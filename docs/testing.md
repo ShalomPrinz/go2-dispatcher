@@ -9,7 +9,6 @@ uv run pytest                    # everything that needs no network, API key, ro
 uv run pytest -q tests/unit      # unit tests only
 uv run pytest -m integration     # real subprocesses on the stub backend
 uv run pytest -k context         # by name
-uv run pytest -n auto            # in parallel (pytest-xdist); about 5 s instead of about 12 s
 ```
 
 ### Coverage
@@ -106,4 +105,3 @@ There are no automated robot tests in v1. The real backend is checked by hand wi
 
 - **SDK-calling skill code is tested in process with a fake sport client.** The stub's `error` fault fails only the first SDK call, so mid-loop failures, a failing `StopMove`, an exception during `Move` and the orphan break in `motion.move_loop`, and the failure branches of `stop_move.main()`, are reached only by monkeypatching `backend.get_sport_client`, `backend.sleep`, `backend.sample_state` and `result.emit` (which would otherwise exit the process). Adding faults to the stub for these paths was rejected: it would grow the stub for test-only behaviour and still cost one interpreter start per case.
 - **Coverage is opt-in, not in `addopts`.** Measuring subprocesses makes the run about 60 % slower, and the default run must stay fast.
-- **Parallel runs are opt-in, not the default.** `pytest-xdist` is a dev dependency and the suite passes with `-n auto` (each test isolates its state under `tmp_path`; the Telegram SIGTERM test signals its own worker process, and xdist runs tests in the worker's main thread, so the signal handler is installed). It is not in `addopts` because `-s` output (used by the live LLM test) is not shown under xdist, and the executor's real-timer tests run under extra CPU load on slower lab machines.

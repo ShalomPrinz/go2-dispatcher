@@ -21,7 +21,7 @@ go2-dispatch = "go2_dispatcher.transports.cli:main"
 go2-bot      = "go2_dispatcher.transports.telegram_bot:main"
 
 [dependency-groups]
-dev = ["pytest", "pytest-cov>=7.1", "pytest-timeout", "pytest-xdist"]   # pytest-cov pulls coverage >= 7.10 for [run] patch
+dev = ["pytest", "pytest-cov>=7.1", "pytest-timeout"]   # pytest-cov pulls coverage >= 7.10 for [run] patch
 
 [tool.uv.sources]
 unitree_sdk2py = { git = "https://github.com/unitreerobotics/unitree_sdk2_python" }
