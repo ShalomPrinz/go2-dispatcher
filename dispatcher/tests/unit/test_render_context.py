@@ -21,7 +21,7 @@ from dispatcher.policies import MotionCost
 from dispatcher.registry import Registry
 from dispatcher.render import format_value, render_remaining, render_step
 
-GOLDEN = REPO_ROOT / "tests" / "golden"
+GOLDEN = REPO_ROOT / "dispatcher" / "tests" / "golden"
 SECTION_ORDER = ["## Previous task", "## Robot", "## Task", "## Budget",
                  "## Executed so far", "## Remaining plan", "## Notice"]
 TASK = "Walk forward, then  find the chair"  # verbatim: inner double space kept

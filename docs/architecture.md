@@ -99,10 +99,12 @@ go2-dispatcher/
 ├── config.example.toml         # copy to config.toml
 ├── .env.example                # ANTHROPIC_API_KEY, TELEGRAM_BOT_TOKEN
 ├── dispatcher/                 # dispatcher package; never imports the SDK
-│   └── transports/             # build_dispatcher, CLI, Telegram
+│   ├── transports/             # build_dispatcher, CLI, Telegram
+│   └── tests/                  # unit/, integration/, helpers/, golden/ (excluded from the wheel)
 ├── skills/                     # skills package: skill and utility processes, backends, posture rule
-│   └── catalog/<name>/SKILL.md # the loaded skill set (config skills.dir)
-├── tests/                      # unit/, integration/, robot/ (opt-in), helpers/, golden/
+│   ├── catalog/<name>/SKILL.md # the loaded skill set (config skills.dir)
+│   └── tests/                  # unit/, integration/, robot/ (opt-in) (excluded from the wheel)
+├── conftest.py                 # pytest options: --run-live, --run-robot, --update-golden
 ├── docs/                       # this documentation
 ├── runs/                       # run logs (gitignored)
 └── models/                     # YOLO weights (gitignored)

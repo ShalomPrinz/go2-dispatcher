@@ -34,7 +34,8 @@ packages = ["dispatcher", "skills"]
 exclude = ["dispatcher/docs", "dispatcher/tests", "skills/docs", "skills/tests"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["dispatcher/tests", "skills/tests"]
+pythonpath = ["dispatcher/tests"]
 timeout = 30
 markers = [
   "integration: spawns real subprocesses with the stub backend",

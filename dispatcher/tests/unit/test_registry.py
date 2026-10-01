@@ -14,7 +14,7 @@ from dispatcher.registry import MISSING, Registry, registry_hash
 from helpers import REPO_ROOT
 
 SKILLS_DIR = REPO_ROOT / "skills" / "catalog"
-GOLDEN_CATALOG = REPO_ROOT / "tests" / "golden" / "catalog.txt"
+GOLDEN_CATALOG = REPO_ROOT / "dispatcher" / "tests" / "golden" / "catalog.txt"
 GOOD_ENTRY = "helpers.skill_modules.good"
 
 GOOD_PARAMS = """params:

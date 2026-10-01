@@ -7,7 +7,7 @@ from typing import Any
 
 from dispatcher.config import Config, build_config
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 TEST_TIME_SCALE = 0.01
 
 

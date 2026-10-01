@@ -1,5 +1,5 @@
 """Shared skill helpers in process: params parsing and checks, backend selection (docs/skills.md).
-One subprocess case per mechanism stays in tests/integration."""
+One subprocess case per mechanism stays in skills/tests/integration."""
 
 from __future__ import annotations
 

@@ -143,7 +143,7 @@ def test_child_env_has_no_secrets(executor, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-secret")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "tg-secret")
     monkeypatch.setenv("GO2_STUB_FAULT", "crash")            # must not leak either
-    monkeypatch.setenv("PYTHONPATH", str(REPO_ROOT / "tests" / "helpers"))
+    monkeypatch.setenv("PYTHONPATH", str(REPO_ROOT / "dispatcher" / "tests" / "helpers"))
     desc = SkillDescriptor(name="env_dump", entrypoint="skill_modules.env_dump",
                            description="dump env keys", params={}, policy=ENV_DUMP_POLICY)
     res = executor.run(desc, {}, fault=None, timeout_s=LONG_TIMEOUT_S,

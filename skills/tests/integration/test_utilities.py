@@ -53,7 +53,7 @@ def test_invalid_params(tmp_path, name):
 
 @pytest.mark.parametrize("name", UTILITIES)
 def test_backend_not_configured(tmp_path, name):
-    """The three bad values are tested in process (tests/unit/test_skill_helpers.py)."""
+    """The three bad values are tested in process (skills/tests/unit/test_skill_helpers.py)."""
     env = stub_env(tmp_path, GO2_BACKEND="simulator")
     proc = run_module(name, {}, env)
     resp = SkillResponse.model_validate(single_response(proc))

@@ -6,7 +6,7 @@ Running the test suite: layout, markers and opt-in flags, helpers and fakes, gol
 
 ```bash
 uv run pytest                    # everything that needs no network, API key, robot or SDK
-uv run pytest -q tests/unit      # unit tests only
+uv run pytest -q dispatcher/tests/unit skills/tests/unit  # unit tests only
 uv run pytest -m integration     # real subprocesses on the stub backend
 uv run pytest -k context         # by name
 ```
@@ -25,11 +25,15 @@ The default run must pass on any machine after `uv sync` (core + dev dependencie
 
 | Folder | What |
 |---|---|
-| `tests/unit/` | config, process lock, registry, tool schema, plan validation, bounds, precheck, motion budget, skill policies (timeout covers the motion), shared skill helpers (`parse_params`, `require_*`, backend selection), motion loop, single actions and the `stop_move` utility with a fake sport client, real-robot state mapping (`real._state_from_msg`), render + context, skill response and executor response parsing, posture, transport start-up (planner choice, initial posture), prompts (fixed-texts golden file), LLM client (mock HTTP), dispatcher loop, `format_outcome`, Telegram handlers |
-| `tests/integration/` | per-skill contract (one subprocess per skill), stub behaviour, one subprocess case per shared mechanism (invalid params, backend not configured, noise, faults), utilities, orphan watchdog, side-effect-free imports, executor, end-to-end with the real executor, CLI subprocesses (including "the CLI does not import `anthropic`"), live LLM |
-| `tests/golden/` | expected catalog, context and fixed texts |
-| `tests/helpers/` | shared helpers (below) |
-| `tests/robot/` | reserved for opt-in robot tests; empty in v1 (the robot checks are manual) |
+| `dispatcher/tests/unit/` | config, process lock, registry, tool schema, plan validation, bounds, precheck, motion budget, render + context, transport start-up (planner choice, initial posture), prompts (fixed-texts golden file), LLM client (mock HTTP), dispatcher loop, `format_outcome`, Telegram handlers |
+| `dispatcher/tests/integration/` | executor, end-to-end with the real executor, CLI subprocesses (including "the CLI does not import `anthropic`"), live LLM |
+| `dispatcher/tests/golden/` | expected catalog, context and fixed texts |
+| `dispatcher/tests/helpers/` | shared helpers (below) |
+| `skills/tests/unit/` | skill policies (timeout covers the motion), shared skill helpers (`parse_params`, `require_*`, backend selection), motion loop, single actions and the `stop_move` utility with a fake sport client, real-robot state mapping (`real._state_from_msg`), skill response and executor response parsing, posture |
+| `skills/tests/integration/` | per-skill contract (one subprocess per skill), stub behaviour, one subprocess case per shared mechanism (invalid params, backend not configured, noise, faults), utilities, orphan watchdog, side-effect-free imports |
+| `skills/tests/robot/` | reserved for opt-in robot tests; empty in v1 (the robot checks are manual) |
+
+Each test lives in the service whose code it exercises. `test_skill_response.py` sits under `skills/` because it mostly checks `skills.result.build_response`; it also checks that the dispatcher's models and response parsing accept that output.
 
 ## Markers and flags
 
@@ -39,25 +43,25 @@ The default run must pass on any machine after `uv sync` (core + dev dependencie
 | `live_llm` | calls the real Anthropic API | `--run-live` and `ANTHROPIC_API_KEY` |
 | `robot` | needs the real Go2 | `--run-robot` |
 
-Options (defined in `tests/conftest.py`):
+Options (defined in the root `conftest.py`):
 
 - `--run-live`: run `live_llm` tests. They are skipped without it, and also skipped if `ANTHROPIC_API_KEY` is not set.
 - `--run-robot`: run `robot` tests. There are none in v1; the robot checks are the supervised checklist in [robot.md](robot.md#supervised-robot-checklist).
-- `--update-golden`: rewrite the golden files instead of comparing against them. Review the diff with `git diff tests/golden` before committing.
+- `--update-golden`: rewrite the golden files instead of comparing against them. Review the diff with `git diff dispatcher/tests/golden` before committing.
 
 ### Live LLM test
 
 ```bash
-ANTHROPIC_API_KEY=sk-ant-... uv run pytest --run-live -s tests/integration/test_live_llm.py
+ANTHROPIC_API_KEY=sk-ant-... uv run pytest --run-live -s dispatcher/tests/integration/test_live_llm.py
 ```
 
 It runs the task "turn left 90 degrees, then tell me if you see a chair" on the stub with `stub.detections = {chair = "center:near"}`. It passes if the task ends `DONE`, the message mentions the chair, and the run log has no `plan_invalid` or `horizon_rejection` record. With `-s`, it prints the run log path.
 
 It uses the default LLM settings (`claude-sonnet-5-5`, `thinking = "between_tools"`, `tool_choice` auto, no `temperature`; see [llm.md](llm.md#the-request)). **It has not been run live yet**; running it is the pending check of the request parameters ([roadmap.md](roadmap.md#pending-human-work)).
 
-## Helpers (`tests/helpers/`)
+## Helpers (`dispatcher/tests/helpers/`)
 
-Import them with `from helpers import ...`. pytest's rootdir insertion makes `tests/` importable; there is no `sys.path` manipulation.
+Import them with `from helpers import ...`, from either service's tests. `pythonpath = ["dispatcher/tests"]` in `[tool.pytest.ini_options]` makes them importable; there is no `sys.path` manipulation in the tests. Nothing on that path may shadow the `dispatcher` or `skills` packages (hence `helpers/skill_process.py`, not `skills.py`).
 
 | Helper | Purpose |
 |---|---|
@@ -67,13 +71,13 @@ Import them with `from helpers import ...`. pytest's rootdir insertion makes `te
 | `FakeExecutor(results, *, stop_move_ok=True, stop_move_posture=None, on_kill=None)` | Returns scripted `ExecResult`s. An item can also be an exception (raised) or a callable `f(call_kwargs) -> ExecResult` (to block, set the stop event, or advance the clock). Records `runs`, `kills`, `stop_moves`. `exec_result(...)` and `stop_move_result(...)` build results. |
 | `fake_update`, `fake_context`, `replies` | Minimal Telegram `Update` / `Context` stand-ins with an `AsyncMock` `reply_text`. |
 | `stub_env`, `run_module`, `single_response` | Run a `skills` module in a subprocess with a stub environment and parse its single response line. |
-| `planner_factory.factory()` | Builds a `ScriptedPlanner` from env `GO2_TEST_SCRIPT` (JSON list of raw tool inputs). Used by CLI subprocess tests through `GO2_TEST_PLANNER=planner_factory:factory` with `tests/helpers` on `PYTHONPATH`. |
+| `planner_factory.factory()` | Builds a `ScriptedPlanner` from env `GO2_TEST_SCRIPT` (JSON list of raw tool inputs). Used by CLI subprocess tests through `GO2_TEST_PLANNER=planner_factory:factory` with `dispatcher/tests/helpers` on `PYTHONPATH`. |
 | `skill_modules/` | Small modules used as skill entrypoints in registry and executor tests (for example `env_dump`, which reports its environment keys). |
 
 The test planner hook also works by hand, for a stub run with no API key:
 
 ```bash
-GO2_TEST_PLANNER=planner_factory:factory PYTHONPATH=tests/helpers \
+GO2_TEST_PLANNER=planner_factory:factory PYTHONPATH=dispatcher/tests/helpers \
 GO2_TEST_SCRIPT='[{"status":"PLAN","steps":[{"skill":"turn","params":{"direction":"left"}}]},{"status":"DONE","steps":[],"message":"Turned."}]' \
 uv run go2 run "turn left"
 ```
@@ -84,7 +88,7 @@ The stub fault kinds `error`, `hang`, `crash` and `garbage` ([skills.md](skills.
 
 ## Golden files
 
-`tests/golden/catalog.txt` is the exact catalog for the five skills (no trailing newline). The `context_*.txt` files are exact user messages: first call, after a checkpoint, after a failure, after a rejection, with a previous task, and a schema retry. `fixed_texts.txt` renders every fixed text in `prompts.py` with example arguments, one labelled section each: every operator message with and without the StopMove warning, every notice, the motion-budget message, the rejection section, the transport texts, `help_text("stub")` and both system blocks for horizon 5. Any change to the wording in `prompts.py`, the renderer, or a `SKILL.md` changes them. Run `uv run pytest --update-golden`, review the diff, and remember that changing the prompt surface changes the registry hash and makes runs incomparable across the change ([skills.md](skills.md#catalog-and-registry-hash)). The fixed texts must stay identical across experimental conditions ([loop-and-context.md](loop-and-context.md)).
+`dispatcher/tests/golden/catalog.txt` is the exact catalog for the five skills (no trailing newline). The `context_*.txt` files are exact user messages: first call, after a checkpoint, after a failure, after a rejection, with a previous task, and a schema retry. `fixed_texts.txt` renders every fixed text in `prompts.py` with example arguments, one labelled section each: every operator message with and without the StopMove warning, every notice, the motion-budget message, the rejection section, the transport texts, `help_text("stub")` and both system blocks for horizon 5. Any change to the wording in `prompts.py`, the renderer, or a `SKILL.md` changes them. Run `uv run pytest --update-golden`, review the diff, and remember that changing the prompt surface changes the registry hash and makes runs incomparable across the change ([skills.md](skills.md#catalog-and-registry-hash)). The fixed texts must stay identical across experimental conditions ([loop-and-context.md](loop-and-context.md)).
 
 ## Robot checks
 

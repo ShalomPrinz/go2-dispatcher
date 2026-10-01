@@ -60,7 +60,7 @@ The dispatcher checks every planned step against these declarations before anyth
 
 ## Catalog and registry hash
 
-The catalog (`Registry.catalog_text()`) is generated from the frontmatter, skills sorted by name, one line per parameter, no trailing newline. It is sent as `system[1]` = `"## Skills\n" + catalog`. Current catalog (`tests/golden/catalog.txt`):
+The catalog (`Registry.catalog_text()`) is generated from the frontmatter, skills sorted by name, one line per parameter, no trailing newline. It is sent as `system[1]` = `"## Skills\n" + catalog`. Current catalog (`dispatcher/tests/golden/catalog.txt`):
 
 ```
 detect_object: Look through the front camera once and report whether an object is visible, where it is in the frame, and roughly how close it is. Does not move the robot.
@@ -274,7 +274,7 @@ Example: a `stand` skill (recommended before experiments, see [roadmap.md](roadm
 2. Create `skills/catalog/stand/SKILL.md` with frontmatter (`name: stand`, `entrypoint: skills.stand`, a one-line `description`, `params` if any) and a short prose section.
 3. If the skill moves the robot, return a `MotionCost` from `motion_cost()`. If some observations should reach the model, list them in `context_observations`.
 4. Use `backend.sleep()`, never `time.sleep`. In motion loops, check `result.orphaned()` and always end with `StopMove()`.
-5. Run `uv run go2 catalog`, run the skill by hand (below), and add tests (contract test in `tests/integration/test_skills.py`, policy test in `tests/unit/test_skill_policies.py`). The catalog golden file and the registry hash change: rewrite the golden file with `uv run pytest --update-golden` and review the diff ([testing.md](testing.md)).
+5. Run `uv run go2 catalog`, run the skill by hand (below), and add tests (contract test in `skills/tests/integration/test_skills.py`, policy test in `skills/tests/unit/test_skill_policies.py`). The catalog golden file and the registry hash change: rewrite the golden file with `uv run pytest --update-golden` and review the diff ([testing.md](testing.md)).
 6. Update this page (and [robot.md](robot.md) if the skill adds robot-side facts).
 
 ## Running a skill by hand

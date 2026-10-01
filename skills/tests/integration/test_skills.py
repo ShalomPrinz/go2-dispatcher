@@ -51,7 +51,7 @@ def test_contract_valid(tmp_path, name):
 
 
 def test_invalid_json(tmp_path):
-    """parse_params is tested in process (tests/unit/test_skill_helpers.py); this proves the
+    """parse_params is tested in process (skills/tests/unit/test_skill_helpers.py); this proves the
     mapping to invalid_params and exit 1."""
     proc = run_module("walk", "not json", stub_env(tmp_path))
     resp = SkillResponse.model_validate(single_response(proc))

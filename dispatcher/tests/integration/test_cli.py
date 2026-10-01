@@ -18,7 +18,7 @@ from helpers import REPO_ROOT
 
 pytestmark = pytest.mark.integration
 
-HELPERS_DIR = REPO_ROOT / "tests" / "helpers"
+HELPERS_DIR = REPO_ROOT / "dispatcher" / "tests" / "helpers"
 TURN = {"skill": "turn", "params": {"direction": "left", "angle_deg": 90}}
 PLAN_TURN = {"status": "PLAN", "steps": [TURN]}
 DONE = {"status": "DONE", "steps": [], "message": "Turned left."}

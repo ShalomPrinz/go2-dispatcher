@@ -307,7 +307,7 @@ Model calls: 1 of 20
 Your previous plan failed at step 2 (walk): error. This is failure 1 of 3. Revise the plan to avoid that failure, or return ABORT with a message if the task cannot be done.
 ```
 
-The failed walk is still charged 2 m: the budget is charged at dispatch ([safety.md](safety.md#motion-budget)). Exact user messages for each case are the golden files `tests/golden/context_*.txt` ([testing.md](testing.md)).
+The failed walk is still charged 2 m: the budget is charged at dispatch ([safety.md](safety.md#motion-budget)). Exact user messages for each case are the golden files `dispatcher/tests/golden/context_*.txt` ([testing.md](testing.md)).
 
 ## Design decisions
 

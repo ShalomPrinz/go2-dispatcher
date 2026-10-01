@@ -11,7 +11,7 @@ from dispatcher import prompts
 from dispatcher.models import TaskOutcomeCode
 from helpers import REPO_ROOT
 
-GOLDEN = REPO_ROOT / "tests" / "golden" / "fixed_texts.txt"
+GOLDEN = REPO_ROOT / "dispatcher" / "tests" / "golden" / "fixed_texts.txt"
 ALL_OUTCOMES = typing.get_args(TaskOutcomeCode)
 
 OUTCOME_ARGS = {
