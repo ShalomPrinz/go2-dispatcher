@@ -1,0 +1,47 @@
+# Copy to config.toml and edit. Relative paths resolve against the folder of this file.
+# Values marked (sketch) are starting points expected to be tuned. See docs/configuration.md.
+
+[run]
+condition = ""                      # free-text experiment label, copied into task_start and index.jsonl
+
+[llm]
+model = "claude-sonnet-5-5"         # (sketch)
+max_tokens = 1024
+temperature = 0.0
+request_timeout_s = 60.0            # cap per attempt (sketch)
+infra_max_retries = 2
+infra_backoff_s = [1.0, 4.0]        # sleep before retry 1, retry 2
+
+[loop]
+planning_horizon = 5                # max steps per plan (sketch)
+max_failures = 3                    # task ends when failures reach this (sketch)
+max_llm_calls = 20                  # per task (sketch)
+task_time_limit_s = 300.0           # wall clock per task (sketch)
+context_history_k = 10              # executed entries shown in full (sketch)
+
+[motion_budget]
+max_distance_m = 10.0               # commanded travel per task (sketch)
+max_rotation_deg = 720.0            # commanded rotation per task (sketch)
+
+[skills]
+dir = "skills"
+
+[robot]
+backend = "stub"                    # "stub" | "real"
+network_interface = ""              # required when backend = "real", e.g. "enp0s31f6"
+yolo_weights = "models/yolov8n.pt"
+stop_move_timeout_s = 10.0
+read_state_timeout_s = 10.0
+
+[stub]
+time_scale = 0.1                    # multiplies every simulated duration
+initial_posture = "standing"        # "standing" | "sitting"
+state_file = "runs/.stub_state.json"
+detections = {}                     # e.g. { chair = "center:near", "cell phone" = "left:far" }
+faults = []                         # e.g. [ { step = 2, kind = "hang" } ]
+
+[log]
+dir = "runs"
+
+[telegram]
+allowed_user_ids = []               # numeric Telegram user ids; empty = nobody allowed

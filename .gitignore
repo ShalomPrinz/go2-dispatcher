@@ -1,0 +1,8 @@
+config.toml
+.env
+runs/
+models/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
