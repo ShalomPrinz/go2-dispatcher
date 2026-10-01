@@ -7,12 +7,12 @@ import threading
 
 import pytest
 
-from go2_dispatcher import prompts
-from go2_dispatcher.dispatcher import Dispatcher
-from go2_dispatcher.executor import STDERR_TAIL_CHARS
-from go2_dispatcher.models import BusyError, LLMInterrupted, LLMUnavailable, Plan, PlanStep
-from go2_dispatcher.registry import Registry
-from go2_dispatcher.runlog import RunLog, RunLogFactory
+from dispatcher import prompts
+from dispatcher.dispatcher import Dispatcher
+from dispatcher.executor import STDERR_TAIL_CHARS
+from dispatcher.models import BusyError, LLMInterrupted, LLMUnavailable, Plan, PlanStep
+from dispatcher.registry import Registry
+from dispatcher.runlog import RunLog, RunLogFactory
 from helpers import (
     REPO_ROOT,
     FakeClock,
@@ -28,7 +28,7 @@ WAIT_S = 5.0
 
 @pytest.fixture(scope="module")
 def registry():
-    return Registry.load(REPO_ROOT / "skills")
+    return Registry.load(REPO_ROOT / "skills" / "catalog")
 
 
 def walk(d=0.5, direction="forward"):

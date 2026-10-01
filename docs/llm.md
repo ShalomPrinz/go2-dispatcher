@@ -1,6 +1,6 @@
 # The LLM layer
 
-How the dispatcher calls the planner model: provider and model, the exact request, how a reply is turned into a plan or rejected, schema retry, horizon rejection, and infrastructure retries. What the model must return and what it sees are in [loop-and-context.md](loop-and-context.md). Code: `src/go2_dispatcher/llm.py`; config keys under `[llm]` in [configuration.md](configuration.md).
+How the dispatcher calls the planner model: provider and model, the exact request, how a reply is turned into a plan or rejected, schema retry, horizon rejection, and infrastructure retries. What the model must return and what it sees are in [loop-and-context.md](loop-and-context.md). Code: `dispatcher/llm.py`; config keys under `[llm]` in [configuration.md](configuration.md).
 
 ## Provider and model
 
@@ -98,5 +98,5 @@ The SDK's own retries are disabled (`max_retries=0`); `AnthropicPlanner` retries
 - **Reject, never truncate, over-long plans**, with the rate logged and a rule for revisiting the choice (above). Truncation would run a plan the model never made and corrupt the data.
 - **Exactly one schema retry**, then `LLM_INVALID`: bounded cost, and a second invalid reply is itself a measurable outcome. Invalid replies are LLM calls but never failures.
 - **Own infrastructure retries, logged separately, never counted as LLM calls or replans.** Transport problems must not distort the planning metrics. This replaces OpenClaw's provider retry; model failover is not covered, which is accepted ([architecture.md](architecture.md#why-a-purpose-built-dispatcher)).
-- **`anthropic` is imported lazily**, inside `AnthropicPlanner` and its retry helper. Importing it costs about 0.8 s, which every `go2-dispatch catalog`, `state` and `--reset-stub` and every stub run with the test planner would otherwise pay without calling the API. A fresh-interpreter test checks that the CLI transport does not import it.
+- **`anthropic` is imported lazily**, inside `AnthropicPlanner` and its retry helper. Importing it costs about 0.8 s, which every `go2 catalog`, `state` and `--reset-stub` and every stub run with the test planner would otherwise pay without calling the API. A fresh-interpreter test checks that the CLI transport does not import it.
 - **No prompt caching.** It would confound token comparisons between conditions ([loop-and-context.md](loop-and-context.md#design-decisions)).

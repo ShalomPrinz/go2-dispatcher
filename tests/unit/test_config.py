@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from go2_dispatcher.config import (
+from dispatcher.config import (
     Config,
     build_config,
     load_config,
@@ -15,7 +15,7 @@ from go2_dispatcher.config import (
     load_env_file,
     parse_env_text,
 )
-from go2_dispatcher.models import ConfigError
+from dispatcher.models import ConfigError
 from helpers import REPO_ROOT
 
 

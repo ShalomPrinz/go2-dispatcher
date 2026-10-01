@@ -1,6 +1,6 @@
 # Configuration
 
-Configuration is defined in `src/go2_dispatcher/config.py` (pydantic models); `config.example.toml` lists every key with its default. This page describes every key it accepts, where values come from, and how they are validated.
+Configuration is defined in `dispatcher/config.py` (pydantic models); `config.example.toml` lists every key with its default. This page describes every key it accepts, where values come from, and how they are validated.
 
 ## Sources and precedence
 
@@ -22,7 +22,7 @@ Secrets are never config keys. They come only from environment variables (see [`
 - Every skill and utility subprocess runs with the base dir as its working directory.
 - `log.dir` is created if it is missing. If it cannot be created, that is a config error.
 
-So `go2-dispatch --config /lab/exp1/config.toml run ...` writes logs to `/lab/exp1/runs/` and reads `/lab/exp1/.env`, whatever the current directory is.
+So `go2 --config /lab/exp1/config.toml run ...` writes logs to `/lab/exp1/runs/` and reads `/lab/exp1/.env`, whatever the current directory is.
 
 ## Keys
 
@@ -73,7 +73,7 @@ There is no `temperature` key (adding one is an unknown-key error), and `tool_ch
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `dir` | path | `"skills"` | Skill set folder loaded by the registry. Each subfolder with a `SKILL.md` is one skill. |
+| `dir` | path | `"skills/catalog"` | Skill set folder loaded by the registry. Each subfolder with a `SKILL.md` is one skill. |
 
 ### `[robot]`
 
@@ -90,7 +90,7 @@ There is no `temperature` key (adding one is an unknown-key error), and `tool_ch
 | Key | Type | Default | Rule | Meaning |
 |---|---|---|---|---|
 | `time_scale` | float | `0.1` | > 0 | Multiplies every simulated duration (motion loops, settle waits, detection delay). |
-| `initial_posture` | `"standing"` \| `"sitting"` | `"standing"` | | Posture written to the state file at startup by `run`, `batch`, `go2-bot` and `--reset-stub`. |
+| `initial_posture` | `"standing"` \| `"sitting"` | `"standing"` | | Posture written to the state file at startup by `run`, `batch`, `go2 bot` and `--reset-stub`. |
 | `state_file` | path | `"runs/.stub_state.json"` | | JSON file that holds the stub posture. Shared by all skill processes. |
 | `detections` | table str → str | `{}` | keys are COCO class names; values match `^(left\|center\|right):(near\|medium\|far)$` | What the stub detector "sees". |
 | `faults` | list of `{step, kind}` | `[]` | `step` int ≥ 1, unique; `kind` ∈ `error`, `hang`, `crash`, `garbage`; must be empty when `backend = "real"` | Faults injected by dispatched step number (counted across the task). See [skills.md](skills.md#fault-injection). |
@@ -103,7 +103,7 @@ detections = { chair = "center:near", "cell phone" = "left:far" }
 faults = [ { step = 2, kind = "hang" } ]
 ```
 
-The 80 class names are in `src/go2_skills/coco.py` (`COCO_CLASSES`).
+The 80 class names are in `skills/coco.py` (`COCO_CLASSES`).
 
 ### `[log]`
 
@@ -140,7 +140,7 @@ Each failure below is a config error:
 Any config error prints `Config error: <message>` to stderr and exits with code **2**. Several errors in one file are joined with `; `. Example:
 
 ```
-$ go2-dispatch --config bad.toml catalog
+$ go2 --config bad.toml catalog
 Config error: loop.planning_horizon: Input should be greater than or equal to 1; loop.colour: unknown key
 ```
 
@@ -148,7 +148,7 @@ Other startup errors also exit with code 2 (registry error, missing API key or b
 
 ## CLI overrides
 
-`go2-dispatch` overrides these keys. They are applied before validation, so the same rules apply:
+`go2` overrides these keys. They are applied before validation, so the same rules apply:
 
 | Flag | Key |
 |---|---|
@@ -156,7 +156,7 @@ Other startup errors also exit with code 2 (registry error, missing API key or b
 | `--horizon N` | `loop.planning_horizon` |
 | `--fault STEP:KIND` (repeatable) | replaces `stub.faults` |
 
-A malformed `--fault` value is a config error, and so is `--fault` together with the real backend. `go2-bot` takes only `--config`.
+A malformed `--fault` value is a config error, and so is `--fault` together with the real backend. `go2 bot` takes only `--config`.
 
 ## `.env` file
 
@@ -164,8 +164,8 @@ Secrets come only from environment variables:
 
 | Variable | Needed by |
 |---|---|
-| `ANTHROPIC_API_KEY` | `run`, `batch`, `go2-bot` (only when a real LLM client is built) |
-| `TELEGRAM_BOT_TOKEN` | `go2-bot` |
+| `ANTHROPIC_API_KEY` | `run`, `batch`, `go2 bot` (only when a real LLM client is built) |
+| `TELEGRAM_BOT_TOKEN` | `go2 bot` |
 
 A `.env` file in the base dir is read by a small built-in parser (no `python-dotenv`):
 
@@ -189,12 +189,12 @@ Some *tunable* values are named constants in code, not config keys:
 
 | Value | Where |
 |---|---|
-| Per-skill timeouts and settle waits (`BASE_S`, `FACTOR`, `TIMEOUT_S`, `SETTLE_S`) | Policy class attributes in `src/go2_skills/<skill>.py` ([skills.md](skills.md#policies)) |
+| Per-skill timeouts and settle waits (`BASE_S`, `FACTOR`, `TIMEOUT_S`, `SETTLE_S`) | Policy class attributes in `skills/<skill>.py` ([skills.md](skills.md#policies)) |
 | Walking speed, yaw rate, command period | `VELOCITY_MPS`, `YAW_RATE_RPS`, `CMD_PERIOD_S` in `walk.py` / `turn.py` |
-| Posture thresholds (0.15 / 0.22 m) | `POSTURE_SITTING_MAX_M`, `POSTURE_STANDING_MIN_M` in `src/go2_skills/posture.py` ([robot.md](robot.md#posture-rule)) |
-| Detector thresholds | `RealDetector` constants in `src/go2_skills/real.py` ([robot.md](robot.md#object-detection)) |
-| `StopMove` settle wait (0.5 s) | `SETTLE_S` in `src/go2_skills/stop_move.py` |
-| Stub durations and body heights | Constants at the top of `src/go2_skills/stub.py` |
+| Posture thresholds (0.15 / 0.22 m) | `POSTURE_SITTING_MAX_M`, `POSTURE_STANDING_MIN_M` in `skills/posture.py` ([robot.md](robot.md#posture-rule)) |
+| Detector thresholds | `RealDetector` constants in `skills/real.py` ([robot.md](robot.md#object-detection)) |
+| `StopMove` settle wait (0.5 s) | `SETTLE_S` in `skills/stop_move.py` |
+| Stub durations and body heights | Constants at the top of `skills/stub.py` |
 
 ## Design decisions
 

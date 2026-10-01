@@ -5,10 +5,10 @@ from __future__ import annotations
 import subprocess
 import sys
 
-from go2_dispatcher import process_lock
+from dispatcher import process_lock
 
 # The child first takes a free lock (must succeed), then the parent's lock (must exit 2).
-CHILD = ("import sys; from go2_dispatcher.process_lock import acquire; "
+CHILD = ("import sys; from dispatcher.process_lock import acquire; "
          "acquire(sys.argv[1]); print('free lock acquired', flush=True); acquire(sys.argv[2])")
 
 

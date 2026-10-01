@@ -24,7 +24,7 @@ max_distance_m = 10.0               # commanded travel per task (tunable)
 max_rotation_deg = 720.0            # commanded rotation per task (tunable)
 
 [skills]
-dir = "skills"
+dir = "skills/catalog"
 
 [robot]
 backend = "stub"                    # "stub" | "real"

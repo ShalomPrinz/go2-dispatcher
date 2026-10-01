@@ -6,18 +6,18 @@ import math
 
 import pytest
 
-from go2_dispatcher.bounds import ERROR_MESSAGE_MAX, check_step, cut_message, precheck
-from go2_dispatcher.budget import MotionBudget
-from go2_dispatcher.models import Plan, PlanStep
-from go2_dispatcher.policies import MotionCost, SkillPolicy
-from go2_dispatcher.registry import ParamSpec, Registry, SkillDescriptor
+from dispatcher.bounds import ERROR_MESSAGE_MAX, check_step, cut_message, precheck
+from dispatcher.budget import MotionBudget
+from dispatcher.models import Plan, PlanStep
+from dispatcher.policies import MotionCost, SkillPolicy
+from dispatcher.registry import ParamSpec, Registry, SkillDescriptor
 
 from helpers import REPO_ROOT
 
 
 @pytest.fixture(scope="module")
 def registry() -> Registry:
-    return Registry.load(REPO_ROOT / "skills")
+    return Registry.load(REPO_ROOT / "skills" / "catalog")
 
 
 class _NullPolicy(SkillPolicy):

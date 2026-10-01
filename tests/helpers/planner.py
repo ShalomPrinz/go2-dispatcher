@@ -5,9 +5,9 @@ from __future__ import annotations
 import threading
 from typing import Any, Callable, Sequence
 
-from go2_dispatcher.llm import TOOL_NAME, LLMResult
-from go2_dispatcher.models import Plan
-from go2_dispatcher.validation import validate_tool_input
+from dispatcher.llm import TOOL_NAME, LLMResult
+from dispatcher.models import Plan
+from dispatcher.validation import validate_tool_input
 
 SCRIPTED_USAGE = {"input_tokens": 100, "output_tokens": 20}
 

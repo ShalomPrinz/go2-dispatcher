@@ -8,12 +8,12 @@ import time
 
 import pytest
 
-from go2_dispatcher.dispatcher import Dispatcher
-from go2_dispatcher.executor import Executor
-from go2_dispatcher.models import Plan, PlanStep
-from go2_dispatcher.registry import Registry
-from go2_dispatcher.runlog import INDEX_FILE, RunLogFactory
-from go2_skills import stub
+from dispatcher.dispatcher import Dispatcher
+from dispatcher.executor import Executor
+from dispatcher.models import Plan, PlanStep
+from dispatcher.registry import Registry
+from dispatcher.runlog import INDEX_FILE, RunLogFactory
+from skills import stub
 from helpers import REPO_ROOT, ScriptedPlanner, make_config
 
 pytestmark = pytest.mark.integration
@@ -26,7 +26,7 @@ STOP_WITHIN_S = 3.0
 
 @pytest.fixture(scope="module")
 def registry():
-    return Registry.load(REPO_ROOT / "skills")
+    return Registry.load(REPO_ROOT / "skills" / "catalog")
 
 
 def build(tmp_path, registry, items, **cfg_over):

@@ -11,11 +11,11 @@ uv sync                                        # core + dev deps (stub mode); la
 uv run pytest -q                               # default suite: no API key, robot or network needed
 uv run pytest -m integration                   # real subprocesses on the stub backend
 uv run pytest --update-golden                  # regenerate golden files; review the diff
-uv run go2-dispatch catalog                    # system text, catalog, tool schema, registry hash; no key needed
-uv run go2-dispatch state                      # stub state as JSON
-uv run go2-dispatch run "turn left 90 degrees" # one task on the stub (needs ANTHROPIC_API_KEY in .env)
-uv run go2-dispatch --fault 1:hang run "…"     # stub fault injection (docs/skills.md)
-uv run go2-dispatch --reset-stub               # reset the stub posture and exit
+uv run go2 catalog                    # system text, catalog, tool schema, registry hash; no key needed
+uv run go2 state                      # stub state as JSON
+uv run go2 run "turn left 90 degrees" # one task on the stub (needs ANTHROPIC_API_KEY in .env)
+uv run go2 --fault 1:hang run "…"     # stub fault injection (docs/skills.md)
+uv run go2 --reset-stub               # reset the stub posture and exit
 ```
 
 Opt-in tests (`--run-live`, `--run-robot`) are described in [docs/testing.md](docs/testing.md).

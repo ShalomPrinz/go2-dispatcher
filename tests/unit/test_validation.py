@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from go2_dispatcher.models import Plan, PlanStep
-from go2_dispatcher.validation import validate_tool_input
+from dispatcher.models import Plan, PlanStep
+from dispatcher.validation import validate_tool_input
 
 H = 5
 STEP = {"skill": "walk", "params": {"distance_m": 1.0}}

@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import pytest
 
-from go2_dispatcher.models import StepResult, TaskOutcome
-from go2_dispatcher.registry import Registry
-from go2_dispatcher.transports import OUTCOME_MAX_CHARS, format_outcome
+from dispatcher.models import StepResult, TaskOutcome
+from dispatcher.registry import Registry
+from dispatcher.transports import OUTCOME_MAX_CHARS, format_outcome
 from helpers import REPO_ROOT
 
 
 @pytest.fixture(scope="module")
 def registry():
-    return Registry.load(REPO_ROOT / "skills")
+    return Registry.load(REPO_ROOT / "skills" / "catalog")
 
 
 def step(index, outcome="ok", msg=None):

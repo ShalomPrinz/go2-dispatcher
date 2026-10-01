@@ -6,14 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from go2_dispatcher.models import RegistryError
-from go2_dispatcher.policies import SkillPolicy
-from go2_dispatcher.llm import plan_tool_schema
-from go2_dispatcher.prompts import system_text
-from go2_dispatcher.registry import MISSING, Registry, registry_hash
+from dispatcher.models import RegistryError
+from dispatcher.policies import SkillPolicy
+from dispatcher.llm import plan_tool_schema
+from dispatcher.prompts import system_text
+from dispatcher.registry import MISSING, Registry, registry_hash
 from helpers import REPO_ROOT
 
-SKILLS_DIR = REPO_ROOT / "skills"
+SKILLS_DIR = REPO_ROOT / "skills" / "catalog"
 GOLDEN_CATALOG = REPO_ROOT / "tests" / "golden" / "catalog.txt"
 GOOD_ENTRY = "helpers.skill_modules.good"
 
@@ -60,7 +60,7 @@ def test_loads_five_skills_sorted():
     reg = Registry.load(SKILLS_DIR)
     assert reg.names() == ["detect_object", "sit", "stretch", "turn", "walk"]
     walk = reg.get("walk")
-    assert walk is not None and walk.entrypoint == "go2_skills.walk"
+    assert walk is not None and walk.entrypoint == "skills.walk"
     assert isinstance(walk.policy, SkillPolicy) and walk.policy.name == "walk"
     assert list(walk.params) == ["direction", "distance_m"]
     assert walk.params["direction"].default is MISSING

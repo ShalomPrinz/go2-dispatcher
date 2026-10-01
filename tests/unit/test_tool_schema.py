@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from go2_dispatcher.llm import plan_tool_schema
-from go2_dispatcher.models import Plan, PlanStep
+from dispatcher.llm import plan_tool_schema
+from dispatcher.models import Plan, PlanStep
 
 
 def test_property_names_equal_model_fields():

@@ -7,9 +7,9 @@ import math
 
 import pytest
 
-from go2_skills import backend, detect_object
-from go2_skills.motion import require_enum, require_number
-from go2_skills.result import InvalidParams, parse_params
+from skills import backend, detect_object
+from skills.motion import require_enum, require_number
+from skills.result import InvalidParams, parse_params
 
 
 @pytest.mark.parametrize("argv", [["skill", "not json"], ["skill", "[1]"], ["skill", "42"],

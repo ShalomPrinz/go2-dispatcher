@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from go2_dispatcher.config import Config, build_config
+from dispatcher.config import Config, build_config
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TEST_TIME_SCALE = 0.01

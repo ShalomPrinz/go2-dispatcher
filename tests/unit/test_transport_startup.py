@@ -5,10 +5,10 @@ from __future__ import annotations
 
 import pytest
 
-from go2_dispatcher.dispatcher import Dispatcher
-from go2_dispatcher.registry import Registry
-from go2_dispatcher.runlog import RunLogFactory
-from go2_dispatcher.transports import (
+from dispatcher.dispatcher import Dispatcher
+from dispatcher.registry import Registry
+from dispatcher.runlog import RunLogFactory
+from dispatcher.transports import (
     API_KEY_ENV,
     MISSING_API_KEY,
     NO_PLANNER_DETAIL,
@@ -42,7 +42,7 @@ def test_malformed_test_planner_exits_2(tmp_path, no_planner_env):
 
 def test_no_planner_ends_task_llm_error(tmp_path, no_planner_env):
     cfg = make_config(tmp_path)
-    d = Dispatcher(cfg, Registry.load(REPO_ROOT / "skills"), make_planner(cfg, need_llm=False),
+    d = Dispatcher(cfg, Registry.load(REPO_ROOT / "skills" / "catalog"), make_planner(cfg, need_llm=False),
                    FakeExecutor(), RunLogFactory(cfg.log.dir, session_id="s1"),
                    initial_posture="standing")
     o = d.run_task("sit down", source="test")

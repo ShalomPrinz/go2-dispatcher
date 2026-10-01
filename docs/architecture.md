@@ -22,7 +22,7 @@ An operator sends a natural-language task over Telegram or the CLI. The LLM retu
   Plan validation ─► bounds ─► motion budget   (whole plan, before any step runs)
             │
             ▼
-        Executor ── one subprocess per step ──► python -m go2_skills.<skill>
+        Executor ── one subprocess per step ──► python -m skills.<skill>
             ▲                                          │
             │   one JSON line (skill response)         ▼
             └────────────────────────────── Backend: real SDK | stub
@@ -30,14 +30,14 @@ An operator sends a natural-language task over Telegram or the CLI. The LLM retu
 
 | Component | Code | Owner doc |
 |---|---|---|
-| Transports: CLI (`go2-dispatch`) and Telegram (`go2-bot`), both over the same dispatcher | `go2_dispatcher/transports/` | [running.md](running.md) |
+| Transports: CLI (`go2`) and Telegram (`go2 bot`), both over the same dispatcher | `dispatcher/transports/` | [running.md](running.md) |
 | Dispatcher loop, busy-reject, stop, shutdown | `dispatcher.py` | [loop-and-context.md](loop-and-context.md), [safety.md](safety.md) |
 | Context assembly and every fixed text | `context.py`, `prompts.py`, `render.py` | [loop-and-context.md](loop-and-context.md) |
 | LLM client, tool schema, infra retries | `llm.py` | [llm.md](llm.md) |
 | Plan validation, parameter bounds, motion budget | `validation.py`, `bounds.py`, `budget.py` | [loop-and-context.md](loop-and-context.md), [safety.md](safety.md) |
 | Skill registry and generated catalog | `registry.py`, `skills/*/SKILL.md` | [skills.md](skills.md) |
 | Executor: subprocesses, timeouts, kill, `StopMove`, state reads | `executor.py` | [safety.md](safety.md) |
-| Skill runtime, skills and utilities, real and stub backends, posture rule | `go2_skills/` | [skills.md](skills.md), [robot.md](robot.md) |
+| Skill runtime, skills and utilities, real and stub backends, posture rule | `skills/` | [skills.md](skills.md), [robot.md](robot.md) |
 | Run log and index | `runlog.py` | [run-log.md](run-log.md) |
 | Configuration and `.env` | `config.py` | [configuration.md](configuration.md) |
 | Single-instance lock | `process_lock.py` | [safety.md](safety.md) |
@@ -48,7 +48,7 @@ One task, in outline: build the context from fixed slots → call the LLM → va
 
 - **One dispatcher process per machine**, enforced by a file lock, so two processes can never drive one robot ([safety.md](safety.md)).
 - Inside it, the transport thread receives messages and one task runs at a time. While a task runs, other messages get a busy reply (no queue); only the stop word gets through. The Telegram bot handles updates concurrently so that `stop` can arrive during a task.
-- **One subprocess per skill call** (`python -m go2_skills.<skill> '<json params>'`), in its own process group, never reused. It prints exactly one JSON response line and exits. Two utilities, `stop_move` and `read_state`, run the same way but are not skills.
+- **One subprocess per skill call** (`python -m skills.<skill> '<json params>'`), in its own process group, never reused. It prints exactly one JSON response line and exits. Two utilities, `stop_move` and `read_state`, run the same way but are not skills.
 - The robot is stationary while the LLM is called; motion happens only inside skill processes.
 - The **dispatcher never imports the SDK or touches DDS**. It imports skill modules only to read their policy objects (timeout formula, motion cost, observations shown to the model), and importing a skill module never imports the SDK.
 - Skill processes watch their parent and stop the robot if the dispatcher dies ([safety.md](safety.md)).
@@ -98,10 +98,10 @@ go2-dispatcher/
 ├── pyproject.toml, uv.lock     # packaging; extras: robot (SDK, CycloneDDS), vision (YOLO)
 ├── config.example.toml         # copy to config.toml
 ├── .env.example                # ANTHROPIC_API_KEY, TELEGRAM_BOT_TOKEN
-├── skills/<name>/SKILL.md      # the loaded skill set (config skills.dir)
-├── src/go2_dispatcher/         # dispatcher; never imports the SDK
+├── dispatcher/                 # dispatcher package; never imports the SDK
 │   └── transports/             # build_dispatcher, CLI, Telegram
-├── src/go2_skills/             # skill and utility processes, backends, posture rule
+├── skills/                     # skills package: skill and utility processes, backends, posture rule
+│   └── catalog/<name>/SKILL.md # the loaded skill set (config skills.dir)
 ├── tests/                      # unit/, integration/, robot/ (opt-in), helpers/, golden/
 ├── docs/                       # this documentation
 ├── runs/                       # run logs (gitignored)
@@ -115,7 +115,7 @@ go2-dispatcher/
 | Task | One operator message, carried out from receipt to a final outcome. |
 | Plan | One `submit_plan` reply: `status`, `steps`, optional `replan_after`, `message`. |
 | Step | One skill call inside a plan. |
-| Skill | A robot capability the model can call, defined by a `SKILL.md` and a module in `go2_skills`. |
+| Skill | A robot capability the model can call, defined by a `SKILL.md` and a module in `skills`. |
 | Utility | `stop_move` or `read_state`: run like a skill, never offered to the model. |
 | LLM call | One request to the LLM that produced a response, valid or not. Infrastructure retries are not separate calls. |
 | Return reason | Why the dispatcher calls the LLM: `initial`, `plan_complete`, `checkpoint`, `failure`, `schema_retry`. |

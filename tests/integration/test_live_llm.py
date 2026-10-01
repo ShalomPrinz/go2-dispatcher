@@ -7,12 +7,12 @@ import os
 
 import pytest
 
-from go2_dispatcher.dispatcher import Dispatcher
-from go2_dispatcher.executor import Executor
-from go2_dispatcher.llm import AnthropicPlanner
-from go2_dispatcher.registry import Registry
-from go2_dispatcher.runlog import RunLogFactory
-from go2_skills import stub
+from dispatcher.dispatcher import Dispatcher
+from dispatcher.executor import Executor
+from dispatcher.llm import AnthropicPlanner
+from dispatcher.registry import Registry
+from dispatcher.runlog import RunLogFactory
+from skills import stub
 from helpers import REPO_ROOT, make_config
 
 pytestmark = [pytest.mark.live_llm, pytest.mark.timeout(300)]
@@ -26,7 +26,7 @@ def test_live_turn_and_find_chair(tmp_path):
         pytest.skip("ANTHROPIC_API_KEY is not set")
     cfg = make_config(tmp_path, stub={"detections": {"chair": "center:near"}})
     stub.write_posture(cfg.stub.initial_posture, cfg.stub.state_file)
-    d = Dispatcher(cfg, Registry.load(REPO_ROOT / "skills"),
+    d = Dispatcher(cfg, Registry.load(REPO_ROOT / "skills" / "catalog"),
                    AnthropicPlanner(key, cfg.llm, cfg.loop.planning_horizon),
                    Executor(cfg, cfg.base_dir), RunLogFactory(cfg.log.dir, "live"),
                    initial_posture=cfg.stub.initial_posture)

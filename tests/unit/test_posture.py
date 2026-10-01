@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from go2_skills.posture import derive_posture
+from skills.posture import derive_posture
 
 
 @pytest.mark.parametrize("height, expected", [

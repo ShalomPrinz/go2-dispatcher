@@ -8,9 +8,9 @@ import time
 
 import pytest
 
-from go2_dispatcher.executor import Executor
-from go2_dispatcher.registry import Registry, SkillDescriptor
-from go2_skills import stub
+from dispatcher.executor import Executor
+from dispatcher.registry import Registry, SkillDescriptor
+from skills import stub
 from helpers import REPO_ROOT, make_config
 from helpers.skill_modules.env_dump import POLICY as ENV_DUMP_POLICY
 
@@ -33,7 +33,7 @@ def executor(cfg):
 
 @pytest.fixture(scope="module")
 def registry():
-    return Registry.load(REPO_ROOT / "skills")
+    return Registry.load(REPO_ROOT / "skills" / "catalog")
 
 
 def run(executor, registry, skill="turn", params=TURN, *, fault=None,

@@ -11,8 +11,8 @@ import time
 
 import pytest
 
-from go2_dispatcher.models import SkillResponse
-from go2_skills import stub
+from dispatcher.models import SkillResponse
+from skills import stub
 from helpers import REPO_ROOT, run_module, single_response, stub_env
 
 pytestmark = pytest.mark.integration
@@ -84,14 +84,14 @@ def test_noise_stays_off_stdout(tmp_path):
 
 
 def test_fresh_interpreter_import_is_side_effect_free():
-    """Every go2_skills module imports without heavy modules or output (docs/skills.md)."""
+    """Every skills module imports without heavy modules or output (docs/skills.md)."""
     code = r"""
 import contextlib, importlib, io, json, pkgutil, sys
-import go2_skills
-names = sorted(m.name for m in pkgutil.iter_modules(go2_skills.__path__))
+import skills
+names = sorted(m.name for m in pkgutil.iter_modules(skills.__path__))
 buf = io.StringIO()
 with contextlib.redirect_stdout(buf):
-    mods = {n: importlib.import_module("go2_skills." + n) for n in names}
+    mods = {n: importlib.import_module("skills." + n) for n in names}
 heavy = [m for m in ("unitree_sdk2py", "cv2", "ultralytics", "numpy", "cyclonedds")
          if m in sys.modules]
 policies = {n: getattr(m, "POLICY", None) and m.POLICY.name for n, m in mods.items()}
@@ -219,11 +219,11 @@ def test_fault_garbage(tmp_path):
 
 
 def test_orphan_watchdog_exits(tmp_path):
-    """The watchdog is shared (go2_skills/result.py); one skill is enough."""
+    """The watchdog is shared (skills/result.py); one skill is enough."""
     env = stub_env(tmp_path, fault="hang", GO2_PARENT_PID=str(os.getppid() or 1))
     assert int(env["GO2_PARENT_PID"]) != os.getpid()
     t0 = time.monotonic()
-    proc = subprocess.run([sys.executable, "-m", "go2_skills.walk", json.dumps(VALID["walk"])],
+    proc = subprocess.run([sys.executable, "-m", "skills.walk", json.dumps(VALID["walk"])],
                           env=env, cwd=REPO_ROOT, capture_output=True, text=True, timeout=10)
     assert time.monotonic() - t0 < 3.0
     assert proc.returncode == 137

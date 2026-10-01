@@ -4,8 +4,8 @@ The skill contract: how a skill is declared, invoked and answers, how the catalo
 
 A skill has two parts:
 
-1. `skills/<name>/SKILL.md`: YAML frontmatter that the registry reads, plus prose for humans. The prose is never sent to the LLM.
-2. `src/go2_skills/<name>.py`: a module with a `main()` that runs as a subprocess, and a module-level `POLICY` object that the dispatcher reads.
+1. `skills/catalog/<name>/SKILL.md`: YAML frontmatter that the registry reads, plus prose for humans. The prose is never sent to the LLM.
+2. `skills/<name>.py`: a module with a `main()` that runs as a subprocess, and a module-level `POLICY` object that the dispatcher reads.
 
 v1 skills: `walk`, `turn`, `sit`, `stretch`, `detect_object`. Two utilities, `stop_move` and `read_state`, run the same way but are not skills: they have no `SKILL.md` and the model never sees them. The registry loads every subfolder of `skills.dir` that has a `SKILL.md`, so a different skill set (for example another granularity tier) is a different folder ([running.md](running.md)).
 
@@ -16,7 +16,7 @@ The YAML block between the first two lines that are exactly `---` (the file must
 | Key | Type | Required | Meaning |
 |---|---|---|---|
 | `name` | string matching `^[a-z][a-z0-9_]*$` | yes | Must equal the folder name and `POLICY.name`; this also makes names unique, so there is no separate duplicate check. |
-| `entrypoint` | string | yes | Module run with `python -m`, for example `go2_skills.walk`. |
+| `entrypoint` | string | yes | Module run with `python -m`, for example `skills.walk`. |
 | `description` | one-line string | yes | Shown in the catalog. |
 | `params` | mapping name → ParamSpec | no | Parameters, in catalog order. Absent means no parameters. |
 | `expect` | any | no | Reserved for v2 verification. Accepted and ignored. |
@@ -34,12 +34,12 @@ ParamSpec (parameter names match `^[a-z][a-z0-9_]*$`):
 
 Any other key, a missing required key or an invalid value is a registry error, as are: an entrypoint that cannot be imported, a module without `POLICY`, a `POLICY` that is not a `SkillPolicy`, `POLICY.name` ≠ `name`, a missing skills folder, or zero skills. Transports print `Registry error: <message naming the file>` and exit 2.
 
-Example (`skills/walk/SKILL.md`):
+Example (`skills/catalog/walk/SKILL.md`):
 
 ```yaml
 ---
 name: walk
-entrypoint: go2_skills.walk
+entrypoint: skills.walk
 description: Walk in a straight line forward, backward, or sideways by a distance, then stop.
 params:
   direction:
@@ -79,12 +79,12 @@ walk: Walk in a straight line forward, backward, or sideways by a distance, then
 
 Type phrases: `one of a, b`; `text`; `number from X to Y`, `number, at least X`, `number, at most Y` or `number` (likewise `integer`), followed by the unit.
 
-The **registry hash** is the first 16 hex characters of SHA-256 over `system_text + "\n" + catalog_text + "\n" + json.dumps(tool_schema, sort_keys=True)`. It identifies the whole prompt surface, so it changes with the skill set, any `SKILL.md` wording, the system text and the horizon (which appears in the system text and the tool schema). It is logged in `task_start` and `index.jsonl`; runs with different hashes are not directly comparable. `go2-dispatch catalog` prints the system text, catalog, tool schema and hash.
+The **registry hash** is the first 16 hex characters of SHA-256 over `system_text + "\n" + catalog_text + "\n" + json.dumps(tool_schema, sort_keys=True)`. It identifies the whole prompt surface, so it changes with the skill set, any `SKILL.md` wording, the system text and the horizon (which appears in the system text and the tool schema). It is logged in `task_start` and `index.jsonl`; runs with different hashes are not directly comparable. `go2 catalog` prints the system text, catalog, tool schema and hash.
 
 ## Invocation
 
 ```
-python -m go2_skills.<name> '<params-json>'
+python -m skills.<name> '<params-json>'
 ```
 
 - `argv[1]` is a JSON object with the **filled** params: checked, normalised and with defaults filled in by the dispatcher. Always present (`{}` for no params).
@@ -191,11 +191,11 @@ class SkillPolicy:
 
 ## No side effects on import
 
-Importing a skill module must do nothing: no SDK import, no DDS init, no argument parsing, no output. All work happens in `main()`, under `if __name__ == "__main__": main()`. At top level a skill imports only the standard library and `go2_skills`; `go2_skills` never imports `go2_dispatcher`. Third-party imports (`unitree_sdk2py`, `cv2`, `ultralytics`, `numpy`) happen inside functions in `go2_skills/real.py`. A test imports every `go2_skills` module in a fresh interpreter and checks that none of these were loaded. This is what lets the dispatcher read policies without touching the SDK.
+Importing a skill module must do nothing: no SDK import, no DDS init, no argument parsing, no output. All work happens in `main()`, under `if __name__ == "__main__": main()`. At top level a skill imports only the standard library and `skills`; `skills` never imports `dispatcher`. Third-party imports (`unitree_sdk2py`, `cv2`, `ultralytics`, `numpy`) happen inside functions in `skills/real.py`. A test imports every `skills` module in a fresh interpreter and checks that none of these were loaded. This is what lets the dispatcher read policies without touching the SDK.
 
 ## Stub backend
 
-The stub (`src/go2_skills/stub.py`) replaces only the SDK layer inside the skill process; processes, timeouts, kills and `StopMove` run for real. It keeps posture in a JSON state file (`{"posture": "standing" | "sitting"}`; a missing file means standing), written atomically.
+The stub (`skills/stub.py`) replaces only the SDK layer inside the skill process; processes, timeouts, kills and `StopMove` run for real. It keeps posture in a JSON state file (`{"posture": "standing" | "sitting"}`; a missing file means standing), written atomically.
 
 | Call | While standing | While sitting |
 |---|---|---|
@@ -207,7 +207,7 @@ The stub (`src/go2_skills/stub.py`) replaces only the SDK layer inside the skill
 - `detect(target)` waits 0.5 s and returns found (`confidence` 0.9, position and closeness from the entry) if the target is listed in `stub.detections`, else not found.
 - `sample_state()` returns `body_height` 0.32 (standing) or 0.08 (sitting); other fields are `null`.
 - All stub waits go through `backend.sleep()` and are multiplied by `stub.time_scale`. Skills never call `time.sleep` themselves.
-- The stub is reset to `stub.initial_posture` at startup and by `go2-dispatch --reset-stub`, not between tasks ([running.md](running.md)).
+- The stub is reset to `stub.initial_posture` at startup and by `go2 --reset-stub`, not between tasks ([running.md](running.md)).
 
 ### Fault injection
 
@@ -223,8 +223,8 @@ faults = [ { step = 2, kind = "hang" } ]
 or on the command line, where `--fault STEP:KIND` (repeatable) replaces the whole list:
 
 ```bash
-uv run go2-dispatch --fault 2:hang run "turn left, then walk forward one metre"
-uv run go2-dispatch --fault 1:error --fault 3:crash batch tasks.txt
+uv run go2 --fault 2:hang run "turn left, then walk forward one metre"
+uv run go2 --fault 1:error --fault 3:crash batch tasks.txt
 ```
 
 - `step` counts **dispatched** steps in the task, 1-based, across plans. Rejected steps are not counted. Steps must be unique.
@@ -244,10 +244,10 @@ For one process run by hand, set `GO2_STUB_FAULT=<kind>` directly. `GO2_STUB_NOI
 
 Example: a `stand` skill (recommended before experiments, see [roadmap.md](roadmap.md#open-questions)).
 
-1. Create `src/go2_skills/stand.py`:
+1. Create `skills/stand.py`:
    ```python
-   from go2_skills import motion, result
-   from go2_skills.policy_base import SkillPolicy
+   from skills import motion, result
+   from skills.policy_base import SkillPolicy
 
    SKILL = "stand"
 
@@ -271,10 +271,10 @@ Example: a `stand` skill (recommended before experiments, see [roadmap.md](roadm
        main()
    ```
    A real `stand` would call `StandUp()` then `BalanceStand()`. Each SDK method must exist on the stub (`StubSportClient`) and work through `real.get_sport_client()`.
-2. Create `skills/stand/SKILL.md` with frontmatter (`name: stand`, `entrypoint: go2_skills.stand`, a one-line `description`, `params` if any) and a short prose section.
+2. Create `skills/catalog/stand/SKILL.md` with frontmatter (`name: stand`, `entrypoint: skills.stand`, a one-line `description`, `params` if any) and a short prose section.
 3. If the skill moves the robot, return a `MotionCost` from `motion_cost()`. If some observations should reach the model, list them in `context_observations`.
 4. Use `backend.sleep()`, never `time.sleep`. In motion loops, check `result.orphaned()` and always end with `StopMove()`.
-5. Run `uv run go2-dispatch catalog`, run the skill by hand (below), and add tests (contract test in `tests/integration/test_skills.py`, policy test in `tests/unit/test_skill_policies.py`). The catalog golden file and the registry hash change: rewrite the golden file with `uv run pytest --update-golden` and review the diff ([testing.md](testing.md)).
+5. Run `uv run go2 catalog`, run the skill by hand (below), and add tests (contract test in `tests/integration/test_skills.py`, policy test in `tests/unit/test_skill_policies.py`). The catalog golden file and the registry hash change: rewrite the golden file with `uv run pytest --update-golden` and review the diff ([testing.md](testing.md)).
 6. Update this page (and [robot.md](robot.md) if the skill adds robot-side facts).
 
 ## Running a skill by hand
@@ -283,12 +283,12 @@ On the stub:
 
 ```bash
 export GO2_BACKEND=stub GO2_STUB_STATE_FILE=runs/.stub_state.json GO2_STUB_TIME_SCALE=0.1
-uv run python -m go2_skills.walk '{"direction":"forward","distance_m":1}'
-uv run python -m go2_skills.detect_object '{"target":"chair"}'
-GO2_STUB_DETECTIONS='{"chair":"center:near"}' uv run python -m go2_skills.detect_object '{"target":"chair"}'
-GO2_STUB_FAULT=crash uv run python -m go2_skills.sit '{}'; echo "exit=$?"
-uv run python -m go2_skills.read_state '{}'
-uv run python -m go2_skills.stop_move '{}'
+uv run python -m skills.walk '{"direction":"forward","distance_m":1}'
+uv run python -m skills.detect_object '{"target":"chair"}'
+GO2_STUB_DETECTIONS='{"chair":"center:near"}' uv run python -m skills.detect_object '{"target":"chair"}'
+GO2_STUB_FAULT=crash uv run python -m skills.sit '{}'; echo "exit=$?"
+uv run python -m skills.read_state '{}'
+uv run python -m skills.stop_move '{}'
 ```
 
 Without `GO2_STUB_STATE_FILE` and `GO2_STUB_TIME_SCALE` the stub uses `runs/.stub_state.json` (relative to the working directory) and 0.1. On the real robot set `GO2_BACKEND=real GO2_IFACE=<nic>` (and `GO2_YOLO_WEIGHTS` for detection), with the robot supervised ([safety.md](safety.md#supervised-operation-rules)). Pass all params: skills do not fill defaults.

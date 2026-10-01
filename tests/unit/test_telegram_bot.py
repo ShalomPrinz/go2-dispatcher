@@ -12,13 +12,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from go2_dispatcher import prompts
-from go2_dispatcher.dispatcher import Dispatcher
-from go2_dispatcher.models import BusyError, Plan, PlanStep
-from go2_dispatcher.registry import Registry
-from go2_dispatcher.runlog import RunLogFactory
-from go2_dispatcher.transports import telegram_bot
-from go2_dispatcher.transports.telegram_bot import (
+from dispatcher import prompts
+from dispatcher.dispatcher import Dispatcher
+from dispatcher.models import BusyError, Plan, PlanStep
+from dispatcher.registry import Registry
+from dispatcher.runlog import RunLogFactory
+from dispatcher.transports import telegram_bot
+from dispatcher.transports.telegram_bot import (
     SHUTDOWN_EXTRA_S,
     build_application,
     on_post_init,
@@ -45,7 +45,7 @@ TOKEN = "123456:TEST-token-not-real"
 
 @pytest.fixture(scope="module")
 def registry():
-    return Registry.load(REPO_ROOT / "skills")
+    return Registry.load(REPO_ROOT / "skills" / "catalog")
 
 
 @pytest.fixture

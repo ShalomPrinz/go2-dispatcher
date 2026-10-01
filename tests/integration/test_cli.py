@@ -12,8 +12,8 @@ import time
 
 import pytest
 
-from go2_dispatcher.registry import Registry
-from go2_skills import stub
+from dispatcher.registry import Registry
+from skills import stub
 from helpers import REPO_ROOT
 
 pytestmark = pytest.mark.integration
@@ -31,7 +31,7 @@ STOP_WITHIN_S = 5.0
 def cfg_path(tmp_path):
     p = tmp_path / "config.toml"
     p.write_text(
-        f'[skills]\ndir = "{REPO_ROOT / "skills"}"\n'
+        f'[skills]\ndir = "{REPO_ROOT / "skills" / "catalog"}"\n'
         '[log]\ndir = "runs"\n'
         '[robot]\nnetwork_interface = "eth0"\n'
         '[stub]\nstate_file = "runs/.stub_state.json"\ntime_scale = 0.01\n',
@@ -49,7 +49,7 @@ def cli_env(script=None):
 
 
 def argv(cfg_path, *args):
-    return [sys.executable, "-m", "go2_dispatcher.transports.cli", "--config", str(cfg_path),
+    return [sys.executable, "-m", "dispatcher.transports.cli", "--config", str(cfg_path),
             *args]
 
 
@@ -64,7 +64,7 @@ def test_catalog(cfg_path):
     proc = subprocess.run(argv(cfg_path, "catalog"), env=env, cwd=cfg_path.parent,
                           capture_output=True, text=True, timeout=30)
     assert proc.returncode == 0, proc.stderr
-    assert Registry.load(REPO_ROOT / "skills").catalog_text() in proc.stdout
+    assert Registry.load(REPO_ROOT / "skills" / "catalog").catalog_text() in proc.stdout
     assert re.search(r"^Registry hash: [0-9a-f]{16}$", proc.stdout, re.M)
 
 
@@ -78,7 +78,7 @@ def test_reset_stub(cfg_path):
 
 def test_cli_does_not_import_anthropic():
     """`anthropic` is imported lazily (docs/llm.md); the CLI starts fast without it."""
-    code = "import sys, go2_dispatcher.transports.cli; print('anthropic' in sys.modules)"
+    code = "import sys, dispatcher.transports.cli; print('anthropic' in sys.modules)"
     proc = subprocess.run([sys.executable, "-c", code], cwd=REPO_ROOT, capture_output=True,
                           text=True, timeout=30)
     assert proc.returncode == 0, proc.stderr

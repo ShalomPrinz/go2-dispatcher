@@ -67,7 +67,7 @@ Kept on purpose; do not remove them as dead code.
 - `StepResult.verification`, always `"unverified"` in v1.
 - `state_before` / `state_after` on every skill response and `state_after` on every `StopMove`, including the robot's own `position` estimate when published.
 - The `expect` key is accepted (and ignored) in `SKILL.md` frontmatter, for per-skill expectations.
-- A single posture rule, `derive_posture()` in `go2_skills/posture.py`.
+- A single posture rule, `derive_posture()` in `skills/posture.py`.
 - Plan status normalised in one place (`Plan._normalise_status` in `models.py`), so adding `ASK` is local.
 - The stub state file and stub `sample_state()`, which the stub upgrade extends.
 - `skills.dir` is configurable, so other granularity tiers can be loaded.

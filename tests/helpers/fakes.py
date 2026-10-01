@@ -6,8 +6,8 @@ import threading
 import time
 from typing import Any, Callable, Sequence, Union
 
-from go2_dispatcher.executor import ExecResult
-from go2_dispatcher.models import RobotState, SkillResponse, StopMoveResult
+from dispatcher.executor import ExecResult
+from dispatcher.models import RobotState, SkillResponse, StopMoveResult
 
 FAKE_CLOCK_START = 1000.0
 

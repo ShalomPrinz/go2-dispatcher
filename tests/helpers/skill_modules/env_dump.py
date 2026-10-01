@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import os
 
-from go2_skills import result
-from go2_skills.policy_base import SkillPolicy
+from skills import result
+from skills.policy_base import SkillPolicy
 
 SKILL = "env_dump"
 

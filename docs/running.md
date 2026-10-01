@@ -1,17 +1,19 @@
 # Running
 
-Operating the system. There are two entry points over the same dispatcher: `go2-dispatch` (CLI) and `go2-bot` (Telegram). Run them with `uv run`, or activate `.venv` first. Installing is in [setup.md](setup.md); what the dispatcher does with a task is in [loop-and-context.md](loop-and-context.md); stopping and limits are in [safety.md](safety.md).
+Operating the system. There are two entry points over the same dispatcher: `go2` (CLI) and `go2 bot` (Telegram). Run them with `uv run`, or activate `.venv` first. Installing is in [setup.md](setup.md); what the dispatcher does with a task is in [loop-and-context.md](loop-and-context.md); stopping and limits are in [safety.md](safety.md).
 
-## CLI: `go2-dispatch`
+## CLI: `go2`
 
 ```
-go2-dispatch [-h] [--config CONFIG] [--backend {stub,real}] [--horizon HORIZON]
-             [--fault STEP:KIND] [--reset-stub] COMMAND ...
+go2 [-h] [--config CONFIG] [--backend {stub,real}] [--horizon HORIZON]
+    [--fault STEP:KIND] [--reset-stub] COMMAND ...
 
-COMMAND: run TASK | batch TASKS_FILE | catalog | state
+COMMAND: run TASK | batch TASKS_FILE | catalog | state | bot
 ```
 
-Global options go **before** the command (argparse), for example `go2-dispatch --backend real state`, not `go2-dispatch state --backend real`. Every command accepts every global option; the commands take no options of their own. Exactly one of a command or `--reset-stub` is required; `--reset-stub` with a command is a usage error. `-h` / `--help` works globally and after each command.
+`go2 bot` starts the Telegram transport ([below](#telegram-go2-bot)) and hands every argument after `bot` to it; it takes only its own `--config`, so a global option before `bot` is a usage error.
+
+Global options go **before** the command (argparse), for example `go2 --backend real state`, not `go2 state --backend real`. Every command accepts every global option; the commands take no options of their own. Exactly one of a command or `--reset-stub` is required; `--reset-stub` with a command is a usage error. `-h` / `--help` works globally and after each command.
 
 | Option | Meaning |
 |---|---|
@@ -76,10 +78,10 @@ sit down
 
 Tasks run one after another in one process. The previous task's summary and the robot posture **carry over** from line to line, as they do between Telegram messages. One `sit` affects every later task, because no skill can stand the robot up ([robot.md](robot.md#open-robot-side-questions)). A reset per task is a future idea ([roadmap.md](roadmap.md#future-ideas)).
 
-## Telegram: `go2-bot`
+## Telegram: `go2 bot`
 
 ```
-go2-bot [--config PATH]
+go2 bot [--config PATH]
 ```
 
 ### Setup
@@ -92,9 +94,9 @@ go2-bot [--config PATH]
    [telegram]
    allowed_user_ids = [123456789]
    ```
-5. Run `uv run go2-bot --config config.toml`. The bot uses long polling, so it needs no public address.
+5. Run `uv run go2 bot --config config.toml`. The bot uses long polling, so it needs no public address.
 
-At startup, `go2-bot`:
+At startup, `go2 bot`:
 - loads the config and `.env`;
 - exits 2 with `Missing TELEGRAM_BOT_TOKEN.` if there is no token;
 - warns if `allowed_user_ids` is empty;
@@ -132,7 +134,7 @@ Only `stop` is recognised during a task. Other messages sent during a task are a
 
 The stub replaces only the SDK layer inside the skill process. Processes, timeouts, kills and StopMove run for real.
 
-`go2-dispatch --reset-stub` puts the stub back in `stub.initial_posture`. Use it after a `sit`, because there is no `stand` skill. `run`, `batch` and `go2-bot` reset the stub once at startup. The stub is not reset between tasks.
+`go2 --reset-stub` puts the stub back in `stub.initial_posture`. Use it after a `sit`, because there is no `stand` skill. `run`, `batch` and `go2 bot` reset the stub once at startup. The stub is not reset between tasks.
 
 ## Fault injection
 
@@ -147,11 +149,11 @@ The registry loads every subfolder of `skills.dir` that contains a `SKILL.md`. T
 dir = "skill_sets/fine"
 ```
 
-The registry hash changes with the catalog, so runs with different skill sets can be told apart in `index.jsonl`. Check a skill set with `go2-dispatch --config ... catalog`. A bad skill set exits 2 with `Registry error: <message naming the file>`. The `SKILL.md` format is in [skills.md](skills.md).
+The registry hash changes with the catalog, so runs with different skill sets can be told apart in `index.jsonl`. Check a skill set with `go2 --config ... catalog`. A bad skill set exits 2 with `Registry error: <message naming the file>`. The `SKILL.md` format is in [skills.md](skills.md).
 
 ## Single-instance lock
 
-`run`, `batch`, `--reset-stub` and `go2-bot` take an exclusive `flock` on `{log.dir}/.dispatcher.lock` and hold it until they exit. A second one fails with:
+`run`, `batch`, `--reset-stub` and `go2 bot` take an exclusive `flock` on `{log.dir}/.dispatcher.lock` and hold it until they exit. A second one fails with:
 
 ```
 Another dispatcher is running (lock: /path/to/runs/.dispatcher.lock).

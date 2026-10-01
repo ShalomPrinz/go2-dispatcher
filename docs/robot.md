@@ -15,7 +15,7 @@ The Go2 EDU side of the system: what the code assumes about the robot, how it ta
 
 ## SDK and DDS usage
 
-All SDK use is in `src/go2_skills/real.py`, selected in the skill process by `GO2_BACKEND=real` (`backend.py`). The dispatcher itself never imports the SDK ([architecture.md](architecture.md#process-model)); every SDK import is inside a function, so importing any `go2_skills` module needs only the standard library ([skills.md](skills.md#no-side-effects-on-import)).
+All SDK use is in `skills/real.py`, selected in the skill process by `GO2_BACKEND=real` (`backend.py`). The dispatcher itself never imports the SDK ([architecture.md](architecture.md#process-model)); every SDK import is inside a function, so importing any `skills` module needs only the standard library ([skills.md](skills.md#no-side-effects-on-import)).
 
 | What | How |
 |---|---|
@@ -51,7 +51,7 @@ Robot state is sampled:
 
 - at the start and end of every skill call (`state_before`, `state_after`);
 - by the `stop_move` utility 0.5 s after `StopMove()` (`state_after`);
-- by the `read_state` utility: `go2-dispatch state`, and at startup on the real backend to set the initial posture (`unknown` if it fails).
+- by the `read_state` utility: `go2 state`, and at startup on the real backend to set the initial posture (`unknown` if it fails).
 
 **How.** On the first sample in a process, the backend subscribes to `rt/sportmodestate`. A sample waits up to 1.0 s for a message that arrived *after* the sample was requested; if none arrives, it uses the latest earlier message; if there is none at all, the sample fails. A failed sample does not fail the step: it is reported in `state_error` and the state is `null` ([skills.md](skills.md#response-schema)).
 
@@ -76,7 +76,7 @@ State is **logged only** in v1. No step gets a verdict from it; the model sees o
 
 ## Posture rule
 
-`derive_posture(body_height, mode)` in `src/go2_skills/posture.py` is the only place posture is derived, on both backends:
+`derive_posture(body_height, mode)` in `skills/posture.py` is the only place posture is derived, on both backends:
 
 | `body_height` | Posture |
 |---|---|
@@ -103,7 +103,7 @@ The waits are guesses, *tunable* and *unverified*; checklist items 3 and 7 measu
 The list of open questions with owners is in [roadmap.md](roadmap.md#open-questions) and [pending human work](roadmap.md#pending-human-work). What they mean on the robot side, and what v1 does meanwhile:
 
 - **Odometry.** `SportModeState` has `position` and `velocity`, and Go2 topic lists include `rt/utlidar/robot_odom` and `rt/utlidar/robot_pose`. Whether the robot's own estimate is available and usable is unknown (ask Achiya). v1 logs `position` and `velocity` in every sample and uses neither. The answer decides whether `walk` can be verified in v2 and whether a geofence is possible ([roadmap.md](roadmap.md#verifiability-per-skill)).
-- **No skill can stand the robot up.** After `sit`, motion fails until a person stands the robot up with the remote; in a batch run one `sit` affects every later task. On the stub, `go2-dispatch --reset-stub` restores the posture. A `stand` skill (`StandUp()` then `BalanceStand()`, with a settle wait) is recommended before experiments; adding one is shown in [skills.md](skills.md#adding-a-new-skill).
+- **No skill can stand the robot up.** After `sit`, motion fails until a person stands the robot up with the remote; in a batch run one `sit` affects every later task. On the stub, `go2 --reset-stub` restores the posture. A `stand` skill (`StandUp()` then `BalanceStand()`, with a settle wait) is recommended before experiments; adding one is shown in [skills.md](skills.md#adding-a-new-skill).
 - **`Move` while lying down.** v1 treats a non-zero return code as `sdk_error` (the stub returns 1). If the real robot silently ignores `Move` and returns 0, `walk` and `turn` report `ok` while nothing moved. Checklist item 8 finds out.
 - **Kill-to-stop latency** and whether the sport service stops by itself when `Move` commands stop arriving: [safety.md](safety.md#between-kill-and-stopmove). Checklist item 5 measures the latency.
 - **Installing the `robot` extra on the lab machine** (CycloneDDS build) and the Python version to pin: [setup.md](setup.md#lab-machine-real-robot).
@@ -119,15 +119,15 @@ The list of open questions with owners is in [roadmap.md](roadmap.md#open-questi
 
 Run this on the lab machine with `robot.backend = "real"`, **in this order**, with the robot **standing**, the area clear and the remote (e-stop) in hand. Read [safety.md](safety.md) first.
 
-Commands use `go2-dispatch` with a real-backend config. Run a step as a one-step task, or run the skill by hand ([skills.md](skills.md#running-a-skill-by-hand)), whichever is easier to observe. The run log has every state sample and timing ([run-log.md](run-log.md)).
+Commands use `go2` with a real-backend config. Run a step as a one-step task, or run the skill by hand ([skills.md](skills.md#running-a-skill-by-hand)), whichever is easier to observe. The run log has every state sample and timing ([run-log.md](run-log.md)).
 
-1. `go2-dispatch state` returns within about 1 s. Record `mode`, `body_height` and `position` while standing.
+1. `go2 state` returns within about 1 s. Record `mode`, `body_height` and `position` while standing.
 2. `walk` forward 0.5 m; `turn` left 90°. Check the distance and angle visually. Record `position` and `imu_rpy` from `state_before` / `state_after` in the run log (evidence for the odometry question).
 3. `stretch` from standing. Measure how long the routine takes (tunes `StretchPolicy.SETTLE_S`).
 4. `detect_object` with target `person`, with a person in view. Check position and closeness against what you see.
 5. Operator `stop` during a 3 m walk. **Measure** kill-to-stop latency: `stop_move.response.timing.stop_call_ms` from the run log, plus the observed time. Record it; there is no pass threshold.
-6. Step timeout during a walk: temporarily set `WalkPolicy.BASE_S = 0` and `FACTOR = 0.5` in `src/go2_skills/walk.py`. The robot must stop and the step outcome must be `timeout`. Restore the values afterwards.
-7. `sit`. Measure how long `StandDown` takes (tunes `SitPolicy.SETTLE_S`). Then `go2-dispatch state`: record `mode` and `body_height` while sitting (decides the [posture rule](#posture-rule)).
+6. Step timeout during a walk: temporarily set `WalkPolicy.BASE_S = 0` and `FACTOR = 0.5` in `skills/walk.py`. The robot must stop and the step outcome must be `timeout`. Restore the values afterwards.
+7. `sit`. Measure how long `StandDown` takes (tunes `SitPolicy.SETTLE_S`). Then `go2 state`: record `mode` and `body_height` while sitting (decides the [posture rule](#posture-rule)).
 8. `walk` while sitting. Record the SDK return code and what the robot does (answers `Move` while lying down).
 9. Stand the robot up with the remote.
 

@@ -8,10 +8,10 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from go2_dispatcher.executor import _parse_response
-from go2_dispatcher.models import SkillResponse
-from go2_skills import result
-from go2_skills.result import build_response
+from dispatcher.executor import _parse_response
+from dispatcher.models import SkillResponse
+from skills import result
+from skills.result import build_response
 
 STATE = {"t": 1.0, "backend": "stub", "posture": "standing", "body_height": 0.32,
          "mode": None, "position": None}

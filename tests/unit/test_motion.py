@@ -8,7 +8,7 @@ import sys
 
 import pytest
 
-from go2_skills import backend, motion, result, stop_move
+from skills import backend, motion, result, stop_move
 
 PERIOD = 0.1
 

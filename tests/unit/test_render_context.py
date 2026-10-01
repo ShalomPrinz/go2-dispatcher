@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 from helpers import REPO_ROOT
 
-from go2_dispatcher.budget import MotionBudget
-from go2_dispatcher.context import ContextInput, build_user_message, schema_retry_message
-from go2_dispatcher.models import (
+from dispatcher.budget import MotionBudget
+from dispatcher.context import ContextInput, build_user_message, schema_retry_message
+from dispatcher.models import (
     PlanStep,
     RobotState,
     SkillError,
@@ -17,9 +17,9 @@ from go2_dispatcher.models import (
     StepResult,
     TaskSummary,
 )
-from go2_dispatcher.policies import MotionCost
-from go2_dispatcher.registry import Registry
-from go2_dispatcher.render import format_value, render_remaining, render_step
+from dispatcher.policies import MotionCost
+from dispatcher.registry import Registry
+from dispatcher.render import format_value, render_remaining, render_step
 
 GOLDEN = REPO_ROOT / "tests" / "golden"
 SECTION_ORDER = ["## Previous task", "## Robot", "## Task", "## Budget",
@@ -29,7 +29,7 @@ TASK = "Walk forward, then  find the chair"  # verbatim: inner double space kept
 
 @pytest.fixture(scope="module")
 def registry() -> Registry:
-    return Registry.load(REPO_ROOT / "skills")
+    return Registry.load(REPO_ROOT / "skills" / "catalog")
 
 
 def check_golden(name: str, text: str, update: bool) -> None:

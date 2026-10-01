@@ -14,7 +14,7 @@ uv run pytest -k context         # by name
 ### Coverage
 
 ```bash
-uv run pytest --cov              # branch coverage of go2_dispatcher and go2_skills, with missing lines
+uv run pytest --cov              # branch coverage of dispatcher and skills, with missing lines
 ```
 
 Coverage is opt-in (`pytest-cov`; settings in `[tool.coverage.*]` in `pyproject.toml`). It measures branches, and it also measures the skill, utility and CLI subprocesses the integration tests start (coverage's `[run] patch = ["subprocess", "_exit"]`; `_exit` is needed because skills end with `os._exit`). Processes killed with SIGKILL (timeouts, stops) record nothing. A covered run takes about 20 s instead of about 12 s.
@@ -66,7 +66,7 @@ Import them with `from helpers import ...`. pytest's rootdir insertion makes `te
 | `FakeClock(start=1000.0)` | `now()`, `advance(seconds)`. |
 | `FakeExecutor(results, *, stop_move_ok=True, stop_move_posture=None, on_kill=None)` | Returns scripted `ExecResult`s. An item can also be an exception (raised) or a callable `f(call_kwargs) -> ExecResult` (to block, set the stop event, or advance the clock). Records `runs`, `kills`, `stop_moves`. `exec_result(...)` and `stop_move_result(...)` build results. |
 | `fake_update`, `fake_context`, `replies` | Minimal Telegram `Update` / `Context` stand-ins with an `AsyncMock` `reply_text`. |
-| `stub_env`, `run_module`, `single_response` | Run a `go2_skills` module in a subprocess with a stub environment and parse its single response line. |
+| `stub_env`, `run_module`, `single_response` | Run a `skills` module in a subprocess with a stub environment and parse its single response line. |
 | `planner_factory.factory()` | Builds a `ScriptedPlanner` from env `GO2_TEST_SCRIPT` (JSON list of raw tool inputs). Used by CLI subprocess tests through `GO2_TEST_PLANNER=planner_factory:factory` with `tests/helpers` on `PYTHONPATH`. |
 | `skill_modules/` | Small modules used as skill entrypoints in registry and executor tests (for example `env_dump`, which reports its environment keys). |
 
@@ -75,7 +75,7 @@ The test planner hook also works by hand, for a stub run with no API key:
 ```bash
 GO2_TEST_PLANNER=planner_factory:factory PYTHONPATH=tests/helpers \
 GO2_TEST_SCRIPT='[{"status":"PLAN","steps":[{"skill":"turn","params":{"direction":"left"}}]},{"status":"DONE","steps":[],"message":"Turned."}]' \
-uv run go2-dispatch run "turn left"
+uv run go2 run "turn left"
 ```
 
 ## Fault injection in tests

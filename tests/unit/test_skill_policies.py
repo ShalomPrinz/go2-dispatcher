@@ -6,12 +6,12 @@ import math
 
 import pytest
 
-from go2_dispatcher.registry import Registry
-from go2_skills import detect_object, sit, stretch, turn, walk
-from go2_skills.policy_base import MotionCost
+from dispatcher.registry import Registry
+from skills import detect_object, sit, stretch, turn, walk
+from skills.policy_base import MotionCost
 from helpers import REPO_ROOT
 
-REGISTRY = Registry.load(REPO_ROOT / "skills")
+REGISTRY = Registry.load(REPO_ROOT / "skills" / "catalog")
 
 
 def max_params(name: str) -> dict:

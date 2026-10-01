@@ -17,8 +17,7 @@ robot  = ["unitree_sdk2py", "cyclonedds==0.10.2"]
 vision = ["ultralytics", "opencv-python", "numpy"]
 
 [project.scripts]
-go2-dispatch = "go2_dispatcher.transports.cli:main"
-go2-bot      = "go2_dispatcher.transports.telegram_bot:main"
+go2 = "dispatcher.transports.cli:main"
 
 [dependency-groups]
 dev = ["pytest", "pytest-cov>=7.1", "pytest-timeout"]   # pytest-cov pulls coverage >= 7.10 for [run] patch
@@ -31,7 +30,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/go2_dispatcher", "src/go2_skills"]
+packages = ["dispatcher", "skills"]
+exclude = ["dispatcher/docs", "dispatcher/tests", "skills/docs", "skills/tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -43,7 +43,7 @@ markers = [
 ]
 
 [tool.coverage.run]                     # opt-in: uv run pytest --cov (docs/testing.md)
-source = ["go2_dispatcher", "go2_skills"]
+source = ["dispatcher", "skills"]
 branch = true
 patch = ["subprocess", "_exit"]         # measure skill and CLI subprocesses; skills end with os._exit
 

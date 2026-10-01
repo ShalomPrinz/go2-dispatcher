@@ -8,8 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from go2_skills import real
-from go2_skills.posture import POSTURE_SITTING_MAX_M, POSTURE_STANDING_MIN_M
+from skills import real
+from skills.posture import POSTURE_SITTING_MAX_M, POSTURE_STANDING_MIN_M
 
 
 def msg(**overrides):

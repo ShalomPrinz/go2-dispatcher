@@ -7,8 +7,8 @@ import typing
 
 import pytest
 
-from go2_dispatcher import prompts
-from go2_dispatcher.models import TaskOutcomeCode
+from dispatcher import prompts
+from dispatcher.models import TaskOutcomeCode
 from helpers import REPO_ROOT
 
 GOLDEN = REPO_ROOT / "tests" / "golden" / "fixed_texts.txt"

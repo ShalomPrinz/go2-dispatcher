@@ -9,14 +9,14 @@ import httpx2 as httpx  # the SDK's HTTP library (see llm.py)
 import pytest
 from helpers import make_config
 
-from go2_dispatcher.llm import (
+from dispatcher.llm import (
     ERR_MAX_TOKENS,
     ERR_NO_TOOL_CALL,
     TOOL_NAME,
     AnthropicPlanner,
     plan_tool_schema,
 )
-from go2_dispatcher.models import LLMInterrupted, LLMUnavailable
+from dispatcher.models import LLMInterrupted, LLMUnavailable
 
 H = 5
 SYSTEM = ["system one", "## Skills\ncatalog"]

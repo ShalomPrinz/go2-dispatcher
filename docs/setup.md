@@ -7,8 +7,8 @@ Installing the project on a development machine (stub only) and on the lab machi
 - Linux (the process lock uses `fcntl.flock`, and skills run in their own process groups).
 - Python **3.10 or 3.11** (`requires-python = ">=3.10,<3.12"`; see [design decisions](#design-decisions)). `uv` can install it for you.
 - `git`.
-- An Anthropic API key, for `run`, `batch` and `go2-bot`. You do not need one for `catalog`, `state`, `--reset-stub` or the test suite.
-- A Telegram bot token, for `go2-bot` only ([running.md](running.md#setup)).
+- An Anthropic API key, for `run`, `batch` and `go2 bot`. You do not need one for `catalog`, `state`, `--reset-stub` or the test suite.
+- A Telegram bot token, for `go2 bot` only ([running.md](running.md#setup)).
 - For the real robot (lab machine only): a Unitree Go2 EDU on a wired network interface, CycloneDDS 0.10.2, and the YOLO weights file.
 
 ## Install `uv`
@@ -116,9 +116,9 @@ TELEGRAM_BOT_TOKEN=123456789:AA...
 ## Verify
 
 ```bash
-uv run go2-dispatch catalog          # prints system text, catalog, tool schema, registry hash; no key needed
-uv run go2-dispatch state            # stub: prints a JSON state with "backend": "stub"
-uv run go2-dispatch run "turn left 90 degrees, then tell me if you see a chair"
+uv run go2 catalog          # prints system text, catalog, tool schema, registry hash; no key needed
+uv run go2 state            # stub: prints a JSON state with "backend": "stub"
+uv run go2 run "turn left 90 degrees, then tell me if you see a chair"
 uv run pytest                        # all default tests pass with no key, robot or network
 ```
 
@@ -127,7 +127,7 @@ The `run` command needs `ANTHROPIC_API_KEY`. Its run log is written to `runs/` (
 On the lab machine, with the robot on and standing, check the real backend:
 
 ```bash
-uv run go2-dispatch --backend real state     # should return within about 1 s
+uv run go2 --backend real state     # should return within about 1 s
 ```
 
 (or set `backend = "real"` in `config.toml`). Read [safety.md](safety.md), then work through the supervised robot checklist in [robot.md](robot.md#supervised-robot-checklist) before running real tasks.

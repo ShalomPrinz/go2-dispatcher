@@ -1,6 +1,6 @@
 """Valid test skill module: POLICY.name == "demo"."""
 
-from go2_skills.policy_base import SkillPolicy
+from skills.policy_base import SkillPolicy
 
 
 class DemoPolicy(SkillPolicy):

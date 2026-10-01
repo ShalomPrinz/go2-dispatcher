@@ -6,8 +6,8 @@ import json
 
 import pytest
 
-from go2_dispatcher.models import SkillResponse
-from go2_skills import stub
+from dispatcher.models import SkillResponse
+from skills import stub
 from helpers import run_module, single_response, stub_env
 
 pytestmark = pytest.mark.integration

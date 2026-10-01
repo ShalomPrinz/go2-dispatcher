@@ -7,8 +7,8 @@ An LLM dispatcher for the Unitree Go2 EDU: it takes a natural-language task from
 ```bash
 uv sync                                   # core + dev dependencies (stub mode)
 cp config.example.toml config.toml && cp .env.example .env   # then set ANTHROPIC_API_KEY in .env
-uv run go2-dispatch catalog               # no API key needed
-uv run go2-dispatch run "turn left 90 degrees, then tell me if you see a chair"
+uv run go2 catalog               # no API key needed
+uv run go2 run "turn left 90 degrees, then tell me if you see a chair"
 uv run pytest
 ```
 
