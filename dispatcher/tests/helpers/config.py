@@ -6,9 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from dispatcher.config import Config, build_config
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
-TEST_TIME_SCALE = 0.01
+from tests.helpers import REPO_ROOT, TEST_TIME_SCALE
 
 
 def _merge(base: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:

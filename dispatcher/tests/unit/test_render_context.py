@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from helpers import REPO_ROOT
+from tests.helpers import REPO_ROOT
 
 from dispatcher.budget import MotionBudget
 from dispatcher.context import ContextInput, build_user_message, schema_retry_message

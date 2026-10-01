@@ -6,7 +6,8 @@ Running the test suite: layout, markers and opt-in flags, helpers and fakes, gol
 
 ```bash
 uv run pytest                    # everything that needs no network, API key, robot or SDK
-uv run pytest -q dispatcher/tests/unit skills/tests/unit  # unit tests only
+uv run pytest -q dispatcher/tests skills/tests  # unit tests of both services only
+uv run pytest -q tests           # cross-service tests only
 uv run pytest -m integration     # real subprocesses on the stub backend
 uv run pytest -k context         # by name
 ```
@@ -25,15 +26,16 @@ The default run must pass on any machine after `uv sync` (core + dev dependencie
 
 | Folder | What |
 |---|---|
-| `dispatcher/tests/unit/` | config, process lock, registry, tool schema, plan validation, bounds, precheck, motion budget, render + context, transport start-up (planner choice, initial posture), prompts (fixed-texts golden file), LLM client (mock HTTP), dispatcher loop, `format_outcome`, Telegram handlers |
-| `dispatcher/tests/integration/` | executor, end-to-end with the real executor, CLI subprocesses (including "the CLI does not import `anthropic`"), live LLM |
+| `dispatcher/tests/unit/` | config, process lock, registry, tool schema, plan validation, bounds, precheck, motion budget, render + context, transport start-up (planner choice, initial posture), prompts (fixed-texts golden file), LLM client (mock HTTP), dispatcher loop, `format_outcome`, Telegram handlers, executor response parsing (`test_parse_response.py`) |
 | `dispatcher/tests/golden/` | expected catalog, context and fixed texts |
-| `dispatcher/tests/helpers/` | shared helpers (below) |
-| `skills/tests/unit/` | skill policies (timeout covers the motion), shared skill helpers (`parse_params`, `require_*`, backend selection), motion loop, single actions and the `stop_move` utility with a fake sport client, real-robot state mapping (`real._state_from_msg`), skill response and executor response parsing, posture |
-| `skills/tests/integration/` | per-skill contract (one subprocess per skill), stub behaviour, one subprocess case per shared mechanism (invalid params, backend not configured, noise, faults), utilities, orphan watchdog, side-effect-free imports |
+| `dispatcher/tests/helpers/` | dispatcher-only helpers (below) |
+| `skills/tests/unit/` | shared skill helpers (`parse_params`, `require_*`, backend selection), motion loop, single actions and the `stop_move` utility with a fake sport client, real-robot state mapping (`real._state_from_msg`), `build_response` argument checks and message cutting, posture |
 | `skills/tests/robot/` | reserved for opt-in robot tests; empty in v1 (the robot checks are manual) |
+| `tests/integration/` | cross-service tests: executor, end-to-end with the real executor, CLI subprocesses (including "the CLI does not import `anthropic`"), live LLM, per-skill contract (one subprocess per skill), stub behaviour, one subprocess case per shared mechanism (invalid params, backend not configured, noise, faults), utilities, orphan watchdog, side-effect-free imports, skill policies against the registry (timeout covers the motion), `build_response` output against `SkillResponse` |
+| `tests/helpers/` | helpers shared by the root tests and a service suite (below) |
+| `tests/pytest_plugin.py` | the `--run-live`, `--run-robot` and `--update-golden` options, marker gating and the `update_golden` fixture |
 
-Each test lives in the service whose code it exercises. `test_skill_response.py` sits under `skills/` because it mostly checks `skills.result.build_response`; it also checks that the dispatcher's models and response parsing accept that output.
+A service folder holds unit tests of that service only: `skills/tests/` never imports `dispatcher`, while `dispatcher/tests/` may import `skills` (the dispatcher depends on skills). A test that needs both services, or that runs the services as real subprocesses, lives in the root `tests/` (see design decisions below).
 
 ## Markers and flags
 
@@ -43,7 +45,7 @@ Each test lives in the service whose code it exercises. `test_skill_response.py`
 | `live_llm` | calls the real Anthropic API | `--run-live` and `ANTHROPIC_API_KEY` |
 | `robot` | needs the real Go2 | `--run-robot` |
 
-Options (defined in the root `conftest.py`):
+Options (defined in the pytest plugin `tests/pytest_plugin.py`, loaded by `addopts = "-p tests.pytest_plugin"` in `pyproject.toml`, so they are available whichever folder is run):
 
 - `--run-live`: run `live_llm` tests. They are skipped without it, and also skipped if `ANTHROPIC_API_KEY` is not set.
 - `--run-robot`: run `robot` tests. There are none in v1; the robot checks are the supervised checklist in [robot.md](../skills/docs/robot.md#supervised-robot-checklist).
@@ -52,16 +54,18 @@ Options (defined in the root `conftest.py`):
 ### Live LLM test
 
 ```bash
-ANTHROPIC_API_KEY=sk-ant-... uv run pytest --run-live -s dispatcher/tests/integration/test_live_llm.py
+ANTHROPIC_API_KEY=sk-ant-... uv run pytest --run-live -s tests/integration/test_live_llm.py
 ```
 
 It runs the task "turn left 90 degrees, then tell me if you see a chair" on the stub with `stub.detections = {chair = "center:near"}`. It passes if the task ends `DONE`, the message mentions the chair, and the run log has no `plan_invalid` or `horizon_rejection` record. With `-s`, it prints the run log path.
 
 It uses the default LLM settings (`claude-sonnet-5-5`, `thinking = "between_tools"`, `tool_choice` auto, no `temperature`; see [llm.md](../dispatcher/docs/llm.md#the-request)). **It has not been run live yet**; running it is the pending check of the request parameters ([roadmap.md](roadmap.md#pending-human-work)).
 
-## Helpers (`dispatcher/tests/helpers/`)
+## Helpers
 
-Import them with `from helpers import ...`, from either service's tests. `pythonpath = ["dispatcher/tests"]` in `[tool.pytest.ini_options]` makes them importable; there is no `sys.path` manipulation in the tests. Nothing on that path may shadow the `dispatcher` or `skills` packages (hence `helpers/skill_process.py`, not `skills.py`).
+Import them with absolute imports: `from tests.helpers import ...` for shared helpers (`tests/helpers/`) and `from dispatcher.tests.helpers import ...` for dispatcher-only ones (`dispatcher/tests/helpers/`); root tests may import both. `tests`, `dispatcher.tests` and `skills.tests` are packages (each test folder has an `__init__.py`), and the editable install from `uv sync` puts the repo root on `sys.path`, so there is no `pythonpath` setting and no `sys.path` manipulation in the tests. `skills/tests/` imports nothing from `dispatcher`.
+
+Shared (`tests/helpers/`): `REPO_ROOT`, `TEST_TIME_SCALE`, `stub_env`, `run_module`, `single_response`. Dispatcher-only (`dispatcher/tests/helpers/`): everything else in the table.
 
 | Helper | Purpose |
 |---|---|
@@ -71,8 +75,8 @@ Import them with `from helpers import ...`, from either service's tests. `python
 | `FakeExecutor(results, *, stop_move_ok=True, stop_move_posture=None, on_kill=None)` | Returns scripted `ExecResult`s. An item can also be an exception (raised) or a callable `f(call_kwargs) -> ExecResult` (to block, set the stop event, or advance the clock). Records `runs`, `kills`, `stop_moves`. `exec_result(...)` and `stop_move_result(...)` build results. |
 | `fake_update`, `fake_context`, `replies` | Minimal Telegram `Update` / `Context` stand-ins with an `AsyncMock` `reply_text`. |
 | `stub_env`, `run_module`, `single_response` | Run a `skills` module in a subprocess with a stub environment and parse its single response line. |
-| `planner_factory.factory()` | Builds a `ScriptedPlanner` from env `GO2_TEST_SCRIPT` (JSON list of raw tool inputs). Used by CLI subprocess tests through `GO2_TEST_PLANNER=planner_factory:factory` with `dispatcher/tests/helpers` on `PYTHONPATH`. |
-| `skill_modules/` | Small modules used as skill entrypoints in registry and executor tests (for example `env_dump`, which reports its environment keys). |
+| `planner_factory.factory()` | Builds a `ScriptedPlanner` from env `GO2_TEST_SCRIPT` (JSON list of raw tool inputs). Used by CLI subprocess tests through `GO2_TEST_PLANNER=planner_factory:factory` with `dispatcher/tests/helpers` on `PYTHONPATH` (a top-level import, so the subprocess does not load the whole helpers package). |
+| `skill_modules/` | Small modules used as skill entrypoints in registry tests (`dispatcher.tests.helpers.skill_modules.<name>`) and the executor test (`env_dump`, which reports its environment keys; run as `skill_modules.env_dump` with `dispatcher/tests/helpers` on `PYTHONPATH`). |
 
 The test planner hook also works by hand, for a stub run with no API key:
 
@@ -108,4 +112,6 @@ There are no automated robot tests in v1. The real backend is checked by hand wi
 ## Design decisions
 
 - **SDK-calling skill code is tested in process with a fake sport client.** The stub's `error` fault fails only the first SDK call, so mid-loop failures, a failing `StopMove`, an exception during `Move` and the orphan break in `motion.move_loop`, and the failure branches of `stop_move.main()`, are reached only by monkeypatching `backend.get_sport_client`, `backend.sleep`, `backend.sample_state` and `result.emit` (which would otherwise exit the process). Adding faults to the stub for these paths was rejected: it would grow the stub for test-only behaviour and still cost one interpreter start per case.
+- **Service folders hold unit tests of their own service; cross-service tests live in a root `tests/` package.** `skills/tests/` must not import `dispatcher`, so that the dependency direction of the code (the dispatcher imports skills, never the reverse) also holds for the tests. Integration tests drive both services (the executor starts skill processes, skill responses are parsed by the dispatcher's models), so they are cross-service by nature and all live in `tests/integration/`, together with the in-process tests that check skills against the dispatcher's registry or models. Rejected: keeping each test in the service whose code it mostly exercises, which made `skills/tests/` import `dispatcher`.
+- **Pytest options come from a plugin module (`-p tests.pytest_plugin`), not a root `conftest.py`.** pytest registers an option only once, so the options cannot be defined in each suite's conftest, and a conftest is loaded only for paths below it, so a conftest in one suite is not loaded when another suite is run on its own. A root `conftest.py` worked but sat outside every test folder; the plugin keeps all test code under `tests/` and makes the options available for any subset (`uv run pytest skills/tests`). Helpers are imported with absolute package paths instead of a `pythonpath` entry, which avoids a bare top-level `helpers` module that could shadow other names.
 - **Coverage is opt-in, not in `addopts`.** Measuring subprocesses makes the run about 60 % slower, and the default run must stay fast.

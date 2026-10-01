@@ -7,7 +7,7 @@ import threading
 
 import httpx2 as httpx  # the SDK's HTTP library (see llm.py)
 import pytest
-from helpers import make_config
+from dispatcher.tests.helpers import make_config
 
 from dispatcher.llm import (
     ERR_MAX_TOKENS,

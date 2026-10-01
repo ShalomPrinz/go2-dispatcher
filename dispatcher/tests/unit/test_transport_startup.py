@@ -16,7 +16,8 @@ from dispatcher.transports import (
     initial_posture,
     make_planner,
 )
-from helpers import REPO_ROOT, FakeExecutor, make_config
+from dispatcher.tests.helpers import FakeExecutor, make_config
+from tests.helpers import REPO_ROOT
 
 
 @pytest.fixture

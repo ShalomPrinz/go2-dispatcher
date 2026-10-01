@@ -8,7 +8,7 @@ import pytest
 
 from dispatcher.models import SkillResponse
 from skills import stub
-from helpers import run_module, single_response, stub_env
+from tests.helpers import run_module, single_response, stub_env
 
 pytestmark = pytest.mark.integration
 

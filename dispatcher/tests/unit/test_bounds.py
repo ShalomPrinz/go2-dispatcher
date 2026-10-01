@@ -12,7 +12,7 @@ from dispatcher.models import Plan, PlanStep
 from dispatcher.policies import MotionCost, SkillPolicy
 from dispatcher.registry import ParamSpec, Registry, SkillDescriptor
 
-from helpers import REPO_ROOT
+from tests.helpers import REPO_ROOT
 
 
 @pytest.fixture(scope="module")

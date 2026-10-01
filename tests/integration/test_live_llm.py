@@ -13,7 +13,8 @@ from dispatcher.llm import AnthropicPlanner
 from dispatcher.registry import Registry
 from dispatcher.runlog import RunLogFactory
 from skills import stub
-from helpers import REPO_ROOT, make_config
+from dispatcher.tests.helpers import make_config
+from tests.helpers import REPO_ROOT
 
 pytestmark = [pytest.mark.live_llm, pytest.mark.timeout(300)]
 

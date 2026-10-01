@@ -7,7 +7,7 @@ import pytest
 from dispatcher.models import StepResult, TaskOutcome
 from dispatcher.registry import Registry
 from dispatcher.transports import OUTCOME_MAX_CHARS, format_outcome
-from helpers import REPO_ROOT
+from tests.helpers import REPO_ROOT
 
 
 @pytest.fixture(scope="module")

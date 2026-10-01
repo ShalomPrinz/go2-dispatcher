@@ -11,11 +11,12 @@ from dispatcher.policies import SkillPolicy
 from dispatcher.llm import plan_tool_schema
 from dispatcher.prompts import system_text
 from dispatcher.registry import MISSING, Registry, registry_hash
-from helpers import REPO_ROOT
+from tests.helpers import REPO_ROOT
 
 SKILLS_DIR = REPO_ROOT / "skills" / "catalog"
 GOLDEN_CATALOG = REPO_ROOT / "dispatcher" / "tests" / "golden" / "catalog.txt"
-GOOD_ENTRY = "helpers.skill_modules.good"
+SKILL_MODULES = "dispatcher.tests.helpers.skill_modules"
+GOOD_ENTRY = f"{SKILL_MODULES}.good"
 
 GOOD_PARAMS = """params:
   speed:
@@ -238,20 +239,20 @@ def test_default_failing_its_own_checks(tmp_path, spec):
 
 
 def test_entrypoint_not_importable(tmp_path):
-    path = write_skill(tmp_path, "demo", "", entrypoint="helpers.skill_modules.does_not_exist")
+    path = write_skill(tmp_path, "demo", "", entrypoint=f"{SKILL_MODULES}.does_not_exist")
     assert_registry_error(tmp_path, path, "importable")
 
 
 def test_module_without_policy(tmp_path):
-    path = write_skill(tmp_path, "demo", "", entrypoint="helpers.skill_modules.no_policy")
+    path = write_skill(tmp_path, "demo", "", entrypoint=f"{SKILL_MODULES}.no_policy")
     assert_registry_error(tmp_path, path, "POLICY")
 
 
 def test_policy_not_a_skill_policy(tmp_path):
-    path = write_skill(tmp_path, "demo", "", entrypoint="helpers.skill_modules.not_a_policy")
+    path = write_skill(tmp_path, "demo", "", entrypoint=f"{SKILL_MODULES}.not_a_policy")
     assert_registry_error(tmp_path, path, "POLICY")
 
 
 def test_policy_name_mismatch(tmp_path):
-    path = write_skill(tmp_path, "demo", "", entrypoint="helpers.skill_modules.wrong_name")
+    path = write_skill(tmp_path, "demo", "", entrypoint=f"{SKILL_MODULES}.wrong_name")
     assert_registry_error(tmp_path, path, "POLICY.name")

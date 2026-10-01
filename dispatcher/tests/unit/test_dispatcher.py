@@ -13,8 +13,7 @@ from dispatcher.executor import STDERR_TAIL_CHARS
 from dispatcher.models import BusyError, LLMInterrupted, LLMUnavailable, Plan, PlanStep
 from dispatcher.registry import Registry
 from dispatcher.runlog import RunLog, RunLogFactory
-from helpers import (
-    REPO_ROOT,
+from dispatcher.tests.helpers import (
     FakeClock,
     FakeExecutor,
     ScriptedPlanner,
@@ -22,6 +21,7 @@ from helpers import (
     make_config,
     stop_move_result,
 )
+from tests.helpers import REPO_ROOT
 
 WAIT_S = 5.0
 

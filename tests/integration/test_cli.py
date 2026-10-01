@@ -14,7 +14,7 @@ import pytest
 
 from dispatcher.registry import Registry
 from skills import stub
-from helpers import REPO_ROOT
+from tests.helpers import REPO_ROOT
 
 pytestmark = pytest.mark.integration
 

@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .config import REPO_ROOT, TEST_TIME_SCALE
+from .paths import REPO_ROOT, TEST_TIME_SCALE
 
 SECRET_ENV = ("ANTHROPIC_API_KEY", "TELEGRAM_BOT_TOKEN")
 SKILL_RUN_TIMEOUT_S = 20.0

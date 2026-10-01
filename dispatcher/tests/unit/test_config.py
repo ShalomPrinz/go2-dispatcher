@@ -16,7 +16,7 @@ from dispatcher.config import (
     parse_env_text,
 )
 from dispatcher.models import ConfigError
-from helpers import REPO_ROOT
+from tests.helpers import REPO_ROOT
 
 
 def write(path: Path, text: str) -> Path:

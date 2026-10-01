@@ -1,4 +1,4 @@
-"""Shared pytest options and marker gating (docs/testing.md)."""
+"""pytest plugin: shared options and marker gating, loaded with -p in pyproject.toml (docs/testing.md)."""
 
 from __future__ import annotations
 

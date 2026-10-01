@@ -9,7 +9,7 @@ import pytest
 
 from dispatcher import prompts
 from dispatcher.models import TaskOutcomeCode
-from helpers import REPO_ROOT
+from tests.helpers import REPO_ROOT
 
 GOLDEN = REPO_ROOT / "dispatcher" / "tests" / "golden" / "fixed_texts.txt"
 ALL_OUTCOMES = typing.get_args(TaskOutcomeCode)

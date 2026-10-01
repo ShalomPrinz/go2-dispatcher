@@ -11,8 +11,9 @@ import pytest
 from dispatcher.executor import Executor
 from dispatcher.registry import Registry, SkillDescriptor
 from skills import stub
-from helpers import REPO_ROOT, make_config
-from helpers.skill_modules.env_dump import POLICY as ENV_DUMP_POLICY
+from dispatcher.tests.helpers import make_config
+from dispatcher.tests.helpers.skill_modules.env_dump import POLICY as ENV_DUMP_POLICY
+from tests.helpers import REPO_ROOT
 
 pytestmark = pytest.mark.integration
 

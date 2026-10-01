@@ -14,7 +14,8 @@ from dispatcher.models import Plan, PlanStep
 from dispatcher.registry import Registry
 from dispatcher.runlog import INDEX_FILE, RunLogFactory
 from skills import stub
-from helpers import REPO_ROOT, ScriptedPlanner, make_config
+from dispatcher.tests.helpers import ScriptedPlanner, make_config
+from tests.helpers import REPO_ROOT
 
 pytestmark = pytest.mark.integration
 

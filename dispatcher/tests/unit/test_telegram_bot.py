@@ -27,8 +27,7 @@ from dispatcher.transports.telegram_bot import (
     on_stop,
     on_text,
 )
-from helpers import (
-    REPO_ROOT,
+from dispatcher.tests.helpers import (
     FakeClock,
     FakeExecutor,
     ScriptedPlanner,
@@ -38,6 +37,7 @@ from helpers import (
     make_config,
     replies,
 )
+from tests.helpers import REPO_ROOT
 
 USER = 42
 TOKEN = "123456:TEST-token-not-real"

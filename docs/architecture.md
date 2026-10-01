@@ -90,7 +90,7 @@ Cross-cutting decisions. Decisions that belong to one topic are in that topic's 
 - **Runs offline by default.** Stub mode and the default test suite need no SDK, API key, network or robot; SDK, CycloneDDS and vision libraries are imported lazily, only on real-backend paths. `uv` and `pyproject.toml`, no `sys.path` changes ([setup.md](setup.md)).
 - **Every starting value is a config key or a named constant**, never inline, because almost all of them are expected to be tuned ([configuration.md](configuration.md)).
 - **Simple, inspectable mechanisms** over clever ones (for example fixed settle waits rather than motion detection, commanded rather than estimated motion budget), matching the project's scope and the student's background.
-- **Two services, `dispatcher/` and `skills/`, each holding its own source, `docs/` and `tests/`.** The dispatcher depends on skills (stub, policy base classes, COCO names, module names it starts); skills never import the dispatcher. Keeping code, tests and docs for one service in one folder makes that boundary visible and keeps each service's material in one place. A small shared root `docs/` holds what covers both services (project, architecture, safety, configuration, setup, running, testing, roadmap, references); service docs live in the service's `docs/`.
+- **Two services, `dispatcher/` and `skills/`, each holding its own source, `docs/` and `tests/`.** The dispatcher depends on skills (stub, policy base classes, COCO names, module names it starts); skills never import the dispatcher. Tests that need both services live in a root `tests/` folder ([testing.md](testing.md#design-decisions)). Keeping code, unit tests and docs for one service in one folder makes that boundary visible and keeps each service's material in one place. A small shared root `docs/` holds what covers both services (project, architecture, safety, configuration, setup, running, testing, roadmap, references); service docs live in the service's `docs/`.
 - **The service folder is the Python package** (`dispatcher`, `skills`), with `docs/` and `tests/` inside it and excluded from the wheel. Rejected: a `src` layout (packages under a top-level `src` folder), which puts two unrelated packages under one generic folder and separates them from their tests and docs; and a nested `dispatcher/dispatcher/` package folder, which adds a level without adding a boundary.
 - **Plain package names `dispatcher` and `skills`.** They match the folder and service names. The generic name `skills` could clash with another installed package; in this project's own virtual environment that is unlikely, and the short name reads naturally in imports and module strings.
 - **Skill manifests live in `skills/catalog/<name>/SKILL.md`**, next to the skill modules. The name matches the existing term: the `catalog` command and the catalog text the model sees are generated from them ([skills.md](../skills/docs/skills.md#catalog-and-registry-hash)).
@@ -106,12 +106,12 @@ go2-dispatcher/
 ├── dispatcher/                 # dispatcher package; never imports the SDK
 │   ├── transports/             # build_dispatcher, CLI, Telegram
 │   ├── docs/                   # loop-and-context.md, llm.md, run-log.md
-│   └── tests/                  # unit/, integration/, helpers/, golden/ (excluded from the wheel)
+│   └── tests/                  # unit/, helpers/, golden/: dispatcher unit tests (excluded from the wheel)
 ├── skills/                     # skills package: skill and utility processes, backends, posture rule
 │   ├── catalog/<name>/SKILL.md # the loaded skill set (config skills.dir)
 │   ├── docs/                   # skills.md, robot.md
-│   └── tests/                  # unit/, integration/, robot/ (opt-in) (excluded from the wheel)
-├── conftest.py                 # pytest options: --run-live, --run-robot, --update-golden
+│   └── tests/                  # unit/, robot/ (opt-in): skills unit tests (excluded from the wheel)
+├── tests/                      # cross-service tests: integration/, shared helpers/, pytest_plugin.py (options)
 ├── docs/                       # shared documentation (index: docs/README.md)
 ├── runs/                       # run logs (gitignored)
 └── models/                     # YOLO weights (gitignored)

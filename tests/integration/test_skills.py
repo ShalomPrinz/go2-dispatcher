@@ -13,7 +13,7 @@ import pytest
 
 from dispatcher.models import SkillResponse
 from skills import stub
-from helpers import REPO_ROOT, run_module, single_response, stub_env
+from tests.helpers import REPO_ROOT, run_module, single_response, stub_env
 
 pytestmark = pytest.mark.integration
 
