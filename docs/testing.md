@@ -12,13 +12,21 @@ uv run pytest -k context         # by name
 uv run pytest -n auto            # in parallel (pytest-xdist); about 5 s instead of about 12 s
 ```
 
+### Coverage
+
+```bash
+uv run pytest --cov              # branch coverage of go2_dispatcher and go2_skills, with missing lines
+```
+
+Coverage is opt-in (`pytest-cov`; settings in `[tool.coverage.*]` in `pyproject.toml`). It measures branches, and it also measures the skill, utility and CLI subprocesses the integration tests start (coverage's `[run] patch = ["subprocess", "_exit"]`; `_exit` is needed because skills end with `os._exit`). Processes killed with SIGKILL (timeouts, stops) record nothing. A covered run takes about 20 s instead of about 12 s.
+
 The default run must pass on any machine after `uv sync` (core + dev dependencies only). Every test has a 30 s timeout (`pytest-timeout`). Parallel runs are opt-in (see design decisions below).
 
 ## Layout
 
 | Folder | What |
 |---|---|
-| `tests/unit/` | config, process lock, registry, tool schema, plan validation, bounds, precheck, motion budget, skill policies (timeout covers the motion), shared skill helpers (`parse_params`, `require_*`, backend selection), render + context, skill response, posture, prompts (fixed-texts golden file), LLM client (mock HTTP), dispatcher loop, `format_outcome`, Telegram handlers |
+| `tests/unit/` | config, process lock, registry, tool schema, plan validation, bounds, precheck, motion budget, skill policies (timeout covers the motion), shared skill helpers (`parse_params`, `require_*`, backend selection), motion loop, single actions and the `stop_move` utility with a fake sport client, real-robot state mapping (`real._state_from_msg`), render + context, skill response and executor response parsing, posture, transport start-up (planner choice, initial posture), prompts (fixed-texts golden file), LLM client (mock HTTP), dispatcher loop, `format_outcome`, Telegram handlers |
 | `tests/integration/` | per-skill contract (one subprocess per skill), stub behaviour, one subprocess case per shared mechanism (invalid params, backend not configured, noise, faults), utilities, orphan watchdog, side-effect-free imports, executor, end-to-end with the real executor, CLI subprocesses (including "the CLI does not import `anthropic`"), live LLM |
 | `tests/golden/` | expected catalog, context and fixed texts |
 | `tests/helpers/` | shared helpers (below) |
@@ -96,4 +104,6 @@ There are no automated robot tests in v1. The real backend is checked by hand wi
 
 ## Design decisions
 
+- **SDK-calling skill code is tested in process with a fake sport client.** The stub's `error` fault fails only the first SDK call, so mid-loop failures, a failing `StopMove`, an exception during `Move` and the orphan break in `motion.move_loop`, and the failure branches of `stop_move.main()`, are reached only by monkeypatching `backend.get_sport_client`, `backend.sleep`, `backend.sample_state` and `result.emit` (which would otherwise exit the process). Adding faults to the stub for these paths was rejected: it would grow the stub for test-only behaviour and still cost one interpreter start per case.
+- **Coverage is opt-in, not in `addopts`.** Measuring subprocesses makes the run about 60 % slower, and the default run must stay fast.
 - **Parallel runs are opt-in, not the default.** `pytest-xdist` is a dev dependency and the suite passes with `-n auto` (each test isolates its state under `tmp_path`; the Telegram SIGTERM test signals its own worker process, and xdist runs tests in the worker's main thread, so the signal handler is installed). It is not in `addopts` because `-s` output (used by the live LLM test) is not shown under xdist, and the executor's real-timer tests run under extra CPU load on slower lab machines.

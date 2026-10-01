@@ -1,10 +1,14 @@
-"""build_response dicts validate against SkillResponse (docs/skills.md)."""
+"""build_response dicts validate against SkillResponse, and the executor parses the
+response line from skill stdout (docs/skills.md)."""
 
 from __future__ import annotations
+
+import json
 
 import pytest
 from pydantic import ValidationError
 
+from go2_dispatcher.executor import _parse_response
 from go2_dispatcher.models import SkillResponse
 from go2_skills import result
 from go2_skills.result import build_response
@@ -81,3 +85,22 @@ def test_robot_state_tolerates_extra_fields():
     d = build_response("read_state", "ok", state_after={**STATE, "extra_field": 5})
     r = SkillResponse.model_validate(d)
     assert r.state_after.posture == "standing"
+
+
+LINE = json.dumps(build_response("walk", "ok"))
+
+
+@pytest.mark.parametrize("stdout", [
+    "junk\n" + json.dumps(build_response("walk", "error", error_code="x", error_message="y"))
+    + "\n" + LINE,
+    LINE + "\n\n  \n",
+], ids=["last_line_wins", "trailing_blank_lines"])
+def test_parse_response_last_nonempty_line(stdout):
+    r = _parse_response(stdout, "walk")
+    assert r is not None and r.status == "ok"
+
+
+@pytest.mark.parametrize("stdout", ["", LINE + "\n{not json", LINE.replace("walk", "turn")],
+                         ids=["empty", "invalid_json", "other_skill"])
+def test_parse_response_none(stdout):
+    assert _parse_response(stdout, "walk") is None

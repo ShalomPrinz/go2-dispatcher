@@ -21,7 +21,7 @@ go2-dispatch = "go2_dispatcher.transports.cli:main"
 go2-bot      = "go2_dispatcher.transports.telegram_bot:main"
 
 [dependency-groups]
-dev = ["pytest", "pytest-timeout", "pytest-xdist"]
+dev = ["pytest", "pytest-cov>=7.1", "pytest-timeout", "pytest-xdist"]   # pytest-cov pulls coverage >= 7.10 for [run] patch
 
 [tool.uv.sources]
 unitree_sdk2py = { git = "https://github.com/unitreerobotics/unitree_sdk2_python" }
@@ -41,3 +41,12 @@ markers = [
   "live_llm: calls the real Anthropic API (needs --run-live and ANTHROPIC_API_KEY)",
   "robot: needs the real Go2 (needs --run-robot)",
 ]
+
+[tool.coverage.run]                     # opt-in: uv run pytest --cov (docs/testing.md)
+source = ["go2_dispatcher", "go2_skills"]
+branch = true
+patch = ["subprocess", "_exit"]         # measure skill and CLI subprocesses; skills end with os._exit
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

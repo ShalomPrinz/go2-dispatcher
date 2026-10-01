@@ -183,6 +183,24 @@ def test_retry_after_capped(tmp_path):
     assert h.sleeps == [30.0]
 
 
+@pytest.mark.parametrize("value", ["soon", "-1"], ids=["non_numeric", "negative"])
+def test_bad_retry_after_ignored(tmp_path, value):
+    h = Harness(tmp_path, [httpx.Response(429, json={}, headers={"retry-after": value}), ok()])
+    h.plan()
+    assert h.sleeps == [1.0]  # the first backoff
+
+
+@pytest.mark.parametrize("status, retried", [(408, True), (409, True), (404, False)])
+def test_4xx_retry_classification(tmp_path, status, retried):
+    h = Harness(tmp_path, [httpx.Response(status, json={}), ok()])
+    if retried:
+        assert h.plan().attempts == 2
+    else:
+        with pytest.raises(LLMUnavailable):
+            h.plan()
+        assert len(h.requests) == 1
+
+
 def test_500_three_times_unavailable(tmp_path):
     h = Harness(tmp_path, [httpx.Response(500, json={})] * 3)
     with pytest.raises(LLMUnavailable) as ei:

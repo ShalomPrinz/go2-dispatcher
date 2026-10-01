@@ -452,3 +452,86 @@ def test_shutdown_while_step_blocks(tmp_path, registry):
     th.join(WAIT_S)
     assert out["o"].outcome == "STOPPED"
     assert records(out["o"], "stop_requested")[0]["source"] == "shutdown"
+
+
+# --- branches not reached by the tests above --------------------------------------------
+
+
+def test_invalid_reply_at_call_budget_skips_retry(tmp_path, registry):
+    r = Rig(tmp_path, registry, [{"status": "PLAN", "steps": []}], loop={"max_llm_calls": 1})
+    o = r.run()
+    assert o.outcome == "CALL_BUDGET_EXHAUSTED"
+    assert len(r.planner.calls) == 1
+
+
+def test_precheck_rejection_reaches_failure_budget(tmp_path, registry):
+    r = Rig(tmp_path, registry, [plan(walk(99))], loop={"max_failures": 1})
+    o = r.run()
+    assert o.outcome == "FAILURE_BUDGET_EXHAUSTED"
+    assert r.executor.runs == []
+
+
+def test_stop_during_schema_retry_call(tmp_path, registry):
+    planner_ref = {}
+
+    def on_call(call_index):
+        if call_index == 2:
+            planner_ref["p"].calls[-1]["stop_event"].set()
+
+    r = Rig(tmp_path, registry, [{"status": "PLAN", "steps": []}, plan(walk())],
+            on_call=on_call)
+    planner_ref["p"] = r.planner
+    o = r.run()
+    assert o.outcome == "STOPPED"
+    assert len(r.planner.calls) == 2
+    assert r.executor.runs == []
+
+
+def test_step_stop_move_failure_warns(tmp_path, registry):
+    timeout = exec_result("timeout", stop_move=stop_move_result("step_timeout", ok=False))
+    r = Rig(tmp_path, registry, [plan(walk()), done()], [timeout])
+    o = r.run()
+    assert o.outcome == "DONE"
+    assert o.stop_move_failed is True
+    assert o.message.endswith(prompts.STOP_MOVE_WARNING)
+
+
+def test_dispatcher_stop_move_updates_posture(tmp_path, registry):
+    def step1(call):
+        call["stop_event"].set()
+        return exec_result()
+
+    r = Rig(tmp_path, registry, [plan(walk(), turn())],
+            executor=FakeExecutor([step1], stop_move_posture="sitting"))
+    o = r.run()
+    assert o.outcome == "STOPPED"
+    assert r.d.posture == o.final_posture == "sitting"
+
+
+def test_llm_interrupted_time_limit(tmp_path, registry):
+    r = Rig(tmp_path, registry, [LLMInterrupted("task_time_limit")])
+    o = r.run()
+    assert o.outcome == "TIME_LIMIT_EXCEEDED"
+    assert r.executor.stop_moves == ["task_time_limit"]
+
+
+def test_shutdown_idle_is_noop(tmp_path, registry):
+    r = Rig(tmp_path, registry, [])
+    r.d.shutdown(1.0)
+    assert (r.executor.kills, r.executor.stop_moves) == ([], [])
+
+
+def test_shutdown_task_ends_within_wait(tmp_path, registry):
+    """The operator kill ends the step in time: no shutdown kill and no extra StopMove."""
+    entered, release = threading.Event(), threading.Event()
+    executor = FakeExecutor([_blocking_step(entered, release)], on_kill=lambda c: release.set())
+    r = Rig(tmp_path, registry, [plan(walk())], executor=executor)
+    out = {}
+    th = threading.Thread(target=lambda: out.setdefault("o", r.run()))
+    th.start()
+    assert entered.wait(WAIT_S)
+    r.d.shutdown(WAIT_S)
+    th.join(WAIT_S)
+    assert out["o"].outcome == "STOPPED"
+    assert executor.kills == ["operator"]
+    assert executor.stop_moves == ["operator"]
