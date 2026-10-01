@@ -191,7 +191,7 @@ dependencies = [
   "httpx2",                               # used directly by llm.py (anthropic SDK transport)
   "pydantic>=2",
   "PyYAML",
-  "python-telegram-bot>=21,<22",
+  "python-telegram-bot>=22.8,<23",
   "tomli; python_version < '3.11'",
 ]
 
@@ -231,7 +231,7 @@ Rules:
 - No `sys.path.insert` anywhere. No absolute paths in code. No hardcoded network interface.
 - Stub mode and the default test suite must work with only core + dev dependencies. `unitree_sdk2py`, `cyclonedds`, `ultralytics`, `cv2`, `numpy` are imported lazily, only inside real-backend code paths.
 - `httpx2` is a direct dependency: the locked `anthropic` SDK (1.x) runs on `httpx2` and rejects an `httpx.Client`, so `AnthropicPlanner(http_client=...)` takes an `httpx2.Client` and the LLM-client tests use `httpx2.MockTransport` (§12.1, §19.2). `httpx` stays because `python-telegram-bot` uses it.
-- `python-telegram-bot` is pinned to the 21.x line (`uv.lock` resolves 21.11.1). `go2-bot`'s signal handling (§16.3) replaces PTB's loop signal handlers from a `post_init` hook; this is tested against 21.x. PTB 21's `run_polling` calls `asyncio.get_event_loop()`, so the test that drives `run_polling` gives it a fresh event loop.
+- `python-telegram-bot` is pinned to the 22.x line, `>=22.8,<23` (`uv.lock` resolves 22.8). `go2-bot`'s signal handling (§16.3) replaces PTB's loop signal handlers from a `post_init` hook; this is tested against 22.x.
 - Commands: `uv sync` (core + dev); on the lab machine `uv sync --extra robot --extra vision`.
 - M1 must verify that `uv lock` succeeds on a clean machine without CycloneDDS installed. If it fails because `cyclonedds` cannot be resolved without building, remove the `robot` extra from `pyproject.toml` and document a manual install instead: `uv pip install cyclonedds==0.10.2` and `uv pip install -e <path to unitree_sdk2_python>`, after which the lab machine uses `uv sync --inexact` (so `uv sync` does not remove them). Record which path was taken in `docs/decisions.md`.
 

@@ -8,7 +8,7 @@ dependencies = [
   "httpx2",                               # used directly by llm.py (anthropic SDK transport)
   "pydantic>=2",
   "PyYAML",
-  "python-telegram-bot>=21,<22",
+  "python-telegram-bot>=22.8,<23",
   "tomli; python_version < '3.11'",
 ]
 

@@ -765,7 +765,7 @@ go2-dispatch [--config PATH] [--backend stub|real] state
 
 ### 16.3 Telegram (`go2-bot [--config PATH]`)
 
-Library: `python-telegram-bot` 21.x (`>=21,<22`; async), long polling.
+Library: `python-telegram-bot` 22.x (`>=22.8,<23`; async), long polling.
 
 ```python
 def build_application(dispatcher: Dispatcher, cfg: Config, token: str) -> Application:

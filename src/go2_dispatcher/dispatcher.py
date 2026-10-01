@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.metadata
 import platform
 import subprocess
+import sys
 import threading
 import traceback
 import uuid
@@ -19,7 +20,7 @@ from .budget import MotionBudget
 from .clock import Clock, MonotonicClock
 from .config import Config
 from .context import ContextInput, build_user_message, schema_retry_message
-from .executor import Executor
+from .executor import STDERR_TAIL_CHARS, Executor
 from .llm import LLMResult, PlannerClient, plan_tool_schema
 from .models import (
     FAILURE_OUTCOMES,
@@ -383,26 +384,31 @@ class Dispatcher:
             run_id=t.run_id, task=t.task, outcome=outcome, message=text, steps=list(t.steps),
             llm_calls=t.llm_calls, failures=t.failures, stop_move_failed=t.stop_move_failed,
             duration_ms=duration_ms, final_posture=self.posture, log_path=str(t.log.path))
-        t.log.write("task_end", outcome=outcome, message=text, llm_calls=t.llm_calls,
-                    failures=t.failures, steps_recorded=len(t.steps),
-                    steps_dispatched=len(dispatched), rejections=t.rejections,
-                    horizon_rejections=t.horizon_rejections, usage_totals=t.usage_totals,
-                    budget_used=self._budget_used(t), stop_move_failed=t.stop_move_failed,
-                    final_posture=self.posture, duration_ms=duration_ms)
-        if isinstance(t.log, RunLog):
-            self.runlog_factory.append_index({
-                "run_id": t.run_id, "file": t.log.path.name, "ts_start": t.ts_start,
-                "task": t.task, "source": t.source, "outcome": outcome,
-                "condition": self.cfg.run.condition, "backend": self.cfg.robot.backend,
-                "model": self.cfg.llm.model, "thinking": self.cfg.llm.thinking,
-                "planning_horizon": self.cfg.loop.planning_horizon,
-                "max_llm_calls": self.cfg.loop.max_llm_calls,
-                "registry_hash": self.registry_hash, "llm_calls": t.llm_calls,
-                "failures": t.failures, "steps_dispatched": len(dispatched),
-                "input_tokens": t.usage_totals.get("input_tokens", 0),
-                "output_tokens": t.usage_totals.get("output_tokens", 0),
-                "duration_ms": duration_ms,
-            })
+        try:
+            t.log.write("task_end", outcome=outcome, message=text, llm_calls=t.llm_calls,
+                        failures=t.failures, steps_recorded=len(t.steps),
+                        steps_dispatched=len(dispatched), rejections=t.rejections,
+                        horizon_rejections=t.horizon_rejections, usage_totals=t.usage_totals,
+                        budget_used=self._budget_used(t), stop_move_failed=t.stop_move_failed,
+                        final_posture=self.posture, duration_ms=duration_ms)
+        except Exception as e:  # noqa: BLE001 - the index row must still be written (§15.3)
+            print(f"go2-dispatcher: failed to write task_end for run {t.run_id}: "
+                  f"{type(e).__name__}: {e}", file=sys.stderr)
+        finally:
+            if isinstance(t.log, RunLog):
+                self.runlog_factory.append_index({
+                    "run_id": t.run_id, "file": t.log.path.name, "ts_start": t.ts_start,
+                    "task": t.task, "source": t.source, "outcome": outcome,
+                    "condition": self.cfg.run.condition, "backend": self.cfg.robot.backend,
+                    "model": self.cfg.llm.model, "thinking": self.cfg.llm.thinking,
+                    "planning_horizon": self.cfg.loop.planning_horizon,
+                    "max_llm_calls": self.cfg.loop.max_llm_calls,
+                    "registry_hash": self.registry_hash, "llm_calls": t.llm_calls,
+                    "failures": t.failures, "steps_dispatched": len(dispatched),
+                    "input_tokens": t.usage_totals.get("input_tokens", 0),
+                    "output_tokens": t.usage_totals.get("output_tokens", 0),
+                    "duration_ms": duration_ms,
+                })
         self.previous = TaskSummary(task=t.task, outcome=outcome, message=text,
                                     last_step=dispatched[-1] if dispatched else None)
         return result
@@ -426,7 +432,7 @@ class Dispatcher:
             except Exception as se:  # noqa: BLE001 - Executor.stop_move never raises; fakes might
                 smr = StopMoveResult(ok=False, reason="internal_error",
                                      duration_ms=(self.clock.now() - t0) * 1000.0,
-                                     stderr_tail=f"{type(se).__name__}: {se}")
+                                     stderr_tail=f"{type(se).__name__}: {se}"[-STDERR_TAIL_CHARS:])
         finally:
             # also runs if a BaseException (e.g. KeyboardInterrupt) arrives above; it then propagates
             outcome = self._end(t, "INTERNAL_ERROR", stop_move_result=smr,

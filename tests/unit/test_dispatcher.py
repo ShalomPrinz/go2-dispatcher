@@ -9,9 +9,10 @@ import pytest
 
 from go2_dispatcher import prompts
 from go2_dispatcher.dispatcher import Dispatcher
+from go2_dispatcher.executor import STDERR_TAIL_CHARS
 from go2_dispatcher.models import BusyError, LLMInterrupted, LLMUnavailable, Plan, PlanStep
 from go2_dispatcher.registry import Registry
-from go2_dispatcher.runlog import RunLogFactory
+from go2_dispatcher.runlog import RunLog, RunLogFactory
 from helpers import (
     REPO_ROOT,
     FakeClock,
@@ -373,6 +374,43 @@ def test_internal_error_stop_move_and_kill_raise_task_end_still_written(tmp_path
     index = r.cfg.log.dir / "index.jsonl"
     rows = [json.loads(line) for line in index.read_text(encoding="utf-8").splitlines()]
     assert rows[-1]["run_id"] == o.run_id and rows[-1]["outcome"] == "INTERNAL_ERROR"
+    assert not r.d.is_busy()
+
+
+def test_internal_error_stop_move_stderr_tail_is_cut(tmp_path, registry):
+    class RaisingExecutor(FakeExecutor):
+        def stop_move(self, reason):
+            self.stop_moves.append(reason)
+            raise RuntimeError("x" * (STDERR_TAIL_CHARS * 2))
+
+    ex = RaisingExecutor([RuntimeError("boom")])
+    r = Rig(tmp_path, registry, [plan(walk()), done()], executor=ex)
+    o = r.run()
+    assert o.outcome == "INTERNAL_ERROR"
+    (sm,) = records(o, "stop_move")
+    assert len(sm["stderr_tail"]) == STDERR_TAIL_CHARS
+    assert sm["stderr_tail"].endswith("x")
+
+
+def test_task_end_write_fails_index_row_still_written(tmp_path, registry, monkeypatch, capsys):
+    real_write = RunLog.write
+
+    def write(self, type_, **fields):
+        if type_ == "task_end":
+            raise OSError("disk full")
+        return real_write(self, type_, **fields)
+
+    monkeypatch.setattr(RunLog, "write", write)
+    r = Rig(tmp_path, registry, [done()])
+    o = r.run()
+    assert o.outcome == "DONE"
+    assert records(o, "task_end") == []
+    index = r.cfg.log.dir / "index.jsonl"
+    rows = [json.loads(line) for line in index.read_text(encoding="utf-8").splitlines()]
+    assert len(rows) == 1
+    assert rows[0]["run_id"] == o.run_id and rows[0]["outcome"] == "DONE"
+    err = capsys.readouterr().err
+    assert "task_end" in err and "OSError: disk full" in err
     assert not r.d.is_busy()
 
 
