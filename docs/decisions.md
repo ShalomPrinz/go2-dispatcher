@@ -57,3 +57,14 @@ Implementation choices where the spec was silent, and outcomes of checks the spe
 - **Duplicate names** cannot arise from distinct folders (name must equal folder name), but the check exists; its test monkeypatches the per-folder loader.
 - **Missing `skills_dir`** is a `RegistryError` naming the directory, as is zero skills.
 - **Test entrypoint modules** live in `tests/helpers/skill_modules/` (importable as `helpers.skill_modules.*`, no `sys.path` changes).
+
+## T5 — Bounds, precheck, motion budget
+
+- **`precheck` and `PrecheckResult` live in `bounds.py`** (spec gives no module).
+- **Violation order:** all unknown params (received order), then all missing required params (frontmatter order), then type violations (frontmatter order), then range violations; range is checked only for params whose type passed. An unknown skill returns only its one violation.
+- **`{expected}` wording:** `a finite number`, `an integer`, `a non-empty string`, `one of a, b, c`. A non-integral float for `integer` is a type violation.
+- **Filled params** are in frontmatter order (declared params only; defaults are copied as declared).
+- **`cut_message(text, limit=200)`** in `bounds.py`: collapses whitespace to one line and cuts to 199 + `…` (same rule as §11.6). Used for the bounds and motion-budget `error_message`.
+- **Motion-budget message** is defined in `budget.py` (`MOTION_BUDGET_MESSAGE`, `MotionBudget.exceeded_message(kind, cost)`); `{need}` is the step's cost in that kind, `{left}` is `max - used` (floored at 0), both rounded to 2 decimals. T6's `prompts.py` should re-export it rather than duplicate it.
+- **`MotionBudget` extras:** `max_distance_m`/`max_rotation_deg` attributes and `remaining(kind)`. Tolerance `BUDGET_EPSILON = 1e-9`.
+- **Rejected StepResults** keep `motion_cost` at zero (not dispatched, never charged), including `motion_budget_exceeded`.
