@@ -1,4 +1,4 @@
-"""Plan-level validation, one test per rule (§13.1, §19.2)."""
+"""Plan-level validation, one test per rule (docs/loop-and-context.md, testing.md)."""
 
 from __future__ import annotations
 

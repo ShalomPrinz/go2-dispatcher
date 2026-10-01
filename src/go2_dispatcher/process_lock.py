@@ -1,4 +1,4 @@
-"""Machine-wide single-instance lock (§5.4)."""
+"""Machine-wide single-instance lock (docs/safety.md)."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""``go2-dispatch`` command line (§16.2)."""
+"""``go2-dispatch`` command line (docs/running.md)."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from ..registry import Registry, registry_hash
 from . import build_dispatcher, format_outcome, load_config_and_env
 
 SOURCE = "cli"
-JOIN_POLL_S = 0.2                    # main thread join period, so signals are handled (§16.2)
+JOIN_POLL_S = 0.2                    # main thread join period, so signals are handled (docs/running.md)
 EXIT_OK = 0
 EXIT_FAIL = 1
 EXIT_USAGE = 2

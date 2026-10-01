@@ -1,4 +1,4 @@
-"""Stub backend (§9.2): remembers posture in a shared JSON state file, supports fault
+"""Stub backend (docs/skills.md): remembers posture in a shared JSON state file, supports fault
 injection, configured detections and a test-only stdout noise mode. Replaces only the
 SDK layer inside the skill subprocess."""
 
@@ -20,7 +20,7 @@ DETECTIONS_ENV = "GO2_STUB_DETECTIONS"
 FAULT_ENV = "GO2_STUB_FAULT"
 NOISE_ENV = "GO2_STUB_NOISE"
 
-# Defaults when the env is unset (manual runs); they mirror the config defaults (§5.2).
+# Defaults when the env is unset (manual runs); they mirror the config defaults (docs/configuration.md).
 DEFAULT_STATE_FILE = "runs/.stub_state.json"
 DEFAULT_TIME_SCALE = 0.1
 

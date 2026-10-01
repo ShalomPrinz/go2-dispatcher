@@ -1,4 +1,4 @@
-"""Skill policies: constants as class attributes, formulas, motion costs (§7.2, §8)."""
+"""Skill policies: constants as class attributes, formulas, motion costs (docs/skills.md)."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Shared pytest options and marker gating (§19)."""
+"""Shared pytest options and marker gating (docs/testing.md)."""
 
 from __future__ import annotations
 

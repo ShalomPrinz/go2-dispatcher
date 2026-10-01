@@ -1,13 +1,13 @@
-"""Every fixed text the dispatcher and transports show to the LLM or the operator (§11).
+"""Every fixed text the dispatcher and transports show to the LLM or the operator (docs/loop-and-context.md).
 
-Wording is draft (OD-9) and must stay identical across experimental conditions.
+Wording is draft (docs/roadmap.md) and must stay identical across experimental conditions.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from .budget import MOTION_BUDGET_MESSAGE  # re-exported: defined once, in budget.py (§11.8)
+from .budget import MOTION_BUDGET_MESSAGE  # re-exported: defined once, in budget.py (docs/loop-and-context.md)
 from .models import TaskOutcomeCode
 
 __all__ = [
@@ -23,7 +23,7 @@ __all__ = [
     "BUSY", "STOPPING", "NOTHING_RUNNING", "WORKING", "EMPTY_TASK", "HELP", "help_text",
 ]
 
-# --- System (S1, S2) — §11.1, §11.2 ---------------------------------------------------
+# --- System (S1, S2), docs/loop-and-context.md ---------------------------------------------------
 
 SYSTEM_TEMPLATE = """\
 You plan actions for a Unitree Go2 quadruped robot. An operator gives you a task in natural language. You answer by calling the submit_plan tool exactly once.
@@ -52,11 +52,11 @@ def system_text(horizon: int) -> str:
 
 
 def system_blocks(horizon: int, catalog_text: str) -> list[str]:
-    """``[system[0], system[1]]`` = [S1, ``"## Skills\\n" + catalog``] (§11.1)."""
+    """``[system[0], system[1]]`` = [S1, ``"## Skills\\n" + catalog``] (docs/loop-and-context.md)."""
     return [system_text(horizon), SKILLS_HEADER + catalog_text]
 
 
-# --- User message (§11.3–§11.7) -----------------------------------------------------------
+# --- User message (docs/loop-and-context.md) -----------------------------------------------------------
 
 SECTION_PREVIOUS_TASK = "## Previous task"
 SECTION_ROBOT = "## Robot"
@@ -85,7 +85,7 @@ BUDGET_TEMPLATE = (
     "Model calls: {calls_made} of {max_llm_calls}"
 )
 
-# --- Notices (§11.8) ------------------------------------------------------------------------
+# --- Notices (docs/loop-and-context.md) ------------------------------------------------------------------------
 
 NOTICES: dict[str, str] = {
     "initial": NONE,
@@ -147,7 +147,7 @@ def operator_message(outcome: TaskOutcomeCode, *, stop_move_failed: bool = False
     return text + STOP_MOVE_WARNING if stop_move_failed else text
 
 
-# --- Transport texts (§16) -------------------------------------------------------------------
+# --- Transport texts (docs/running.md) -------------------------------------------------------------------
 
 BUSY = 'Busy: a task is running. Send "stop" to stop it.'
 STOPPING = "Stopping."

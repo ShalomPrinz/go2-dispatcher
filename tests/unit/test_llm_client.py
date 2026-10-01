@@ -1,4 +1,4 @@
-"""AnthropicPlanner over httpx.MockTransport — no network (§12, §19.2)."""
+"""AnthropicPlanner over httpx.MockTransport — no network (docs/llm.md, testing.md)."""
 
 from __future__ import annotations
 

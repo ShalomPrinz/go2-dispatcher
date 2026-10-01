@@ -1,4 +1,4 @@
-"""LLM client and plan contract (§12): tool schema, AnthropicPlanner, infra retries."""
+"""LLM client and plan contract (docs/llm.md): tool schema, AnthropicPlanner, infra retries."""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ ERR_NO_TOOL_CALL = "no submit_plan call in reply"
 RejectionKind = Literal["none", "schema", "horizon", "semantic", "no_tool_call", "max_tokens"]
 
 
-# --- Tool schema (§12.2) ----------------------------------------------------------------
+# --- Tool schema (docs/loop-and-context.md) ----------------------------------------------------------------
 
 
 def plan_tool_schema(horizon: int) -> dict:
@@ -86,7 +86,7 @@ def plan_tool_schema(horizon: int) -> dict:
     }
 
 
-# --- Interfaces (§12.1) -----------------------------------------------------------------
+# --- Interfaces (docs/llm.md) -----------------------------------------------------------------
 
 
 class LLMResult(BaseModel):
@@ -139,7 +139,7 @@ def _is_retryable(e: anthropic.APIError) -> bool:
 
 
 class AnthropicPlanner:
-    """PlannerClient over the Anthropic Messages API, with its own infra retries (§12.3–§12.6)."""
+    """PlannerClient over the Anthropic Messages API, with its own infra retries (docs/llm.md)."""
 
     def __init__(self, api_key: str, llm_cfg: LLMConfig, horizon: int, *,
                  http_client: httpx2.Client | None = None,
@@ -208,7 +208,7 @@ class AnthropicPlanner:
 
     def _result(self, resp: Any, *, latency_ms: float, total_ms: float,
                 attempts: int) -> LLMResult:
-        """Response handling (§12.4). Thinking and text blocks are skipped when choosing the
+        """Response handling (docs/llm.md). Thinking and text blocks are skipped when choosing the
         tool_use block; all blocks are kept in ``content``."""
         block = next((b for b in resp.content
                       if b.type == "tool_use" and b.name == TOOL_NAME), None)

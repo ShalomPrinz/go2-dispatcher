@@ -1,4 +1,4 @@
-"""Test helpers (§19.1)."""
+"""Test helpers (docs/testing.md)."""
 
 from .config import REPO_ROOT, make_config
 from .fake_telegram import fake_context, fake_update, replies

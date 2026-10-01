@@ -1,4 +1,4 @@
-"""User-message assembly from fixed slots (§11.3–§11.7). No conversation is carried."""
+"""User-message assembly from fixed slots (docs/loop-and-context.md). No conversation is carried."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from .models import PlanStep, StepResult, TaskSummary
 from .registry import Registry
 from .render import render_remaining, render_step
 
-BUDGET_DECIMALS = 2   # budget numbers: round(x, 2) then :g (§11.3)
+BUDGET_DECIMALS = 2   # budget numbers: round(x, 2) then :g (docs/loop-and-context.md)
 
 Posture = Literal["standing", "sitting", "unknown"]
 ReturnReason = Literal["initial", "plan_complete", "checkpoint", "failure"]
@@ -19,10 +19,10 @@ ReturnReason = Literal["initial", "plan_complete", "checkpoint", "failure"]
 
 @dataclass(frozen=True)
 class ContextInput:
-    """Per-task state the user message is built from (a view of §15.2)."""
+    """Per-task state the user message is built from (docs/loop-and-context.md)."""
 
     task: str                                       # verbatim (after the transport's .strip())
-    posture: Posture                                # last known posture (§11.5)
+    posture: Posture                                # last known posture (docs/loop-and-context.md)
     budget: MotionBudget
     failures: int
     max_failures: int
@@ -86,7 +86,7 @@ def notice_block(inp: ContextInput) -> str:
 
 
 def build_user_message(inp: ContextInput, registry: Registry) -> str:
-    """The single user message (§11.3): sections in fixed order, one blank line between."""
+    """The single user message (docs/loop-and-context.md): sections in fixed order, one blank line between."""
     sections = [
         _section(prompts.SECTION_PREVIOUS_TASK, previous_task_block(inp.previous, registry)),
         _section(prompts.SECTION_ROBOT, prompts.POSTURE_TEMPLATE.format(posture=inp.posture)),
@@ -101,5 +101,5 @@ def build_user_message(inp: ContextInput, registry: Registry) -> str:
 
 
 def schema_retry_message(user: str, errors: list[str]) -> str:
-    """Original user message, byte-identical, + ``"\\n\\n"`` + the Rejection section (§12.5)."""
+    """Original user message, byte-identical, + ``"\\n\\n"`` + the Rejection section (docs/llm.md)."""
     return user + prompts.SECTION_SEPARATOR + prompts.rejection_section(errors)

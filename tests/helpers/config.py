@@ -1,4 +1,4 @@
-"""make_config: test config rooted at the repo, writing under tmp_path (§19.1)."""
+"""make_config: test config rooted at the repo, writing under tmp_path (docs/testing.md)."""
 
 from __future__ import annotations
 

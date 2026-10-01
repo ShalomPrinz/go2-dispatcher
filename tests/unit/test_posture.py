@@ -1,4 +1,4 @@
-"""derive_posture thresholds and None handling (§9, OD-2)."""
+"""derive_posture thresholds and None handling (docs/robot.md)."""
 
 from __future__ import annotations
 

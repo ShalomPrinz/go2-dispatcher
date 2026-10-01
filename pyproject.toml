@@ -1,7 +1,7 @@
 [project]
 name = "go2-dispatcher"
 version = "0.1.0"
-requires-python = ">=3.10,<3.12"          # see OD-3
+requires-python = ">=3.10,<3.12"          # see docs/setup.md
 dependencies = [
   "anthropic",                            # current major; pin in uv.lock
   "httpx",

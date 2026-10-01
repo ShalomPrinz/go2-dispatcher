@@ -1,4 +1,4 @@
-"""Per-task motion budget on commanded motion (§13.4)."""
+"""Per-task motion budget on commanded motion (docs/safety.md)."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ from typing import Literal
 from .policies import MotionCost
 
 BUDGET_EPSILON = 1e-9          # tolerance on the limit: exceeds when used + cost > max + epsilon
-MESSAGE_DECIMALS = 2           # numbers in the motion-budget message are rounded to this (§11.8)
+MESSAGE_DECIMALS = 2           # numbers in the motion-budget message are rounded to this (docs/loop-and-context.md)
 
-# Motion-budget message (§11.8); kind -> unit
+# Motion-budget message (docs/loop-and-context.md); kind -> unit
 MOTION_BUDGET_MESSAGE = ("this step needs {need:g} {unit} of {kind} "
                          "but only {left:g} {unit} remain for this task")
 KIND_UNITS = {"travel": "m", "rotation": "deg"}
@@ -50,7 +50,7 @@ class MotionBudget:
         return max(0.0, self.max_rotation_deg - self.used_rotation_deg)
 
     def exceeded_message(self, kind: BudgetKind, cost: MotionCost) -> str:
-        """The §11.8 ``error_message`` for a step of ``cost`` that would exceed ``kind``."""
+        """The ``error_message`` (docs/loop-and-context.md) for a step of ``cost`` that would exceed ``kind``."""
         need = cost.distance_m if kind == "travel" else cost.rotation_deg
         return MOTION_BUDGET_MESSAGE.format(
             need=round(need, MESSAGE_DECIMALS), left=round(self.remaining(kind), MESSAGE_DECIMALS),

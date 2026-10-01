@@ -1,4 +1,4 @@
-"""Executor: one subprocess per skill call, timeouts, kill, StopMove (§14)."""
+"""Executor: one subprocess per skill call, timeouts, kill, StopMove (docs/safety.md)."""
 
 from __future__ import annotations
 
@@ -24,9 +24,9 @@ STOP_MOVE_MODULE = "go2_skills.stop_move"
 READ_STATE_MODULE = "go2_skills.read_state"
 UTILITY_SKILL_NAMES = {STOP_MOVE_MODULE: "stop_move", READ_STATE_MODULE: "read_state"}
 
-POLL_INTERVAL_S = 0.05          # wait-loop poll period (§14.3)
-READER_JOIN_TIMEOUT_S = 2.0     # join timeout per reader thread (§14.3)
-STDERR_TAIL_CHARS = 2000        # stderr kept for the log (§14.2)
+POLL_INTERVAL_S = 0.05          # wait-loop poll period (docs/safety.md)
+READER_JOIN_TIMEOUT_S = 2.0     # join timeout per reader thread (docs/safety.md)
+STDERR_TAIL_CHARS = 2000        # stderr kept for the log (docs/skills.md)
 
 InterruptCause = Literal["operator", "task_time_limit", "shutdown"]
 KillCause = Literal["operator", "task_time_limit", "shutdown", "step_timeout"]
@@ -124,7 +124,7 @@ class Executor:
         self._current: subprocess.Popen | None = None
         self._kill_cause: KillCause | None = None
 
-    # --- environment and process start (§14.2) ----------------------------------
+    # --- environment and process start (docs/skills.md) ----------------------------------
 
     def _env(self, fault: str | None) -> dict[str, str]:
         env = {k: v for k, v in os.environ.items() if k not in SECRET_ENV and k != FAULT_ENV}
@@ -149,7 +149,7 @@ class Executor:
                                 errors="replace", cwd=self.base_dir, env=env,
                                 start_new_session=True)
 
-    # --- kill (§14.3) --------------------------------------------------------------
+    # --- kill (docs/safety.md) --------------------------------------------------------------
 
     def _kill_locked(self, proc: subprocess.Popen, cause: KillCause) -> bool:
         with self._lock:
@@ -169,7 +169,7 @@ class Executor:
             return False
         return self._kill_locked(proc, cause)
 
-    # --- run (§14.2, §14.3) -----------------------------------------------------------
+    # --- run (docs/skills.md, safety.md) -----------------------------------------------------------
 
     def run(self, skill: SkillDescriptor, params: dict, *, fault: str | None,
             timeout_s: float, remaining_task_s: float,
@@ -224,7 +224,7 @@ class Executor:
             error_message=response.error.message if response.error else None,
             **common)
 
-    # --- utilities (§14.4) ------------------------------------------------------------
+    # --- utilities (docs/safety.md) ------------------------------------------------------------
 
     def _run_utility(self, module: str, timeout_s: float
                      ) -> tuple[int | None, SkillResponse | None, str | None, float]:
@@ -248,7 +248,7 @@ class Executor:
         try:
             rc, response, tail, duration_ms = self._run_utility(
                 STOP_MOVE_MODULE, self.cfg.robot.stop_move_timeout_s)
-        except Exception as e:  # noqa: BLE001 - the stop path must not raise (§14.4)
+        except Exception as e:  # noqa: BLE001 - the stop path must not raise (docs/safety.md)
             return StopMoveResult(ok=False, reason=reason, duration_ms=_ms(t0),
                                   stderr_tail=f"{type(e).__name__}: {e}"[-STDERR_TAIL_CHARS:])
         ok = response is not None and response.status == "ok"

@@ -1,4 +1,4 @@
-"""Skill policy base classes (§7.2). Standard library only; re-exported by
+"""Skill policy base classes (docs/skills.md). Standard library only; re-exported by
 ``go2_dispatcher.policies``."""
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ class MotionCost:
 
 
 class SkillPolicy:
-    """Per-skill dispatcher policy. Every number is a class attribute (§7.2)."""
+    """Per-skill dispatcher policy. Every number is a class attribute (docs/skills.md)."""
 
     name: str = ""
     context_observations: tuple[str, ...] = ()   # observation keys shown to the LLM on ok

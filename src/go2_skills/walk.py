@@ -1,4 +1,4 @@
-"""Skill: walk in a straight line by a distance, then stop (§8.1)."""
+"""Skill: walk in a straight line by a distance, then stop (docs/skills.md)."""
 
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ DIRECTION_VECTORS = {"forward": (1, 0), "backward": (-1, 0), "left": (0, 1), "ri
 
 class WalkPolicy(SkillPolicy):
     name = "walk"
-    BASE_S = 10.0     # process start + SDK init + state samples (sketch)
-    FACTOR = 1.5      # safety factor on commanded motion time (sketch)
+    BASE_S = 10.0     # process start + SDK init + state samples (tunable)
+    FACTOR = 1.5      # safety factor on commanded motion time (tunable)
 
     def timeout_s(self, p):
         return self.BASE_S + self.FACTOR * p["distance_m"] / VELOCITY_MPS

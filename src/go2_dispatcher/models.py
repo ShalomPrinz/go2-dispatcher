@@ -1,4 +1,4 @@
-"""Data models and exceptions (§6)."""
+"""Data models and exceptions (docs/architecture.md)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr, model_validator
 
 
-# --- Exceptions (§6.6) -------------------------------------------------------
+# --- Exceptions (docs/architecture.md) -------------------------------------------------------
 
 
 class ConfigError(Exception):
@@ -42,7 +42,7 @@ class _Model(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-# --- Plan (§6.1) -------------------------------------------------------------
+# --- Plan (docs/loop-and-context.md) -------------------------------------------------------------
 
 
 class PlanStep(_Model):
@@ -65,7 +65,7 @@ class Plan(_Model):
         return data
 
 
-# --- SkillResponse (§6.2) -----------------------------------------------------
+# --- SkillResponse (docs/skills.md) -----------------------------------------------------
 
 
 class SkillError(BaseModel):
@@ -112,7 +112,7 @@ class SkillResponse(BaseModel):
         return self
 
 
-# --- StepResult (§6.3) --------------------------------------------------------
+# --- StepResult (docs/run-log.md) --------------------------------------------------------
 
 StepOutcome = Literal["ok", "error", "timeout", "malformed",
                       "rejected", "motion_budget_exceeded", "interrupted"]
@@ -154,7 +154,7 @@ class StepResult(_Model):
     verification: Literal["unverified"] = "unverified"
 
 
-# --- Task outcome (§6.4) and summary (§6.5) -------------------------------------
+# --- Task outcome and summary (docs/loop-and-context.md) -------------------------------------
 
 TaskOutcomeCode = Literal[
     "DONE", "ABORTED", "STOPPED", "TIME_LIMIT_EXCEEDED",
@@ -167,7 +167,7 @@ class TaskOutcome(_Model):
     run_id: str
     task: str
     outcome: TaskOutcomeCode
-    message: str                        # operator-facing (§11.8)
+    message: str                        # operator-facing (docs/loop-and-context.md)
     steps: list[StepResult]             # every recorded step, in order
     llm_calls: int
     failures: int

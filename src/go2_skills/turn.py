@@ -1,4 +1,4 @@
-"""Skill: turn in place by an angle, then stop (§8.2). Degrees in the interface."""
+"""Skill: turn in place by an angle, then stop (docs/skills.md). Degrees in the interface."""
 
 from __future__ import annotations
 
@@ -17,8 +17,8 @@ DIRECTION_SIGN = {"left": 1, "right": -1}
 
 class TurnPolicy(SkillPolicy):
     name = "turn"
-    BASE_S = 10.0     # process start + SDK init + state samples (sketch)
-    FACTOR = 1.5      # safety factor on commanded motion time (sketch)
+    BASE_S = 10.0     # process start + SDK init + state samples (tunable)
+    FACTOR = 1.5      # safety factor on commanded motion time (tunable)
 
     def timeout_s(self, p):
         return self.BASE_S + self.FACTOR * math.radians(p["angle_deg"]) / YAW_RATE_RPS

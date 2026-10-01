@@ -1,4 +1,4 @@
-"""Skill: the robot's built-in stretch routine (§8.4)."""
+"""Skill: the robot's built-in stretch routine (docs/skills.md)."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ SKILL = "stretch"
 
 class StretchPolicy(SkillPolicy):
     name = "stretch"
-    TIMEOUT_S = 20.0  # (sketch)
-    SETTLE_S = 6.0    # wait after Stretch so state_after is sampled at rest (sketch; OD-10)
+    TIMEOUT_S = 20.0  # (tunable)
+    SETTLE_S = 6.0    # wait after Stretch so state_after is sampled at rest (tunable, docs/robot.md)
 
     def timeout_s(self, p):
         return self.TIMEOUT_S

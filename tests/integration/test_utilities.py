@@ -1,4 +1,4 @@
-"""stop_move and read_state utilities on the stub backend (§8.6, §8.7, §19.4)."""
+"""stop_move and read_state utilities on the stub backend (docs/safety.md, robot.md, testing.md)."""
 
 from __future__ import annotations
 

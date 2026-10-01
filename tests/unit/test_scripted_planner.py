@@ -1,4 +1,4 @@
-"""ScriptedPlanner helper (§19.1)."""
+"""ScriptedPlanner helper (docs/testing.md)."""
 
 from __future__ import annotations
 

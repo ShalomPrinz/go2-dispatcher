@@ -1,4 +1,4 @@
-"""``go2-bot`` Telegram transport (§16.3): long polling, plain-text replies."""
+"""``go2-bot`` Telegram transport (docs/running.md): long polling, plain-text replies."""
 
 from __future__ import annotations
 
@@ -34,8 +34,8 @@ __all__ = ["build_application", "on_start", "on_stop", "on_text", "on_post_init"
 
 SOURCE = "telegram"
 TOKEN_ENV = "TELEGRAM_BOT_TOKEN"
-STOP_WORD = "stop"                   # matched after strip().lower() (OD-12)
-SHUTDOWN_EXTRA_S = 5.0               # post_stop waits stop_move_timeout_s + this (§16.3)
+STOP_WORD = "stop"                   # matched after strip().lower() (docs/safety.md)
+SHUTDOWN_EXTRA_S = 5.0               # post_stop waits stop_move_timeout_s + this (docs/running.md)
 SHUTDOWN_SOURCE = "shutdown"         # request_stop source on SIGINT/SIGTERM (as shutdown())
 STOP_SIGNALS = (signal.SIGINT, signal.SIGTERM)
 _STOPPING_KEY = "stop_signal_received"
@@ -123,7 +123,7 @@ def on_stop_signal(app: Application) -> None:
     PTB's ``Application.stop()`` waits for every in-flight handler (including a running
     ``run_task``) before ``post_stop`` runs, so the kill must happen here, not only in
     ``on_post_stop``. ``request_stop`` is non-blocking: it kills the current skill; the
-    executor then sends StopMove and the task ends ``STOPPED`` (§14.4, §15.1)."""
+    executor then sends StopMove and the task ends ``STOPPED`` (docs/safety.md, loop-and-context.md)."""
     app.bot_data["dispatcher"].request_stop(SHUTDOWN_SOURCE)
     if not app.bot_data.get(_STOPPING_KEY):
         app.bot_data[_STOPPING_KEY] = True
@@ -139,7 +139,7 @@ async def on_post_init(app: Application) -> None:
 
 
 async def on_post_stop(app: Application) -> None:
-    """Backstop (§16.3, Appendix A #32): waits for / force-ends a task still running."""
+    """Backstop (docs/running.md): waits for / force-ends a task still running."""
     dispatcher: Dispatcher = app.bot_data["dispatcher"]
     cfg: Config = app.bot_data["cfg"]
     await asyncio.to_thread(dispatcher.shutdown,

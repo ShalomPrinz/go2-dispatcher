@@ -1,4 +1,4 @@
-"""Re-export of the skill policy base classes (§7.2)."""
+"""Re-export of the skill policy base classes (docs/skills.md)."""
 
 from go2_skills.policy_base import MotionCost, SkillPolicy
 

@@ -1,4 +1,4 @@
-"""Skill: look through the front camera once for a COCO object (§8.5). Never moves."""
+"""Skill: look through the front camera once for a COCO object (docs/skills.md). Never moves."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ CONFIDENCE_DECIMALS = 2
 class DetectObjectPolicy(SkillPolicy):
     name = "detect_object"
     context_observations = ("object_found", "position", "closeness", "confidence")
-    TIMEOUT_S = 45.0  # YOLO load on CPU (sketch)
+    TIMEOUT_S = 45.0  # YOLO load on CPU (tunable)
 
     def timeout_s(self, p):
         return self.TIMEOUT_S

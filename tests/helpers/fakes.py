@@ -1,4 +1,4 @@
-"""FakeClock and FakeExecutor for dispatcher loop tests (§19.1)."""
+"""FakeClock and FakeExecutor for dispatcher loop tests (docs/testing.md)."""
 
 from __future__ import annotations
 

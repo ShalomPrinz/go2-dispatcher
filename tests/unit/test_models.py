@@ -1,4 +1,4 @@
-"""Data models (§6): Plan parsing, StepResult defaults, outcome models."""
+"""Data models (docs/architecture.md): Plan parsing, StepResult defaults, outcome models."""
 
 from __future__ import annotations
 

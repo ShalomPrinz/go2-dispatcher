@@ -1,4 +1,4 @@
-"""submit_plan tool schema (§12.2, §19.2)."""
+"""submit_plan tool schema (docs/loop-and-context.md, testing.md)."""
 
 from __future__ import annotations
 

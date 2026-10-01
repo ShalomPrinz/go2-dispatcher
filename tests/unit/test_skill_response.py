@@ -1,4 +1,4 @@
-"""build_response dicts validate against SkillResponse (§7.4, §6.2)."""
+"""build_response dicts validate against SkillResponse (docs/skills.md)."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""prompts.py: operator messages, StopMove warning, notices, fixed texts (§11.8, §19.2)."""
+"""prompts.py: operator messages, StopMove warning, notices, fixed texts (docs/loop-and-context.md, testing.md)."""
 
 from __future__ import annotations
 

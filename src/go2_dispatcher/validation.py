@@ -1,4 +1,4 @@
-"""Plan-level validation of the raw submit_plan tool input (§13.1).
+"""Plan-level validation of the raw submit_plan tool input (docs/loop-and-context.md).
 
 Plans are never truncated: an over-long plan is rejected as a whole.
 """

@@ -1,4 +1,4 @@
-"""Fake Telegram objects for calling bot handlers directly (§19.1)."""
+"""Fake Telegram objects for calling bot handlers directly (docs/testing.md)."""
 
 from __future__ import annotations
 

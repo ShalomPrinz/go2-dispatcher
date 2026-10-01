@@ -1,4 +1,4 @@
-"""Transports (CLI, Telegram) over the dispatcher: shared setup and output (§16.1)."""
+"""Transports (CLI, Telegram) over the dispatcher: shared setup and output (docs/running.md)."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ __all__ = ["load_config_and_env", "build_dispatcher", "format_outcome", "make_pl
 API_KEY_ENV = "ANTHROPIC_API_KEY"
 TEST_PLANNER_ENV = "GO2_TEST_PLANNER"          # "module:factory" (tests only)
 MISSING_API_KEY = f"Missing {API_KEY_ENV}."
-OUTCOME_MAX_CHARS = 4000                         # Telegram's limit is 4096 (§16.1)
+OUTCOME_MAX_CHARS = 4000                         # Telegram's limit is 4096 (docs/running.md)
 OMITTED_LINES = "({n} earlier lines omitted)"
 NO_PLANNER_DETAIL = "no planner configured"
 
@@ -49,7 +49,7 @@ class _NoPlanner:
 
 
 def make_planner(cfg: Config, *, need_llm: bool) -> PlannerClient:
-    """§16.1 step 6, without an explicit planner."""
+    """Choose the planner: test planner, Anthropic, or none (docs/running.md)."""
     spec = os.environ.get(TEST_PLANNER_ENV)
     if spec:
         module_name, sep, attr = spec.partition(":")
@@ -66,7 +66,7 @@ def make_planner(cfg: Config, *, need_llm: bool) -> PlannerClient:
 
 
 def initial_posture(cfg: Config, executor: Executor, *, reset: bool) -> str:
-    """§16.1 step 7."""
+    """Posture at start-up: from the stub state file or a robot state read (docs/running.md)."""
     if cfg.robot.backend == "stub":
         if reset:
             return cfg.stub.initial_posture
@@ -84,7 +84,7 @@ def initial_posture(cfg: Config, executor: Executor, *, reset: bool) -> str:
 
 def build_dispatcher(cfg: Config, *, need_llm: bool, reset_stub: bool,
                      planner: PlannerClient | None = None) -> Dispatcher:
-    """Lock, registry, stub reset, planner, executor, run log factory (§16.1)."""
+    """Lock, registry, stub reset, planner, executor, run log factory (docs/running.md)."""
     process_lock.acquire(cfg.log.dir)
     try:
         registry = Registry.load(cfg.skills.dir)
@@ -104,7 +104,7 @@ def build_dispatcher(cfg: Config, *, need_llm: bool, reset_stub: bool,
 
 
 def format_outcome(outcome: TaskOutcome, registry: Registry) -> str:
-    """Plain-text outcome for the operator (§16.1); oldest step lines are dropped if the
+    """Plain-text outcome for the operator (docs/running.md); oldest step lines are dropped if the
     whole text would exceed ``OUTCOME_MAX_CHARS``."""
     dispatched = sum(1 for s in outcome.steps if s.index is not None)
     head = [f"{outcome.outcome}: {outcome.message}",

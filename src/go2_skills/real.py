@@ -1,4 +1,4 @@
-"""Real Unitree Go2 backend (§9.1).
+"""Real Unitree Go2 backend (docs/robot.md).
 
 All third-party imports (unitree_sdk2py, cv2, numpy, ultralytics) are inside
 functions, so importing this module needs only the standard library.
@@ -65,7 +65,7 @@ def get_sport_client():
 
 
 class RealDetector:
-    """VideoClient frame + YOLO (§8.5). YOLO is loaded on the first detect()."""
+    """VideoClient frame + YOLO (docs/skills.md). YOLO is loaded on the first detect()."""
 
     CAMERA_TIMEOUT_S = 3.0
     IMGSZ = 640

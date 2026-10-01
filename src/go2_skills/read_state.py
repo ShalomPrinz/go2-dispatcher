@@ -1,4 +1,4 @@
-"""Utility: sample robot state once (§8.7). Not a skill.
+"""Utility: sample robot state once (docs/robot.md). Not a skill.
 
 ``python -m go2_skills.read_state '{}'``. No faults, no watchdog.
 """

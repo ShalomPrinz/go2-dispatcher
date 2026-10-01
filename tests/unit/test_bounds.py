@@ -1,4 +1,4 @@
-"""Step bounds, whole-plan pre-check, motion budget (§13.2–§13.4, §19.2)."""
+"""Step bounds, whole-plan pre-check, motion budget (docs/loop-and-context.md, testing.md)."""
 
 from __future__ import annotations
 

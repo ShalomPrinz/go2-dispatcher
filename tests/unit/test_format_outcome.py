@@ -1,4 +1,4 @@
-"""format_outcome (§16.1)."""
+"""format_outcome (docs/running.md)."""
 
 from __future__ import annotations
 

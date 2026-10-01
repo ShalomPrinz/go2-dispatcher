@@ -1,4 +1,4 @@
-"""Utility: send StopMove and sample state afterwards (§8.6). Not a skill.
+"""Utility: send StopMove and sample state afterwards (docs/safety.md). Not a skill.
 
 ``python -m go2_skills.stop_move '{}'``. No orphan watchdog: it must finish even if
 the parent died. Stub faults are ignored. StopMove is sent even if the params

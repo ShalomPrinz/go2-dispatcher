@@ -16,14 +16,4 @@ On the lab machine: `uv sync --extra robot --extra vision` (see [setup](docs/set
 
 ## Documentation
 
-- [Architecture](docs/architecture.md): overview of the design
-- [Setup](docs/setup.md): install, lab machine, verification
-- [Configuration](docs/configuration.md): every config key, `.env`, overrides
-- [Running](docs/running.md): CLI, Telegram, stub vs real, fault injection
-- [Skills](docs/skills.md): SKILL.md format, response schema, adding a skill
-- [Loop and context](docs/loop-and-context.md): the loop, budgets, what the model sees
-- [Safety](docs/safety.md): stop path, limits, supervised operation
-- [Run log](docs/run-log.md): record types and study metrics
-- [Testing](docs/testing.md): test suite and the robot checklist
-- [Decisions](docs/decisions.md), [Open decisions](docs/open-decisions.md), [Future ideas](docs/future-ideas.md)
-- Specification: [docs/spec/](docs/spec/)
+All project documentation is in [docs/](docs/README.md): start with the index there.

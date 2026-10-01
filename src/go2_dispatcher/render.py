@@ -1,4 +1,4 @@
-"""Step-line rendering shared by the context builder and transports (§11.6, §11.7)."""
+"""Step-line rendering shared by the context builder and transports (docs/loop-and-context.md)."""
 
 from __future__ import annotations
 
@@ -72,5 +72,5 @@ def render_step(sr: StepResult, registry: Registry, *, numbered: bool) -> str:
 
 def render_remaining(plan_step: int, step: PlanStep, registry: Registry,
                      tag: Literal["pending", "abandoned"]) -> str:
-    """A Remaining plan line (§11.7); raw params."""
+    """A Remaining plan line (docs/loop-and-context.md); raw params."""
     return f"{plan_step}. {format_call(step.skill, step.params, registry)} [{tag}]"

@@ -1,4 +1,4 @@
-"""``factory()`` for CLI subprocess tests (§19.1): a ScriptedPlanner whose items are the
+"""``factory()`` for CLI subprocess tests (docs/testing.md): a ScriptedPlanner whose items are the
 JSON list in env ``GO2_TEST_SCRIPT`` (each item is raw ``submit_plan`` tool input).
 
 Used as ``GO2_TEST_PLANNER=planner_factory:factory`` with ``tests/helpers`` on PYTHONPATH."""

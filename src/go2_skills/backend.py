@@ -1,4 +1,4 @@
-"""Robot backend selection (§9).
+"""Robot backend selection (docs/robot.md).
 
 Dispatches on env ``GO2_BACKEND`` (``real`` | ``stub``). The backend modules are
 imported lazily, and ``real`` imports its third-party dependencies only inside
@@ -25,7 +25,7 @@ class StateUnavailable(Exception):
 
 
 class DetectorError(Exception):
-    """Base for detector failures; ``code`` is the skill error code (§8.5)."""
+    """Base for detector failures; ``code`` is the skill error code (docs/skills.md)."""
 
     code = "detector_error"
 

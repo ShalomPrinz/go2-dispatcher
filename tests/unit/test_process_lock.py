@@ -1,4 +1,4 @@
-"""Process lock unit tests (§19.2 process lock)."""
+"""Process lock unit tests (docs/testing.md)."""
 
 from __future__ import annotations
 

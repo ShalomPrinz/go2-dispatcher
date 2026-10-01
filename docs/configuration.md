@@ -26,7 +26,7 @@ So `go2-dispatch --config /lab/exp1/config.toml run ...` writes logs to `/lab/ex
 
 ## Keys
 
-Every section and every model rejects unknown keys (`extra="forbid"`). *tunable* marks a starting value that is expected to be tuned from logs and robot runs (marked `*tunable*` in the code and the example file).
+Every section and every model rejects unknown keys (`extra="forbid"`). *tunable* marks a starting value that is expected to be tuned from logs and robot runs (marked `(tunable)` in code comments and the example file).
 
 Types:
 - **int** keys reject floats, strings and booleans (`3`, not `3.0`).

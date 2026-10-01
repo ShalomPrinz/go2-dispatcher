@@ -1,4 +1,4 @@
-"""Configuration: models, validation, base dir and path resolution, .env parser (§5)."""
+"""Configuration: models, validation, base dir and path resolution, .env parser (docs/configuration.md)."""
 
 from __future__ import annotations
 
@@ -55,10 +55,10 @@ class RunConfig(_Section):
 
 
 class LLMConfig(_Section):
-    model: StrictStr = "claude-sonnet-5-5"  # (sketch)
+    model: StrictStr = "claude-sonnet-5-5"  # (tunable)
     max_tokens: StrictInt = Field(2048, ge=1)
     thinking: Literal["between_tools", "adaptive"] = "between_tools"
-    request_timeout_s: FiniteFloat = Field(60.0, gt=0)  # (sketch)
+    request_timeout_s: FiniteFloat = Field(60.0, gt=0)  # (tunable)
     infra_max_retries: StrictInt = Field(2, ge=0)
     infra_backoff_s: list[FiniteFloat] = [1.0, 4.0]
 
@@ -81,16 +81,16 @@ class LLMConfig(_Section):
 
 
 class LoopConfig(_Section):
-    planning_horizon: StrictInt = Field(5, ge=1)  # (sketch)
-    max_failures: StrictInt = Field(3, ge=1)  # (sketch)
-    max_llm_calls: StrictInt = Field(20, ge=1)  # (sketch)
-    task_time_limit_s: FiniteFloat = Field(300.0, gt=0)  # (sketch)
-    context_history_k: StrictInt = Field(10, ge=1)  # (sketch)
+    planning_horizon: StrictInt = Field(5, ge=1)  # (tunable)
+    max_failures: StrictInt = Field(3, ge=1)  # (tunable)
+    max_llm_calls: StrictInt = Field(20, ge=1)  # (tunable)
+    task_time_limit_s: FiniteFloat = Field(300.0, gt=0)  # (tunable)
+    context_history_k: StrictInt = Field(10, ge=1)  # (tunable)
 
 
 class MotionBudgetConfig(_Section):
-    max_distance_m: FiniteFloat = Field(10.0, ge=0)  # (sketch)
-    max_rotation_deg: FiniteFloat = Field(720.0, ge=0)  # (sketch)
+    max_distance_m: FiniteFloat = Field(10.0, ge=0)  # (tunable)
+    max_rotation_deg: FiniteFloat = Field(720.0, ge=0)  # (tunable)
 
 
 class SkillsConfig(_Section):
@@ -161,7 +161,7 @@ class Config(_Section):
 
     @property
     def base_dir(self) -> Path:
-        """Folder relative paths were resolved against; subprocess cwd (§5.3)."""
+        """Folder relative paths were resolved against; subprocess cwd (docs/configuration.md)."""
         return self._base_dir
 
     @model_validator(mode="after")
@@ -233,7 +233,7 @@ def build_config(
 def load_config(
     config_path: Path | str | None = None, overrides: dict[str, Any] | None = None
 ) -> Config:
-    """Load config (§5.1). ``None`` means the default ``./config.toml``; if that is
+    """Load config (docs/configuration.md). ``None`` means the default ``./config.toml``; if that is
     missing, defaults are used with a one-line stderr warning. An explicit path
     that is missing raises ConfigError."""
     if config_path is None:
@@ -310,7 +310,7 @@ def load_config_and_env(
     config_path: Path | str | None, overrides: dict[str, Any] | None = None
 ) -> Config:
     """Load config and the base-dir ``.env``. Config errors print
-    ``Config error: <message>`` to stderr and exit with code 2 (§5.1)."""
+    ``Config error: <message>`` to stderr and exit with code 2 (docs/configuration.md)."""
     try:
         cfg = load_config(config_path, overrides)
     except ConfigError as e:

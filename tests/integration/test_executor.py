@@ -1,4 +1,4 @@
-"""Executor on real subprocesses with the stub backend (§14, §19.4)."""
+"""Executor on real subprocesses with the stub backend (docs/safety.md, testing.md)."""
 
 from __future__ import annotations
 

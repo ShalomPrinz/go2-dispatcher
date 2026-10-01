@@ -1,4 +1,4 @@
-"""Config unit tests (§19.2 config)."""
+"""Config unit tests (docs/testing.md)."""
 
 from __future__ import annotations
 
@@ -124,7 +124,7 @@ def test_make_config(tmp_path):
     assert cfg.loop.planning_horizon == 5
 
 
-# --- validation rules (§5.2) --------------------------------------------------
+# --- validation rules (docs/configuration.md) --------------------------------------------------
 
 
 def ok(tmp_path, data):

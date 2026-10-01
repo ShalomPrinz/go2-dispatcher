@@ -1,27 +1,27 @@
 # Copy to config.toml and edit. Relative paths resolve against the folder of this file.
-# Values marked (sketch) are starting points expected to be tuned. See docs/configuration.md.
+# Values marked (tunable) are starting points expected to be tuned. See docs/configuration.md.
 
 [run]
 condition = ""                      # free-text experiment label, copied into task_start and index.jsonl
 
 [llm]
-model = "claude-sonnet-5-5"         # (sketch)
+model = "claude-sonnet-5-5"         # (tunable)
 max_tokens = 2048
 thinking = "between_tools"          # "between_tools" (thinking off) | "adaptive"
-request_timeout_s = 60.0            # cap per attempt (sketch)
+request_timeout_s = 60.0            # cap per attempt (tunable)
 infra_max_retries = 2
 infra_backoff_s = [1.0, 4.0]        # sleep before retry 1, retry 2
 
 [loop]
-planning_horizon = 5                # max steps per plan (sketch)
-max_failures = 3                    # task ends when failures reach this (sketch)
-max_llm_calls = 20                  # per task (sketch)
-task_time_limit_s = 300.0           # wall clock per task (sketch)
-context_history_k = 10              # executed entries shown in full (sketch)
+planning_horizon = 5                # max steps per plan (tunable)
+max_failures = 3                    # task ends when failures reach this (tunable)
+max_llm_calls = 20                  # per task (tunable)
+task_time_limit_s = 300.0           # wall clock per task (tunable)
+context_history_k = 10              # executed entries shown in full (tunable)
 
 [motion_budget]
-max_distance_m = 10.0               # commanded travel per task (sketch)
-max_rotation_deg = 720.0            # commanded rotation per task (sketch)
+max_distance_m = 10.0               # commanded travel per task (tunable)
+max_rotation_deg = 720.0            # commanded rotation per task (tunable)
 
 [skills]
 dir = "skills"
