@@ -7,7 +7,7 @@ condition = ""                      # free-text experiment label, copied into ta
 [llm]
 model = "claude-sonnet-5-5"         # (tunable)
 max_tokens = 2048
-thinking = "between_tools"          # "between_tools" (thinking off) | "adaptive"
+thinking = "between_tools"          # "between_tools" (lowest thinking setting, Sonnet 5.5 only; not zero thinking) | "adaptive"
 request_timeout_s = 60.0            # cap per attempt (tunable)
 infra_max_retries = 2
 infra_backoff_s = [1.0, 4.0]        # sleep before retry 1, retry 2

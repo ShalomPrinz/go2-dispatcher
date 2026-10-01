@@ -6,7 +6,7 @@ A final-year, full-year capstone project at Bar-Ilan University. The lab's Unitr
 
 The dispatcher is also a measurement instrument. Every task writes a complete run log ([run-log.md](run-log.md)) from which tokens, latency and replanning can be computed. That log is the dataset for the study below, so many design choices favour comparable measurements over convenience (see [architecture.md](architecture.md#design-decisions)).
 
-Scope: simulation (a stub backend) plus a small hardware demo on the real robot. The student has computer-science coursework but no hands-on control or RL background, so the design favours simple, inspectable mechanisms over clever ones.
+Scope: simulation (a stub backend) plus a small hardware demo on the real robot. Whether the participant study (below) runs on the real robot or the stub is open ([roadmap](roadmap.md#open-questions)). The student has computer-science coursework but no hands-on control or RL background, so the design favours simple, inspectable mechanisms over clever ones.
 
 ### Predecessor
 
@@ -39,7 +39,7 @@ The **planning horizon** (maximum steps per plan) is one config value. Horizon 1
 
 - **Two phases.** Phase one characterises the system objectively, in simulation and from run logs, before any human participants are involved. Phase two is the participant study.
 - **Granularity and horizon are independent variables.** Varying both at once makes effects impossible to attribute. The experiment design must decide how they are crossed (open, [roadmap](roadmap.md#open-questions)).
-- Experiments run only after the v2 verification layer is implemented ([roadmap](roadmap.md#v2-plan)).
+- Experiments run only after the v2 verification layer is implemented ([roadmap](roadmap.md#v2-plan)). Everything that gates them, including the still-undesigned participant protocol, task set and trust measure, is listed in [roadmap.md](roadmap.md#before-experiments).
 
 ### OpenClaw as a system-level baseline
 

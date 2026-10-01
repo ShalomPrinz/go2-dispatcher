@@ -45,7 +45,7 @@ Types:
 |---|---|---|---|---|
 | `model` | str | `"claude-sonnet-5-5"` *tunable* | | Anthropic model id. Logged in `task_start.config` and `index.jsonl`. |
 | `max_tokens` | int | `2048` | ≥ 1 | `max_tokens` for each request. |
-| `thinking` | `"between_tools"` \| `"adaptive"` | `"between_tools"` | | Sent as `thinking={"type": ...}`. `between_tools` keeps thinking off; `adaptive` lets the model think (use it only as a deliberate experimental condition). Logged in `index.jsonl`. |
+| `thinking` | `"between_tools"` \| `"adaptive"` | `"between_tools"` | | Sent as `thinking={"type": ...}`. `between_tools` is the lowest setting (no extended thinking; [llm.md](llm.md#sonnet-55-parameter-constraints)); `adaptive` lets the model think (use it only as a deliberate experimental condition). Logged in `index.jsonl`. |
 | `request_timeout_s` | float | `60.0` *tunable* | > 0 | Upper limit for one HTTP attempt. Each attempt uses `min(request_timeout_s, remaining task time)`. |
 | `infra_max_retries` | int | `2` | ≥ 0 | Retries after transport or overload errors. Infra retries are not LLM calls. |
 | `infra_backoff_s` | list of float | `[1.0, 4.0]` | each ≥ 0; length ≥ `infra_max_retries` | Seconds to sleep before retry 1, retry 2, and so on. A `retry-after` header can raise a sleep, capped at 30 s. |
@@ -200,6 +200,6 @@ Some *tunable* values are named constants in code, not config keys:
 
 - **Secrets only from environment variables or `.env`**, never config keys; real environment variables win; they are removed from skill processes and never logged. The full config can then be logged with every task (`task_start.config`) without leaking anything, and skills never see credentials.
 - **Relative paths resolve against the config file's folder (the base dir), which is also every subprocess's working directory.** A config folder is self-contained, so a run behaves the same whatever the current directory is.
-- **Unknown keys and loosely typed values are errors** (`extra="forbid"`, strict ints and finite floats). A typo in an experiment config would otherwise silently run the defaults under the wrong condition label.
+- **Unknown keys and loosely typed values are errors** (`extra="forbid"`, strict ints and finite floats), not warnings: a misspelt or mistyped key stops startup with exit code 2 instead of being ignored.
 - **CLI overrides go through the same validation** as the file: they are applied to the raw data before the models are built.
 - **Every starting value is a config key or a named constant**, never inline ([architecture.md](architecture.md#design-decisions)).

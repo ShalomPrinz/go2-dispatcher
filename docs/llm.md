@@ -6,7 +6,7 @@ How the dispatcher calls the planner model: provider and model, the exact reques
 
 - **Provider:** the Anthropic Messages API, through the official `anthropic` Python SDK (1.x, which runs on `httpx2`).
 - **Model:** `llm.model`, default `claude-sonnet-5-5` (Claude Sonnet 5.5). The default is a starting value; the model id is logged in `task_start.config` and in every `index.jsonl` row.
-- **Thinking:** off, via `llm.thinking = "between_tools"` (below).
+- **Thinking:** minimal, via `llm.thinking = "between_tools"`: no extended thinking, but not strictly zero thinking output (below). "Thinking off" in these docs means this setting.
 
 An alternative LLM layer (Jev, a "TypeSafe AI" decision model) is under consideration, not decided ([roadmap.md](roadmap.md#open-questions)).
 
@@ -40,9 +40,9 @@ Sonnet 5.5 returns HTTP 400 for three things an earlier design relied on. A 400 
 | A non-default `temperature` (or other sampling parameter) | Nothing; there is no `temperature` config key (adding one is an unknown-key error) | Planning is **not deterministic**. Repeated runs of the same task can differ. |
 | `thinking: {"type": "disabled"}` | `thinking={"type": "between_tools"}` | See below. |
 
-**Thinking.** On Sonnet 5.5, `between_tools` is the lowest thinking setting: the model does no extended thinking; short progress notes it writes between tool calls may come back as `thinking` blocks. It is accepted only at effort `high` or below; we send no effort, so the model default (`high`) applies. It takes no other field inside `thinking`. The other allowed value, `llm.thinking = "adaptive"`, lets the model think and is meant only as a deliberate experimental condition; `thinking` is logged in every `index.jsonl` row. `between_tools` is accepted by Sonnet 5.5 only: to run another model, set `llm.thinking = "adaptive"` (which means thinking on) or change the code.
+**Thinking.** On Sonnet 5.5, `between_tools` is the lowest thinking setting: the model does no extended thinking; short progress notes it writes between tool calls may still come back as `thinking` blocks. Thinking cannot be switched off completely on Sonnet 5.5 (`disabled` is rejected), so "thinking off" means this lowest setting, not zero thinking output. Any such blocks are logged in `llm_response.content`; that their tokens are counted in `usage` is *unverified on the live API*. It is accepted only at effort `high` or below; we send no effort, so the model default (`high`) applies. It takes no other field inside `thinking`. The other allowed value, `llm.thinking = "adaptive"`, lets the model think and is meant only as a deliberate experimental condition; `thinking` is logged in every `index.jsonl` row. `between_tools` is accepted by Sonnet 5.5 only: to run another model, set `llm.thinking = "adaptive"` (which means thinking on) or change the code.
 
-**`max_tokens` 2048** is headroom against cut-off replies. It is only a ceiling: cost follows the tokens actually generated, and it affects measurements only if a reply would be cut off. A 5-step plan with thinking off needs far less. A reply cut off at the limit is invalid (below).
+**`max_tokens` 2048** is headroom against cut-off replies. It is only a ceiling: cost follows the tokens actually generated, and it affects measurements only if a reply would be cut off. A 5-step plan at `between_tools` needs far less. A reply cut off at the limit is invalid (below).
 
 ### Live-API verification status
 
@@ -90,7 +90,7 @@ The SDK's own retries are disabled (`max_retries=0`); `AnthropicPlanner` retries
 ## Design decisions
 
 - **Claude Sonnet 5.5 as the planner, with the request shaped to what it accepts.** When an earlier design (forced `tool_choice`, a fixed `temperature`) turned out to be rejected by Sonnet 5.5, the request was changed rather than the model. Rejected: switching to an older model that still accepts forced tool choice and `temperature` (such as Opus 4.6).
-- **Thinking off (`between_tools`).** Thinking adds variable latency and output tokens, and those are measured variables. The setting is kept constant across conditions; `adaptive` exists only as a deliberate condition.
+- **Thinking at its lowest setting (`between_tools`), called "thinking off".** Thinking adds variable latency and output tokens, and those are measured variables. Sonnet 5.5 does not allow `disabled`, so the lowest accepted setting is used and kept constant across conditions; `adaptive` exists only as a deliberate condition.
 - **Auto `tool_choice` plus one schema retry.** Forced tool choice is unavailable; a missing call is treated like any other invalid reply, so it is measured rather than hidden.
 - **No `temperature`.** Not possible on Sonnet 5.5. The cost is non-deterministic planning; the study must account for run-to-run variation.
 - **Non-strict tool mode.** Strict mode cannot enforce `maxItems` or numeric ranges, and it injects an extra system prompt that distorts token counts. The dispatcher's own validation is the enforcer.

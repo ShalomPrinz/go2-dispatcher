@@ -29,6 +29,7 @@ Details:
 
 - Each skill runs in its own session; the kill is `SIGKILL` to the whole process group. The executor checks for process exit and sends the kill under one lock, so a reused PID is never signalled. The first kill cause wins.
 - `StopMove` runs as `python -m go2_skills.stop_move '{}'` in a new process. A fresh process gets a clean DDS channel (the SDK uses a process-wide singleton). It is never registered as the current process, so a stop can never kill it. It waits up to `robot.stop_move_timeout_s` (10 s) and is not retried. It sends `StopMove` even if its params are invalid, waits 0.5 s and samples the state. `Executor.stop_move()` never raises: if the process cannot even be started, it returns a failed result, so the operator still gets the warning.
+- If a stop, the time limit or shutdown kills a running step, the executor sends `StopMove` right after the kill, and that is the only one: the task then ends without a second, end-of-task `StopMove`. How the posture is updated: [loop-and-context.md](loop-and-context.md#user-message).
 - If a stop or the time limit arrives while **no** step runs (during an LLM call or between steps), the dispatcher still sends `StopMove` when the task ends. This is idempotent.
 - `StopMove` is not sent after a step that ends normally: walk and turn already end with `StopMove()`.
 - An LLM request already in flight is not cancelled; the stop takes effect when it returns ([llm.md](llm.md#infrastructure-retries)).
