@@ -38,9 +38,12 @@ Opt-in tests (`--run-live`, `--run-robot`) are described in [docs/testing.md](do
 - No secrets in code, config files under version control, or logs. The API key and Telegram token live only in `.env` ([docs/configuration.md](docs/configuration.md)).
 - Fixed texts in `prompts.py` and `SKILL.md` files change the registry hash and the golden files; changing them makes runs incomparable ([skills/docs/skills.md](skills/docs/skills.md)).
 
-## Working pattern for large tasks
+## Working pattern
 
-- The main session is an **orchestrator**: it delegates each task to a fresh subagent, one at a time, with a self-contained brief.
+- The main session is an **orchestrator**: it always delegates code and doc changes to a project agent (`.claude/agents/`), one task at a time, with a self-contained brief. It does not edit `dispatcher/` or `skills/` itself.
+  - `dispatcher-dev`: anything under `dispatcher/` or owned by `dispatcher/docs/`.
+  - `skills-dev`: anything under `skills/` or owned by `skills/docs/`.
+  - A task that touches both packages is split into one task per agent, run in sequence (the side that defines the contract first). Each agent stops and reports when it needs a change on the other side.
 - It verifies with commands only (`uv run pytest -q 2>&1 | tail -n 15`, `git status --short`, `git diff --stat`) and commits per task.
 - It does not read the whole doc set or source itself; that exhausts its context before the work starts.
 - Subagents record any gap they fill in the owning doc and report briefly (300 words or fewer).
