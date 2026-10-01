@@ -103,10 +103,10 @@ There are no automated robot tests in v1. The real backend is checked by hand wi
 - The default run must stay offline: no network, API key, SDK or robot. Mark anything else `live_llm` or `robot`.
 - Keep the suite fast. Most of its size comes from parameterised cases; prefer fewer, meaningful tests over more parameter combinations.
 - Use the fakes above for dispatcher logic and the stub with real subprocesses (`integration`) for anything that depends on processes, timeouts or kills.
-- Cut cases only for redundancy (same code path, same input class) or cost (one interpreter start per subprocess case), never to lower the count.
-- Keep parametrisation and shrink the input set; never fold cases into a loop inside one test, which stops at the first failure. Instead of a cross product (fields × values), write two parametrised tests: all bad values on one field, and every field with one bad value.
-- For thresholds and ranges, test just below, at and above each boundary, plus `None`; drop interior points.
-- Test shared skill code (`parse_params`, `require_*`, `capture_stdout`, stub faults, the orphan watchdog) once, in process where possible, plus one subprocess case per mechanism. Per-skill fan-out is only for per-skill code: `test_contract_valid` runs every skill, because each skill is its own entrypoint.
+- Remove a case only if it is redundant (same code path and input class as another case) or costly (each subprocess case starts an interpreter). The case count is not a goal.
+- Keep cases parametrised so each failure reports by name; never loop over inputs inside one test. Instead of a cross product (fields × values), write two parametrised tests: every bad value on one field, and every field with one bad value.
+- For thresholds and ranges, test just below, at and above each boundary, plus `None`.
+- Fan out per skill only for per-skill code (`test_contract_valid`, because each skill is its own entrypoint). Test shared skill code once, in process, plus one subprocess case per mechanism.
 - Do not re-type fixed texts or constants in assertions; fixed texts are checked through `fixed_texts.txt`. Do not test pydantic, Python, or the test helpers themselves.
 
 ## Design decisions
