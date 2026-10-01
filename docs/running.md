@@ -137,21 +137,7 @@ The stub replaces only the SDK layer inside the skill process. Processes, timeou
 
 ## Fault injection
 
-Faults apply to the stub only. The step number counts **dispatched** steps across the whole task (1-based, across plans). Rejected steps are not counted. The fault hits the first action call the skill makes (`Move`, `StopMove`, `StandDown`, `Stretch` or `detect`).
-
-| Kind | What the skill process does | Step outcome |
-|---|---|---|
-| `error` | the call returns code 99 (detector: camera error → `camera_unavailable`) | `error` |
-| `hang` | sleeps forever | `timeout` (killed, StopMove sent) |
-| `crash` | exits with code 139 without output | `malformed` |
-| `garbage` | prints `not json` and exits 0 | `malformed` |
-
-```bash
-uv run go2-dispatch --fault 2:hang run "turn left, then walk forward one metre"
-uv run go2-dispatch --fault 1:error --fault 3:crash batch tasks.txt
-```
-
-Or in config: `[stub] faults = [ { step = 2, kind = "hang" } ]`. `--fault` replaces the whole list.
+Stub faults (`stub.faults`, `--fault STEP:KIND`) are described in [skills.md](skills.md#fault-injection).
 
 ## Switching skill sets
 

@@ -1,128 +1,284 @@
 # The loop and the context
 
-How one task runs, what the model sees on each call, and how the budgets end a task. Spec: §11–§13, §15, §18.
+How one task runs, what the model must return, how a plan is checked before it runs, what the model sees on each call, and how budgets end a task. The LLM request itself (model, parameters, retries) is in [llm.md](llm.md); the stop path and the meaning of the motion budget are in [safety.md](safety.md).
 
 ## The loop
 
 ```
 task text
-  └─► [check stop / deadline] ─► [call budget left?] ─► build context ─► LLM call
-          ▲                                                                   │
-          │                                    invalid reply ─► one schema retry ─► still invalid → LLM_INVALID
-          │                                                                   │
-          │                                    DONE → DONE      ABORT → ABORTED
-          │                                                                   │ PLAN
-          │                                    precheck (bounds on every step, motion budget up to stop_at)
-          │                                      rejected → failure +1 ───────┤
-          │                                                                   ▼
-          │                                    run steps 1..stop_at, one subprocess each
-          │                                      step fails → failure +1, rest abandoned
-          │                                      interrupted → STOPPED / TIME_LIMIT_EXCEEDED
-          └────────── return reason: plan_complete | checkpoint | failure ◄───┘
+  └─► [stop / deadline?] ─► [call budget left?] ─► build context ─► LLM call
+          ▲                                                             │
+          │                         invalid reply ─► one schema retry ─► still invalid → LLM_INVALID
+          │                                                             │
+          │                         DONE → DONE        ABORT → ABORTED  │
+          │                                                             │ PLAN
+          │                         pre-check (bounds on every step, motion budget up to stop_at)
+          │                           rejected → failure +1 ────────────┤
+          │                                                             ▼
+          │                         run steps 1..stop_at, one subprocess each
+          │                           step fails → failure +1, rest abandoned
+          │                           interrupted → STOPPED / TIME_LIMIT_EXCEEDED
+          └──────── return reason: plan_complete | checkpoint | failure ◄┘
 ```
 
-1. Before every LLM call: if a stop was requested, the task ends `STOPPED`. If the task deadline has passed, it ends `TIME_LIMIT_EXCEEDED` (StopMove is sent in both cases). If `max_llm_calls` calls have been made, it ends `CALL_BUDGET_EXHAUSTED`.
-2. The context is built from scratch (below) and sent. Interrupts are checked again right after the call, so a stop that arrives during a call never triggers a schema retry.
-3. If the reply is invalid, there is exactly one schema retry (below).
+1. Before every LLM call: a requested stop ends the task `STOPPED`; a passed deadline ends it `TIME_LIMIT_EXCEEDED` (both send `StopMove`, see [safety.md](safety.md)). If `loop.max_llm_calls` calls have been made, the task ends `CALL_BUDGET_EXHAUSTED`.
+2. The context is built from scratch ([below](#context-layout)) and sent. Stop and deadline are checked again right after the reply, so a stop that arrives during a call never leads to a schema retry.
+3. An invalid reply gets exactly one schema retry ([llm.md](llm.md#schema-retry)).
 4. `DONE` and `ABORT` end the task with the model's `message`.
-5. `PLAN`: `stop_at = replan_after or len(steps)`. The whole plan is prechecked. If the precheck rejects the plan, nothing runs: one failure is counted and the model is called again with reason `failure`.
-6. Steps `1..stop_at` run in order. Before each step, interrupts are checked. The step's motion cost is charged to the budget and the subprocess starts (`docs/skills.md`).
+5. `PLAN`: `stop_at = replan_after or len(steps)`. The whole plan is pre-checked ([below](#whole-plan-pre-check)). A rejected plan runs nothing: one failure is counted and the model is called again with reason `failure`.
+6. Steps `1..stop_at` run in order. Before each step, stop and deadline are checked; the step's motion cost is charged; the skill subprocess starts ([skills.md](skills.md)).
 7. After the plan:
-   - a step failed → reason `failure`; the steps after it are `[abandoned]`;
-   - `stop_at < len(steps)` → reason `checkpoint`; the steps after `stop_at` are `[pending]`;
-   - otherwise → reason `plan_complete`.
-
-   (`replan_after == len(steps)` counts as `plan_complete`.)
-8. The model is called again. A new plan always replaces the old one.
-
-## Return reasons
-
-| Reason | When | Notice shown |
-|---|---|---|
-| `initial` | first call of the task | `(none)` |
-| `plan_complete` | the previous plan ran to the end | `Your previous plan ran to completion. Return DONE with a message if the task is complete; otherwise plan the next steps.` |
-| `checkpoint` | the plan had `replan_after` < its length | `You asked to review results after step {n} of your previous plan. Its remaining steps are listed under "Remaining plan"; include them again if you still want them.` |
-| `failure` | a step failed, or the plan was rejected | `Your previous plan failed at step {n} ({skill}): {outcome}. This is failure {f} of {max_failures}. Revise the plan to avoid that failure, or return ABORT with a message if the task cannot be done.` |
-| `schema_retry` | the reply to the previous call was invalid | the original request's notice, unchanged, plus the Rejection section |
-
-`{n}` is the step's position within its plan (1-based), not the task-wide step index.
-
-## What counts
-
-**A failure** is a step outcome of `error`, `timeout`, `malformed`, `rejected` (bounds) or `motion_budget_exceeded`. Bounds and motion-budget rejections count, following the professor's definition of failure (OD-11). `task_end.rejections` counts them separately. These are not failures: checkpoints, completed plans, invalid LLM replies, infra retries, and `interrupted` steps.
-
-**An LLM call** is one request that got a response back, valid or not. A schema retry is an LLM call. Infra retries (connection errors, 408/409/429/5xx with backoff) are **not** separate calls. They appear as `llm_retry` records. A call that ends in `LLMUnavailable` or `LLMInterrupted` is not counted.
-
-## Budgets and outcomes
-
-| Limit | Config | Checked | Outcome |
-|---|---|---|---|
-| Failure budget | `loop.max_failures` | right after the failure that reaches it (no extra LLM call) | `FAILURE_BUDGET_EXHAUSTED` |
-| Call budget | `loop.max_llm_calls` | before every call, including the schema retry | `CALL_BUDGET_EXHAUSTED` |
-| Task time limit | `loop.task_time_limit_s` | before each call and step, during LLM retries, and by the executor while a step runs | `TIME_LIMIT_EXCEEDED` |
-| Horizon | `loop.planning_horizon` | on every reply, before schema validation | invalid reply → schema retry |
-| Motion budget | `motion_budget.*` | precheck, over steps `1..stop_at`, starting from the task's current usage | `motion_budget_exceeded` failure |
-| Step timeout | the skill's `POLICY.timeout_s(params)` | by the executor | `timeout` failure |
-
-All task outcomes:
-
-| Outcome | When | Operator message |
-|---|---|---|
-| `DONE` | the model returned `DONE` | the model's message |
-| `ABORTED` | the model returned `ABORT` | the model's message |
-| `STOPPED` | operator `stop` or shutdown | `Stopped on request. A stop command was sent to the robot.` |
-| `TIME_LIMIT_EXCEEDED` | time limit reached | `Stopped: the task exceeded its {limit}s time limit. A stop command was sent to the robot.` |
-| `FAILURE_BUDGET_EXHAUSTED` | failures reached `max_failures` | `Stopped: the robot failed {n} times while trying this task. Last failure: {skill}: {error_message}` |
-| `CALL_BUDGET_EXHAUSTED` | `max_llm_calls` reached | `Stopped: the task reached the limit of {n} planning calls without finishing.` |
-| `LLM_INVALID` | a reply and its retry were both invalid | `Stopped: the model returned an invalid plan twice.` |
-| `LLM_ERROR` | LLM unreachable after infra retries, or a non-retryable API error | `Stopped: the model could not be reached ({detail}).` |
-| `INTERNAL_ERROR` | unhandled exception in the dispatcher | `Stopped: internal error ({ExceptionType}). See run log {run_id}.` |
-
-If a StopMove failed during the task, the message ends with ` WARNING: the stop command to the robot failed. Stop the robot manually.`
+   - a step failed → reason `failure`; the steps after it are listed as `[abandoned]`;
+   - `stop_at < len(steps)` → reason `checkpoint`; the steps after `stop_at` are listed as `[pending]`;
+   - otherwise → reason `plan_complete` (`replan_after == len(steps)` counts as complete).
+8. The model is called again. A new plan always replaces the old one; leftover steps run only if the model includes them again.
 
 ## Plan contract
 
-The model must call the single tool `submit_plan` (`tool_choice` is `auto`, so the model is asked rather than forced to call it; non-strict tool use; no `temperature`; `thinking` from `llm.thinking`, off by default):
+The model answers every call through the single tool `submit_plan`. Its input is the plan:
 
 ```json
 {"status": "PLAN", "steps": [{"skill": "turn", "params": {"direction": "left", "angle_deg": 90}}], "replan_after": 1, "message": "optional"}
 ```
 
-Validation (§13.1), in this order:
+| Field | Meaning |
+|---|---|
+| `status` | `PLAN` (run the steps), `DONE` (task complete), `ABORT` (cannot or should not be done, or ambiguous). Matched case-insensitively after trimming. |
+| `steps` | Ordered skill calls `{skill, params}`. At least one for `PLAN`, none for `DONE` / `ABORT`. At most `loop.planning_horizon`. |
+| `replan_after` | Optional, `PLAN` only, `1..len(steps)`: run up to this step, then call the model again. |
+| `message` | Required (non-blank) for `DONE` / `ABORT`: the text the operator receives. Optional for `PLAN`, where it is logged only. |
 
-1. **Horizon** (on the raw input): more than `planning_horizon` steps → `plan has {n} steps; the maximum is {horizon}`. The plan is **never truncated**. A `horizon_rejection` record is logged.
-2. **Schema**: `status` ∈ PLAN/DONE/ABORT (case-insensitive), `replan_after` a strict integer, no extra keys.
-3. **Semantics**: PLAN needs ≥ 1 step; DONE/ABORT need no steps and a non-blank message; `replan_after` only with PLAN and within `1..len(steps)`.
+The tool definition, generated by `llm.plan_tool_schema(horizon)` (the request is sent non-strict, so the dispatcher's own validation enforces it):
 
-Other invalid replies: no `submit_plan` call (`no submit_plan call in reply`; for example a text-only reply), and `stop_reason = max_tokens` (`reply was cut off; keep the plan shorter`). `thinking` and `text` blocks before the `submit_plan` call are skipped; all blocks are logged in `llm_response.content`.
+```json
+{
+  "name": "submit_plan",
+  "description": "Submit your plan for the current task. Call this exactly once.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "status": {"type": "string", "enum": ["PLAN", "DONE", "ABORT"],
+                 "description": "PLAN: run the steps. DONE: task complete, no steps. ABORT: cannot or should not be done, no steps."},
+      "steps": {"type": "array", "maxItems": "<planning_horizon>",
+                "description": "Skill calls to run in order. Empty for DONE and ABORT.",
+                "items": {"type": "object",
+                          "properties": {"skill": {"type": "string", "description": "Skill name from the skill list."},
+                                         "params": {"type": "object", "description": "Parameter values for this skill."}},
+                          "required": ["skill", "params"], "additionalProperties": false}},
+      "replan_after": {"type": "integer", "minimum": 1,
+                       "description": "Optional. Stop after this step number and call again before running the rest."},
+      "message": {"type": "string",
+                  "description": "Required for DONE and ABORT: text for the operator. Optional for PLAN."}
+    },
+    "required": ["status", "steps"],
+    "additionalProperties": false
+  }
+}
+```
 
-Step bounds (§13.2), checked on every step of a PLAN before anything runs: the skill exists; no undeclared params; required params are present; types are right (enum values are trimmed and lowercased; an integral float is accepted for `integer`); ranges are respected; defaults are filled in. The first step with violations rejects the whole plan. The rejected step is recorded with its raw params, `error_code = "bounds"`, and all its violations joined with `; ` (cut to 200 chars).
+`maxItems` is the integer horizon. `go2-dispatch catalog` prints the exact schema for the current config.
+
+## Plan validation
+
+`validation.validate_tool_input` checks the raw tool input, in this order. Every error becomes one line in the schema retry's Rejection section.
+
+1. **Horizon**, on the raw input: more than `planning_horizon` steps → `plan has {n} steps; the maximum is {horizon}`. The plan is rejected, never truncated, and a `horizon_rejection` record is logged ([llm.md](llm.md#horizon-rejection)). Schema and semantic checks still run and add their errors.
+2. **Schema** (pydantic `Plan`): unknown keys, wrong types (`replan_after` must be a strict integer, `message` a string). Each error is `{dotted location}: {message}` (`input: ...` when the whole input is wrong).
+3. **Semantics**, only if the schema passed:
+   - `status PLAN needs at least one step`
+   - `status {s} must have no steps` (DONE / ABORT)
+   - `status {s} needs a message` (DONE / ABORT, missing or blank)
+   - `replan_after is only allowed with status PLAN`
+   - `replan_after must be between 1 and {len(steps)}`
+
+A plan is accepted only with no errors at all. Two more invalid replies are detected before validation ([llm.md](llm.md#response-handling)): a reply cut off at `max_tokens` (`reply was cut off; keep the plan shorter`) and a reply without a `submit_plan` call (`no submit_plan call in reply`).
+
+## Step bounds
+
+`bounds.check_step` checks one step against its skill's `SKILL.md` declaration ([skills.md](skills.md#skillmd-frontmatter)) and collects every violation:
+
+1. The skill exists, else `unknown skill '{s}'; available: {sorted names}` (nothing else is checked).
+2. No undeclared params: `unknown parameter '{p}' for skill {s}`.
+3. Required params present: `missing parameter '{p}' for skill {s}`.
+4. Types, with no other coercion: `number` is an int or float, not bool, finite; `integer` is an int, or an integral float that is converted to int; `string` is non-empty after trimming (the trimmed value is kept); `enum` is a string whose trimmed, lower-cased value is in `values` (the normalised value is kept). A number too large to convert to float is a type violation. Message: `parameter '{p}' for skill {s} must be {expected}, got {repr}`, with `{expected}` one of `a finite number`, `an integer`, `a non-empty string`, `one of a, b, c`, and the repr cut to 40 characters.
+5. Ranges (only for params whose type passed): `parameter '{p}' for skill {s} is {v:g}, outside {min:g} to {max:g}` (or `below the minimum {min:g}` / `above the maximum {max:g}` when one side is open).
+6. Defaults are filled in for absent optional params, in frontmatter order.
+
+The filled, normalised params are what is dispatched, logged and shown in the context. Skills themselves check only presence, type and enum membership; ranges are enforced only here.
+
+## Whole-plan pre-check
+
+`bounds.precheck` runs on every `PLAN` before any step starts:
+
+1. `check_step` on **every** step of the plan, including steps after `stop_at`. The first step with violations rejects the plan: a step result with `outcome = "rejected"`, `error_code = "bounds"`, the raw params, and all its violations joined with `; ` (cut to 200 characters).
+2. If all steps pass, the motion budget is simulated over steps `1..stop_at` only, in order, on a copy of the task's budget starting from its current usage. The first step that would go over a limit rejects the plan with `outcome = "motion_budget_exceeded"` and the message `this step needs {need:g} {unit} of {kind} but only {left:g} {unit} remain for this task` (`kind` is `travel` in `m` or `rotation` in `deg`, travel checked first; values rounded to 2 decimals).
+
+A rejection is recorded as one step result with no dispatch index, counts as one failure, and leads to a `failure` call. After a rejection, **every** step of the plan is listed as `[abandoned]` under Remaining plan, including the rejected one. Rejected steps are never charged to the motion budget. What the budget means and why it exists: [safety.md](safety.md#motion-budget).
+
+## Step outcomes
+
+Every recorded step has one outcome:
+
+| Outcome | `error_code` | Source | Failure? |
+|---|---|---|---|
+| `ok` | — | skill response `status = ok` | no |
+| `error` | the skill's code ([skills.md](skills.md#error-codes)) | skill response `status = error` | yes |
+| `timeout` | `timeout` | killed after `POLICY.timeout_s(params)`; message `killed after {timeout_s:g}s timeout` | yes |
+| `malformed` | `malformed` | no valid response line; message `skill process exited with code {rc} without a valid response` | yes |
+| `rejected` | `bounds` | pre-check, before anything ran | yes |
+| `motion_budget_exceeded` | `motion_budget_exceeded` | pre-check, before anything ran | yes |
+| `interrupted` | `stopped_by_operator` / `task_time_limit` / `shutdown` | killed by a stop, the task time limit or shutdown; ends the task | no |
+
+## What counts
+
+**A failure** is a step outcome of `error`, `timeout`, `malformed`, `rejected` or `motion_budget_exceeded`. Checkpoints, completed plans, invalid LLM replies, infrastructure retries and `interrupted` steps are not failures. `task_end.rejections` counts the two pre-check outcomes separately, so they can be told apart in analysis.
+
+**An LLM call** is one request that got a response back, valid or not. A schema retry is an LLM call. Infrastructure retries are not separate calls; a call that ends without a response (LLM unreachable, or interrupted while retrying) is not counted ([llm.md](llm.md#infrastructure-retries)).
+
+## Return reasons
+
+The reason for each call is logged on every `llm_request` record and selects the Notice the model sees.
+
+| Reason | When | Notice |
+|---|---|---|
+| `initial` | first call of the task | `(none)` |
+| `plan_complete` | the previous plan ran to the end | `Your previous plan ran to completion. Return DONE with a message if the task is complete; otherwise plan the next steps.` |
+| `checkpoint` | the plan had `replan_after` < its length | `You asked to review results after step {n} of your previous plan. Its remaining steps are listed under "Remaining plan"; include them again if you still want them.` |
+| `failure` | a step failed, or the plan was rejected | `Your previous plan failed at step {n} ({skill}): {outcome}. This is failure {f} of {max_failures}. Revise the plan to avoid that failure, or return ABORT with a message if the task cannot be done.` |
+| `schema_retry` | the previous reply was invalid | the original request's notice, unchanged, plus the Rejection section |
+
+`{n}` is the step's position in its plan (1-based), not the task-wide index.
+
+## Budgets and limits
+
+| Limit | Config | Checked | Effect |
+|---|---|---|---|
+| Failure budget | `loop.max_failures` | right after the failure that reaches it (no further LLM call) | `FAILURE_BUDGET_EXHAUSTED` |
+| Call budget | `loop.max_llm_calls` | before every call, including a schema retry | `CALL_BUDGET_EXHAUSTED` |
+| Task time limit | `loop.task_time_limit_s` | before each call and step, during LLM retry backoff, and by the executor while a step runs | `TIME_LIMIT_EXCEEDED` |
+| Horizon | `loop.planning_horizon` | on every reply | invalid reply → schema retry |
+| Motion budget | `motion_budget.*` | pre-check, over steps `1..stop_at` | `motion_budget_exceeded` failure |
+| Step timeout | the skill's `POLICY.timeout_s(params)` | by the executor | `timeout` failure |
+
+All values are starting values and *tunable* ([configuration.md](configuration.md)).
+
+### Horizon and call budget
+
+`planning_horizon` and `max_llm_calls` interact. At horizon 1 every step needs its own call, plus a final call for `DONE`: a 10-step task needs at least 11 calls at horizon 1 but can need 3 at horizon 5. With one `max_llm_calls` for all conditions, long tasks at a small horizon can end `CALL_BUDGET_EXHAUSTED`, so that outcome's rate partly reflects the cap. Both values are logged with every task (`task_start.config`, `index.jsonl`). Choosing `max_llm_calls` per condition is open ([roadmap.md](roadmap.md#open-questions)).
+
+## Task outcomes
+
+| Outcome | When | Operator message |
+|---|---|---|
+| `DONE` | the model returned `DONE` | the model's `message` |
+| `ABORTED` | the model returned `ABORT` | the model's `message` |
+| `STOPPED` | operator stop or shutdown | `Stopped on request. A stop command was sent to the robot.` |
+| `TIME_LIMIT_EXCEEDED` | task time limit reached | `Stopped: the task exceeded its {limit:g}s time limit. A stop command was sent to the robot.` |
+| `FAILURE_BUDGET_EXHAUSTED` | failures reached `max_failures` | `Stopped: the robot failed {n} times while trying this task. Last failure: {skill}: {error_message}` |
+| `CALL_BUDGET_EXHAUSTED` | `max_llm_calls` reached | `Stopped: the task reached the limit of {n} planning calls without finishing.` |
+| `LLM_INVALID` | a reply and its schema retry were both invalid | `Stopped: the model returned an invalid plan twice.` |
+| `LLM_ERROR` | LLM unreachable after infrastructure retries, or a non-retryable API error | `Stopped: the model could not be reached ({detail}).` |
+| `INTERNAL_ERROR` | unhandled exception in the dispatcher | `Stopped: internal error ({exception_type}). See run log {run_id}.` |
+
+`{detail}` is the error class and HTTP status, for example `RateLimitError 429`. For `FAILURE_BUDGET_EXHAUSTED`, `{error_message}` is the last failure's message, or its outcome if it has none. If any `StopMove` failed during the task, the message ends with ` WARNING: the stop command to the robot failed. Stop the robot manually.` The texts are in `prompts.py`; how transports show them is in [running.md](running.md).
 
 ## Context layout
 
-Every request is built from fixed slots. No conversation is carried over, and each request has exactly one user message. Context size depends only on the current task.
+Every request is built from fixed slots. No conversation is carried over; each request has exactly one user message.
 
 | Order | Slot | Where | Changes |
 |---|---|---|---|
-| 1 | Output contract (S6) | `tools`: the `submit_plan` schema | never, for a given config |
-| 2 | System role and rules (S1) | `system[0]` | never, for a given config |
-| 3 | Skill catalog (S2) | `system[1]` = `"## Skills\n" + catalog` | never, for a given config |
-| 4 | Previous task (S7) | user message | between tasks |
+| 1 | Output contract | `tools`: the `submit_plan` definition | never, for a given config |
+| 2 | System text | `system[0]` | never, for a given config |
+| 3 | Skill catalog | `system[1]` = `"## Skills\n" + catalog` | never, for a given config |
+| 4 | Previous task | user message | between tasks |
 | 5 | Robot | user message | after steps |
-| 6 | Task (S3) | user message | never within a task |
+| 6 | Task | user message | never within a task |
 | 7 | Budget | user message | after steps and calls |
-| 8 | Executed so far (S4) | user message | after steps |
-| 9 | Remaining plan (S5) | user message | after plans |
+| 8 | Executed so far | user message | after steps |
+| 9 | Remaining plan | user message | after plans |
 | 10 | Notice | user message | per call |
 | 11 | Rejection | user message | schema retry only |
 
-Static content comes first (tools, then system), so prompt caching can be added later without reordering. Caching is not enabled in v1. `go2-dispatch catalog` prints slots 1–3 exactly.
+`go2-dispatch catalog` prints slots 1–3 exactly. The catalog is generated from the registry ([skills.md](skills.md#catalog-and-registry-hash)).
 
-The user message always has all seven sections, in this order, separated by one blank line. An empty section shows a placeholder (`(none)` or `(nothing yet)`), so the shape never changes.
+### System text
 
-### Full example: the request after a failure
+`prompts.SYSTEM_TEMPLATE`, with `{horizon}` = `loop.planning_horizon`:
 
-Task: "Turn left, walk two metres and look for a chair". The first plan was `turn left 90`, `walk forward 2`, `detect_object chair`. The walk failed (injected stub fault `error` at step 2). This is call 2, reason `failure`:
+```
+You plan actions for a Unitree Go2 quadruped robot. An operator gives you a task in natural language. You answer by calling the submit_plan tool exactly once.
+
+How the loop works:
+- You return a plan: an ordered list of skill calls. The system runs the steps in order and then calls you again with the results.
+- Each call is independent. Everything you know is in the message: the previous task, the robot's posture, the task, the remaining budget, the steps already executed, and any steps left over from your previous plan.
+- A new plan replaces any previous plan. Steps listed under "Remaining plan" do not run unless you include them again.
+
+Rules:
+- Use only skills from the skill list, with only their declared parameters, and keep values inside the declared ranges.
+- A plan may contain at most {horizon} steps.
+- status PLAN: one or more steps to run. message is optional.
+- status DONE: the task is complete. No steps. message is required: tell the operator what was done and anything they asked to find out.
+- status ABORT: the task cannot or should not be done with these skills, or it is ambiguous. No steps. message is required: explain why, or ask the operator a clarifying question.
+- replan_after N: stop after step N and call you again before running the rest. Use it when later steps depend on what earlier steps find. Omit it to run the whole plan.
+- If a step fails, the rest of that plan is abandoned and you are called again with the failure.
+- The motion budget limits total travel and total rotation for this task. A plan that would exceed it is rejected before any step runs.
+```
+
+### User message
+
+Always all seven sections, in this order, separated by one blank line, no trailing newline. An empty section shows a placeholder (`(none)` or `(nothing yet)`), so the shape never changes.
+
+```
+## Previous task
+## Robot
+## Task
+## Budget
+## Executed so far
+## Remaining plan
+## Notice
+```
+
+- **Previous task:** the last finished task in this process, or `(none)` (also after a restart):
+  ```
+  Task: {task}
+  Outcome: {outcome code}
+  Message: {operator message}
+  Last step: {last dispatched step, rendered without its number, or (none)}
+  ```
+- **Robot:** `Posture: standing | sitting | unknown`. After every dispatched step the posture is taken from the step's `state_after`; if there is none, from the following `StopMove`'s `state_after`; if there is none and the step was killed (`timeout`, `interrupted`), it becomes `unknown`; otherwise it is unchanged. A dispatcher `StopMove` at task end also updates it. It carries over to the next task. At startup it is the stub's reset posture, or read from the real robot (`unknown` if that fails). How posture is derived from state: [robot.md](robot.md).
+- **Task:** the operator's text, trimmed, never rewritten.
+- **Budget:**
+  ```
+  Travel: {used} of {max} m used
+  Rotation: {used} of {max} deg used
+  Failures: {failures} of {max_failures}
+  Model calls: {calls made before this request} of {max_llm_calls}
+  ```
+  Numbers are rounded to 2 decimals and printed with `:g`.
+- **Executed so far:** one line per recorded step, or `(nothing yet)`:
+  ```
+  {index}. {skill}({params}) -> ok{: k=v, ... for the skill's context_observations}
+  {index}. {skill}({params}) -> {outcome}: {error_message}
+  - rejected before running: {skill}({params}) -> {outcome}: {error_message}
+  ```
+  Params are `name=value` in frontmatter order (undeclared ones after, in received order), strings unquoted, numbers with `:g`, booleans `true` / `false`. Error messages are one line of at most 200 characters (cut to 199 + `…`). Stderr, tracebacks and raw stdout never appear. Rejected steps use the `-` form because they did not run.
+- **Remaining plan:** steps of the latest plan that did not run, as `{position in plan}. {skill}({raw params}) [pending]` after a checkpoint or `[abandoned]` after a failure or rejection; otherwise `(none)`.
+- **Notice:** see [return reasons](#return-reasons).
+
+**History cut.** If more than `loop.context_history_k` (K, default 10, *tunable*) steps have been recorded, Executed so far starts with `({n} earlier entries omitted)` and shows the last K. Nothing is summarised. The operator's outcome text is cut separately ([running.md](running.md)).
+
+**Rejection section** (schema retry only): the original user message, byte for byte, plus `"\n\n"` and
+
+```
+## Your previous reply was rejected
+{one line per validation error}
+Call submit_plan again with a corrected plan.
+```
+
+### Example: the request after a failure
+
+Task "Turn left, walk two metres and look for a chair". The first plan was `turn left 90`, `walk forward 2`, `detect_object chair`; the walk failed (stub fault `error` at step 2). Call 2, reason `failure`:
 
 ```
 ## Previous task
@@ -151,42 +307,23 @@ Model calls: 1 of 20
 Your previous plan failed at step 2 (walk): error. This is failure 1 of 3. Revise the plan to avoid that failure, or return ABORT with a message if the task cannot be done.
 ```
 
-The failed walk is still charged 2 m of travel: the budget is charged when a step is dispatched, because commanded motion may have happened.
+The failed walk is still charged 2 m: the budget is charged at dispatch ([safety.md](safety.md#motion-budget)). Exact user messages for each case are the golden files `tests/golden/context_*.txt` ([testing.md](testing.md)).
 
-### Sections
+## Design decisions
 
-- **Previous task:** the last finished task in this process (`Task`, `Outcome`, `Message`, `Last step` without its number). After a restart it is `(none)`.
-- **Robot:** `Posture: standing | sitting | unknown`. After every dispatched step, the posture is taken from the step's `state_after`. If there is none, it comes from the StopMove's `state_after`. If there is none and the step was killed, it becomes `unknown`. Otherwise it is unchanged. The posture carries over to the next task.
-- **Task:** the operator's text, trimmed, never rewritten.
-- **Budget:** numbers rounded to 2 decimals and printed with `:g`. `Model calls` counts the calls completed **before** this request.
-- **Executed so far:** one line per recorded step:
-  ```
-  {index}. {skill}({params}) -> ok{: k=v, ... for context_observations}
-  {index}. {skill}({params}) -> {outcome}: {error_message}
-  - rejected before running: {skill}({params}) -> {outcome}: {error_message}
-  ```
-  Params are written as `name=value` in frontmatter order, strings without quotes, numbers with `:g`. Error messages are one line of at most 200 characters (cut to 199 + `…`). Stderr, tracebacks and raw stdout never appear. Rejected steps use the `-` form, because they did not run.
-- **Remaining plan:** the steps of the latest plan that did not run, with their position in the plan: `[pending]` after a checkpoint, `[abandoned]` after a failure. After a rejection, **every** step of the plan is listed as `[abandoned]`, including the rejected one. These steps do not run unless the model includes them again.
-- **Notice:** see the return reasons above.
-
-### Truncation
-
-If more than `context_history_k` (K, default 10) steps have been recorded in the task, the section starts with `({n} earlier entries omitted)` and then shows the last K entries. Nothing is summarised. The operator's outcome text (`docs/running.md`) is not cut to K.
-
-### Schema retry
-
-If a reply is invalid, the dispatcher makes exactly **one** retry. The system blocks and tools are the same. The user message is the original user message, byte for byte, plus `"\n\n"` and:
-
-```
-## Your previous reply was rejected
-{one line per validation error}
-Call submit_plan again with a corrected plan.
-```
-
-The retry has reason `schema_retry` (`retry_of` in the log holds the reason being retried) and counts as an LLM call. If the retry is also invalid, the task ends `LLM_INVALID`. Invalid replies never count as failures.
-
-## Horizon and call budget
-
-`planning_horizon` and `max_llm_calls` interact (OD-13). With horizon 1, every step needs its own call, plus a final call for `DONE`. A task that needs 10 steps uses at least 11 calls at horizon 1, but can need as few as 3 at horizon 5. With the default `max_llm_calls = 20`, long tasks at a small horizon can end `CALL_BUDGET_EXHAUSTED`, so in that condition the rate of that outcome partly reflects the cap. Both values are logged with every task (`task_start.config`, `index.jsonl`). Set `max_llm_calls` per condition when designing an experiment.
-
-The horizon is stated in the system text and enforced by the tool schema (`maxItems`) and by validation. A plan that is too long is rejected and retried, not truncated. Watch the `horizon_rejection` rate in the run log (see `docs/future-ideas.md`).
+- **The plan is returned through one tool, `submit_plan`, whose input is the plan object.** The plan is first-class: it can be validated, logged, counted and inspected, and every call has one output contract. Rejected: a generic tool-use loop, where the plan exists only implicitly in a sequence of calls ([architecture.md](architecture.md#why-a-purpose-built-dispatcher)).
+- **An up-front plan with model-chosen checkpoints.** The advisor's complaint about the inherited system was that the LLM guided the robot step by step, which was slow; he asked for a plan with explicit stop-and-report points. `replan_after` is the checkpoint the model chooses inside a plan; the horizon is a cap the dispatcher imposes. They are different things: without `replan_after` a plan is all-or-nothing. Horizon values 1 / k / large give one-step / batch / full-plan behaviour on one code path ([project.md](project.md)).
+- **Plans longer than the horizon are rejected, never truncated.** Truncation would silently run a plan the model never made and corrupt the logged data. The rejection rate is monitored ([llm.md](llm.md#horizon-rejection)).
+- **The whole plan is pre-checked before any step runs** (bounds on all steps, motion budget on the steps to run). A plan either runs within limits or does not start; no partial motion happens because of a later bad step.
+- **Failures are skill error, timeout, malformed output, bounds rejection and motion-budget rejection.** This follows the advisor's definition of failure (skill error, bounds rejection, timeout); motion-budget rejections are treated like bounds rejections. Checkpoints and completed plans never count. The failure budget counts failures only.
+- **A separate cap on LLM calls per task** stops endless *successful* loops, which the failure budget cannot catch. The return reason is logged on every call; without it, horizon 1 would look like constant replanning.
+- **Budget exhaustion has its own outcomes** (`FAILURE_BUDGET_EXHAUSTED`, `CALL_BUDGET_EXHAUSTED`) with fixed messages, never `ABORTED`, so the dispatcher ending a task is never confused with the model giving up.
+- **Ambiguous instructions** ("go to the chair" with two chairs) end with `ABORT` and a clarifying question in `message`. A dedicated `ASK` status is planned for v2 ([roadmap.md](roadmap.md#ask-plan-status)).
+- **Fixed slots, not a conversation.** Context size depends only on the current task, which keeps token and latency figures comparable across conditions. Rejected: carrying a conversation, and compaction (OpenClaw's compaction is part of why it was replaced).
+- **Static content first** (tools, system text, catalog), so prompt caching could be added later without reordering.
+- **No prompt caching.** Cached tokens are reported separately, and cache behaviour differs between skill sets of different sizes, which would confound token comparisons between granularity conditions. Kept as a future idea ([roadmap.md](roadmap.md#future-ideas)).
+- **Executed-steps history keeps the last K entries plus an "n earlier entries omitted" line**, with no model summarisation. The count line tells the model that history was cut; summarisation would add an uncontrolled LLM step.
+- **After a failure, leftover steps are shown as `[abandoned]`, not cleared**, so the model does not have to re-derive them blind.
+- **Notices are fixed texts that tell the model directly what to do** ("failure f of N … revise or ABORT"). Directive text steers behaviour, so the wording must be identical across experimental conditions. The current wording is a draft to be frozen before experiments ([roadmap.md](roadmap.md#open-questions)).
+- **A previous-task slot carries continuity between messages** (the robot remembers its posture). Posture is stated from sampled state, never inferred from the last skill, because a skill can fail or be killed mid-motion.
+- **Nothing enters the context that the dispatcher did not shape.** No stderr, tracebacks, raw stdout or provider error text; every problem reaches the model as one short line. This keeps the context bounded and identical in form across conditions.
