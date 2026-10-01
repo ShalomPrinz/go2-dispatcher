@@ -223,7 +223,7 @@ def cmd_batch(cfg, tasks_file: Path) -> int:
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] == ["bot"]:
-        from . import telegram_bot      # lazy: keeps the Telegram library out of other commands
+        from . import telegram_bot  # lazy: keeps the Telegram library out of other commands
         return telegram_bot.main(argv[1:])
     parser = _parser()
     args = parser.parse_args(argv)

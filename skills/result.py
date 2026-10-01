@@ -9,7 +9,8 @@ import sys
 import threading
 import time
 import traceback
-from typing import Any, Callable, NoReturn
+from collections.abc import Callable
+from typing import NoReturn
 
 SCHEMA_VERSION = 1
 ERROR_MESSAGE_MAX_CHARS = 300

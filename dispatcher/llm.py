@@ -5,7 +5,8 @@ from __future__ import annotations
 import math
 import threading
 import time
-from typing import TYPE_CHECKING, Any, Callable, Literal, Protocol
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from pydantic import BaseModel
 

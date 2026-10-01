@@ -17,16 +17,6 @@ from dispatcher.dispatcher import Dispatcher
 from dispatcher.models import BusyError, Plan, PlanStep
 from dispatcher.registry import Registry
 from dispatcher.runlog import RunLogFactory
-from dispatcher.transports import telegram_bot
-from dispatcher.transports.telegram_bot import (
-    SHUTDOWN_EXTRA_S,
-    build_application,
-    on_post_init,
-    on_post_stop,
-    on_start,
-    on_stop,
-    on_text,
-)
 from dispatcher.tests.helpers import (
     FakeClock,
     FakeExecutor,
@@ -36,6 +26,16 @@ from dispatcher.tests.helpers import (
     fake_update,
     make_config,
     replies,
+)
+from dispatcher.transports import telegram_bot
+from dispatcher.transports.telegram_bot import (
+    SHUTDOWN_EXTRA_S,
+    build_application,
+    on_post_init,
+    on_post_stop,
+    on_start,
+    on_stop,
+    on_text,
 )
 from tests.helpers import REPO_ROOT
 

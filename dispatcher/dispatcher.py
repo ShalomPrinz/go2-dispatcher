@@ -90,7 +90,7 @@ class _NullLog:
         pass
 
 
-# --- per-task state (dispatcher/docs/loop-and-context.md) --------------------------------------------------------------
+# --- per-task state (dispatcher/docs/loop-and-context.md) -----------------------------------------------------------
 
 
 @dataclass
@@ -122,7 +122,7 @@ class _Task:
 class Dispatcher:
     def __init__(self, cfg: Config, registry: Registry, planner: PlannerClient,
                  executor: Executor, runlog_factory: RunLogFactory, *,
-                 clock: Clock = MonotonicClock(), initial_posture: str = "unknown"):
+                 clock: Clock = MonotonicClock(), initial_posture: str = "unknown"):  # noqa: B008  stateless
         self.cfg = cfg
         self.registry = registry
         self.planner = planner
@@ -146,7 +146,7 @@ class Dispatcher:
         self._versions = _versions()
         self._git_commit = _git_commit(cfg.base_dir)
 
-    # --- public interface (dispatcher/docs/loop-and-context.md) -------------------------------------------------------
+    # --- public interface (dispatcher/docs/loop-and-context.md) ------------------------------------------------------
 
     def is_busy(self) -> bool:
         return self._task_lock.locked()
@@ -439,7 +439,7 @@ class Dispatcher:
                                 exception_type=type(e).__name__)
         return outcome
 
-    # --- the loop (dispatcher/docs/loop-and-context.md) ----------------------------------------------------------------------
+    # --- the loop (dispatcher/docs/loop-and-context.md) --------------------------------------------------------------
 
     def _loop(self, t: _Task) -> TaskOutcome:
         loop = self.cfg.loop

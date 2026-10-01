@@ -11,7 +11,6 @@ from dispatcher.budget import MotionBudget
 from dispatcher.models import Plan, PlanStep
 from dispatcher.policies import MotionCost, SkillPolicy
 from dispatcher.registry import ParamSpec, Registry, SkillDescriptor
-
 from tests.helpers import REPO_ROOT
 
 

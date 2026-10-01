@@ -13,8 +13,8 @@ from dispatcher.executor import Executor
 from dispatcher.models import Plan, PlanStep
 from dispatcher.registry import Registry
 from dispatcher.runlog import INDEX_FILE, RunLogFactory
-from skills import stub
 from dispatcher.tests.helpers import ScriptedPlanner, make_config
+from skills import stub
 from tests.helpers import REPO_ROOT
 
 pytestmark = pytest.mark.integration

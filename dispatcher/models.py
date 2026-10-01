@@ -6,7 +6,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr, model_validator
 
-
 # --- Exceptions (docs/architecture.md) -------------------------------------------------------
 
 
@@ -106,7 +105,7 @@ class SkillResponse(BaseModel):
     timing: dict[str, float] = {}              # init_ms, exec_ms, state_ms, total_ms (+ stop_call_ms)
 
     @model_validator(mode="after")
-    def _error_iff_status_error(self) -> "SkillResponse":
+    def _error_iff_status_error(self) -> SkillResponse:
         if (self.status == "error") != (self.error is not None):
             raise ValueError("error must be present if and only if status == 'error'")
         return self

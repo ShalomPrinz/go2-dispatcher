@@ -20,7 +20,7 @@ vision = ["ultralytics", "opencv-python", "numpy"]
 go2 = "dispatcher.transports.cli:main"
 
 [dependency-groups]
-dev = ["pytest", "pytest-cov>=7.1", "pytest-timeout"]   # pytest-cov pulls coverage >= 7.10 for [run] patch
+dev = ["pytest", "pytest-cov>=7.1", "pytest-timeout", "ruff>=0.16"]   # pytest-cov pulls coverage >= 7.10 for [run] patch
 
 [tool.uv.sources]
 unitree_sdk2py = { git = "https://github.com/unitreerobotics/unitree_sdk2_python" }
@@ -51,3 +51,13 @@ patch = ["subprocess", "_exit"]         # measure skill and CLI subprocesses; sk
 [tool.coverage.report]
 show_missing = true
 skip_covered = true
+
+[tool.ruff]                             # lint only, no formatter (docs/testing.md)
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"dispatcher/prompts.py" = ["E501"]   # fixed texts; rewrapping changes the registry hash (skills/docs/skills.md)

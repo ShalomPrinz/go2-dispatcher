@@ -7,7 +7,6 @@ import threading
 
 import httpx2 as httpx  # the SDK's HTTP library (see llm.py)
 import pytest
-from dispatcher.tests.helpers import make_config
 
 from dispatcher.llm import (
     ERR_MAX_TOKENS,
@@ -17,6 +16,7 @@ from dispatcher.llm import (
     plan_tool_schema,
 )
 from dispatcher.models import LLMInterrupted, LLMUnavailable
+from dispatcher.tests.helpers import make_config
 
 H = 5
 SYSTEM = ["system one", "## Skills\ncatalog"]

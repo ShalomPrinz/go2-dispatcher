@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
+from dispatcher.llm import plan_tool_schema
 from dispatcher.models import RegistryError
 from dispatcher.policies import SkillPolicy
-from dispatcher.llm import plan_tool_schema
 from dispatcher.prompts import system_text
 from dispatcher.registry import MISSING, Registry, registry_hash
 from tests.helpers import REPO_ROOT

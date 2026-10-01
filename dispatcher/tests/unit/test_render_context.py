@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from tests.helpers import REPO_ROOT
 
 from dispatcher.budget import MotionBudget
 from dispatcher.context import ContextInput, build_user_message, schema_retry_message
@@ -20,6 +19,7 @@ from dispatcher.models import (
 from dispatcher.policies import MotionCost
 from dispatcher.registry import Registry
 from dispatcher.render import format_value, render_remaining, render_step
+from tests.helpers import REPO_ROOT
 
 GOLDEN = REPO_ROOT / "dispatcher" / "tests" / "golden"
 SECTION_ORDER = ["## Previous task", "## Robot", "## Task", "## Budget",

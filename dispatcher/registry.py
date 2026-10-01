@@ -31,9 +31,9 @@ PARAM_KEYS = frozenset({"type", "description", "values", "min", "max", "default"
 class _Missing:
     """Sentinel for a ParamSpec without a default (the param is required)."""
 
-    _instance: "_Missing | None" = None
+    _instance: _Missing | None = None
 
-    def __new__(cls) -> "_Missing":
+    def __new__(cls) -> _Missing:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
@@ -270,7 +270,7 @@ class Registry:
         self._skills = dict(sorted(skills.items()))
 
     @classmethod
-    def load(cls, skills_dir: Path) -> "Registry":
+    def load(cls, skills_dir: Path) -> Registry:
         """Load every ``<skills_dir>/<name>/SKILL.md``; raises RegistryError."""
         skills_dir = Path(skills_dir)
         if not skills_dir.is_dir():

@@ -8,7 +8,7 @@ import os
 import sys
 import threading
 import uuid
-from typing import Callable
+from collections.abc import Callable
 
 from skills import stub
 

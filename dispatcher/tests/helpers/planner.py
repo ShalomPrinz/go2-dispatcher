@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import threading
-from typing import Any, Callable, Sequence
+from collections.abc import Callable, Sequence
+from typing import Any
 
 from dispatcher.llm import TOOL_NAME, LLMResult
 from dispatcher.models import Plan

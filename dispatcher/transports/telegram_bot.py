@@ -9,8 +9,9 @@ import os
 import signal
 import sys
 import traceback
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 from telegram import Update
 from telegram.ext import (

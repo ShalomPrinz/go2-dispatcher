@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Literal, Mapping, Sequence
+from typing import Any, Literal
 
 from . import prompts
 from .budget import MotionBudget
@@ -86,7 +87,10 @@ def notice_block(inp: ContextInput) -> str:
 
 
 def build_user_message(inp: ContextInput, registry: Registry) -> str:
-    """The single user message (dispatcher/docs/loop-and-context.md): sections in fixed order, one blank line between."""
+    """The single user message (dispatcher/docs/loop-and-context.md).
+
+    Sections in fixed order, one blank line between.
+    """
     sections = [
         _section(prompts.SECTION_PREVIOUS_TASK, previous_task_block(inp.previous, registry)),
         _section(prompts.SECTION_ROBOT, prompts.POSTURE_TEMPLATE.format(posture=inp.posture)),

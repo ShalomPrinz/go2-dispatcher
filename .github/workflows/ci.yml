@@ -1,10 +1,10 @@
-name: tests
+name: ci
 
 on:
   push:
 
 jobs:
-  pytest:
+  lint-and-test:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -17,4 +17,5 @@ jobs:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
       - run: uv sync --locked
+      - run: uv run ruff check .
       - run: uv run pytest -q

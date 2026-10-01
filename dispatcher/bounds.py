@@ -10,7 +10,8 @@ from .budget import MotionBudget
 from .models import Plan, PlanStep, StepResult
 from .registry import ParamSpec, Registry
 
-ERROR_MESSAGE_MAX = 200        # StepResult.error_message limit (dispatcher/docs/run-log.md, dispatcher/docs/loop-and-context.md)
+# StepResult.error_message limit (dispatcher/docs/run-log.md, dispatcher/docs/loop-and-context.md)
+ERROR_MESSAGE_MAX = 200
 ELLIPSIS = "…"
 BOUNDS_ERROR_CODE = "bounds"
 BUDGET_ERROR_CODE = "motion_budget_exceeded"
@@ -53,7 +54,10 @@ def _expected(spec: ParamSpec) -> str:
 
 
 def _coerce(spec: ParamSpec, value: Any) -> Any:
-    """Type check without other coercion (dispatcher/docs/loop-and-context.md); returns the normalised value or _MISSING."""
+    """Type check without other coercion (dispatcher/docs/loop-and-context.md).
+
+    Returns the normalised value or _MISSING.
+    """
     if spec.type in ("number", "integer"):
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             return _MISSING
@@ -158,7 +162,7 @@ def precheck(plan: Plan, stop_at: int, registry: Registry, budget: MotionBudget,
         filled_all.append(filled)
 
     sim = budget.copy()
-    for i, (step, filled) in enumerate(zip(plan.steps[:stop_at], filled_all), start=1):
+    for i, (step, filled) in enumerate(zip(plan.steps[:stop_at], filled_all, strict=False), start=1):
         cost = registry.get(step.skill).policy.motion_cost(filled)
         kind = sim.would_exceed(cost)
         if kind is not None:

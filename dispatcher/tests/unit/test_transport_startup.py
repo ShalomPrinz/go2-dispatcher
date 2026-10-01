@@ -8,6 +8,7 @@ import pytest
 from dispatcher.dispatcher import Dispatcher
 from dispatcher.registry import Registry
 from dispatcher.runlog import RunLogFactory
+from dispatcher.tests.helpers import FakeExecutor, make_config
 from dispatcher.transports import (
     API_KEY_ENV,
     MISSING_API_KEY,
@@ -16,7 +17,6 @@ from dispatcher.transports import (
     initial_posture,
     make_planner,
 )
-from dispatcher.tests.helpers import FakeExecutor, make_config
 from tests.helpers import REPO_ROOT
 
 

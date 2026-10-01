@@ -33,6 +33,6 @@ def acquire(log_dir: Path) -> Path:
     except BlockingIOError:
         f.close()
         print(f"Another dispatcher is running (lock: {path}).", file=sys.stderr)
-        raise SystemExit(2)
+        raise SystemExit(2) from None
     _held[path] = f
     return path

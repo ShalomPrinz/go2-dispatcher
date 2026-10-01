@@ -74,7 +74,7 @@ def test_relative_paths_resolve_against_config_folder(tmp_path, monkeypatch):
     sub = tmp_path / "conf"
     sub.mkdir()
     abs_weights = tmp_path / "w.pt"
-    p = write(sub / "config.toml",
+    write(sub / "config.toml",
               f'[skills]\ndir = "myskills"\n[log]\ndir = "logs"\n'
               f'[stub]\nstate_file = "st/state.json"\n'
               f'[robot]\nyolo_weights = "{abs_weights}"\n')

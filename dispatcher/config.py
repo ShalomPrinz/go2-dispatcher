@@ -71,7 +71,7 @@ class LLMConfig(_Section):
         return v
 
     @model_validator(mode="after")
-    def _enough_backoffs(self) -> "LLMConfig":
+    def _enough_backoffs(self) -> LLMConfig:
         if len(self.infra_backoff_s) < self.infra_max_retries:
             raise ValueError(
                 "infra_backoff_s must have at least infra_max_retries "
@@ -165,7 +165,7 @@ class Config(_Section):
         return self._base_dir
 
     @model_validator(mode="after")
-    def _real_backend_rules(self) -> "Config":
+    def _real_backend_rules(self) -> Config:
         if self.robot.backend == "real":
             if not self.robot.network_interface.strip():
                 raise ValueError("robot.network_interface is required when robot.backend = \"real\"")

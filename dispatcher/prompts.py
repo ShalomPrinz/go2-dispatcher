@@ -7,7 +7,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from .budget import MOTION_BUDGET_MESSAGE  # re-exported: defined once, in budget.py (dispatcher/docs/loop-and-context.md)
+from .budget import (
+    MOTION_BUDGET_MESSAGE,  # re-exported: defined once, in budget.py (dispatcher/docs/loop-and-context.md)
+)
 from .models import TaskOutcomeCode
 
 __all__ = [

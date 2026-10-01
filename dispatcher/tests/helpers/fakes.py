@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Any, Callable, Sequence, Union
+from collections.abc import Callable, Sequence
+from typing import Any
 
 from dispatcher.executor import ExecResult
 from dispatcher.models import RobotState, SkillResponse, StopMoveResult
@@ -65,7 +66,7 @@ def stop_move_result(reason: str = "operator", *, ok: bool = True,
                           response=response)
 
 
-ScriptItem = Union[ExecResult, BaseException, Callable[[dict], ExecResult]]
+ScriptItem = ExecResult | BaseException | Callable[[dict], ExecResult]
 
 
 class FakeExecutor:
