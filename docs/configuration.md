@@ -30,7 +30,7 @@ Every section and every model rejects unknown keys (`extra="forbid"`). (sketch) 
 
 Types:
 - **int** keys reject floats, strings and booleans (`3`, not `3.0`).
-- **float** keys also accept TOML integers (`300` is fine).
+- **float** keys also accept TOML integers (`300` is fine; stored as a float). They reject booleans, strings (also numeric ones such as `"1.5"`), `nan` and `inf`/`-inf`.
 - **str** keys must be strings.
 
 ### `[run]`
@@ -43,16 +43,14 @@ Types:
 
 | Key | Type | Default | Rule | Meaning |
 |---|---|---|---|---|
-| `model` | str | `"claude-opus-4-6"` (sketch) | | Anthropic model id. Must accept a forced `tool_choice` and `temperature` (see below). |
-| `max_tokens` | int | `1024` | ≥ 1 | `max_tokens` for each request. |
-| `temperature` | float | `0.0` | ≥ 0 | Sampling temperature. Sent in the request body. |
+| `model` | str | `"claude-sonnet-5-5"` (sketch) | | Anthropic model id. Logged in `task_start.config` and `index.jsonl`. |
+| `max_tokens` | int | `2048` | ≥ 1 | `max_tokens` for each request. |
+| `thinking` | `"between_tools"` \| `"adaptive"` | `"between_tools"` | | Sent as `thinking={"type": ...}`. `between_tools` keeps thinking off; `adaptive` lets the model think (use it only as a deliberate experimental condition). Logged in `index.jsonl`. |
 | `request_timeout_s` | float | `60.0` (sketch) | > 0 | Upper limit for one HTTP attempt. Each attempt uses `min(request_timeout_s, remaining task time)`. |
 | `infra_max_retries` | int | `2` | ≥ 0 | Retries after transport or overload errors. Infra retries are not LLM calls. |
 | `infra_backoff_s` | list of float | `[1.0, 4.0]` | each ≥ 0; length ≥ `infra_max_retries` | Seconds to sleep before retry 1, retry 2, and so on. A `retry-after` header can raise a sleep, capped at 30 s. |
 
-**Model compatibility.** §12.3 requires a forced `tool_choice` (`{"type": "tool", "name": "submit_plan"}`) and sends `temperature`. Per the Anthropic API docs, the newest models reject one or both with HTTP 400, which is not retried, so every task would end `LLM_ERROR`: forced `tool_choice` is rejected by Claude Fable 5.1, Opus 5.5 and Sonnet 5.5; `temperature` is rejected by Fable 5/5.1, Opus 5.5/5/4.8/4.7 and Sonnet 5 (Sonnet 5.5 rejects non-default values). Models that accept both include `claude-opus-4-6` (the default), `claude-sonnet-4-6` and `claude-haiku-4-5`. Not yet checked against the live API. See `docs/decisions.md` (T13).
-
-The Anthropic SDK in use (1.x) has no `temperature` keyword argument, so the value is sent through `extra_body`. The JSON request body is the same.
+**Request parameters (§12.3).** Every request uses `tool_choice={"type": "auto"}` with `submit_plan` as the only tool, sends `thinking={"type": <llm.thinking>}`, and sends no `temperature` (there is no `temperature` key; adding one is an unknown-key error). The default model, `claude-sonnet-5-5`, rejects a forced `tool_choice` and non-default sampling parameters with HTTP 400, which is why the request is shaped this way. A reply without a `submit_plan` call (for example plain text) is an invalid reply and gets the one schema retry. Thinking off (`between_tools`) keeps latency and output tokens comparable across conditions. See `docs/decisions.md` (F1).
 
 ### `[loop]`
 
@@ -131,7 +129,9 @@ Each failure below is a config error:
 - `stub.detections` key not in `COCO_CLASSES`, or a value that does not match `position:closeness`.
 - Integers ≥ 1: `planning_horizon`, `max_failures`, `max_llm_calls`, `context_history_k`, `max_tokens`.
 - Floats > 0: `task_time_limit_s`, `request_timeout_s`, `stop_move_timeout_s`, `read_state_timeout_s`, `stub.time_scale`.
-- Floats ≥ 0: `max_distance_m`, `max_rotation_deg`, `temperature`, every value in `infra_backoff_s`.
+- Floats ≥ 0: `max_distance_m`, `max_rotation_deg`, every value in `infra_backoff_s`.
+- `llm.thinking` not one of `between_tools`, `adaptive`.
+- Any float key given a boolean, a string, `nan` or `±inf`.
 - `infra_max_retries` ≥ 0 and `len(infra_backoff_s) >= infra_max_retries`.
 - Invalid TOML, an unreadable file, an explicit `--config` path that does not exist, or a `log.dir` that cannot be created.
 

@@ -34,7 +34,7 @@ Options in `tests/conftest.py`: `--run-live` (enables `live_llm`), `--run-robot`
 
 ### 19.2 Unit tests
 
-**config**: defaults load without a file; explicit missing `--config` → exit 2; unknown key → error naming it; each validation rule in §5.2; relative paths resolve against the config file's folder; `.env` parsing (export, quotes, comments) and real env overriding `.env`.
+**config**: defaults load without a file (including `llm.model="claude-sonnet-5-5"`, `max_tokens=2048`, `thinking="between_tools"`); `llm.thinking` accepts only `between_tools`/`adaptive`; a `temperature` key is an unknown-key error; float keys reject booleans, strings, NaN and ±inf and accept ints; explicit missing `--config` → exit 2; unknown key → error naming it; each validation rule in §5.2; relative paths resolve against the config file's folder; `.env` parsing (export, quotes, comments) and real env overriding `.env`.
 
 **process lock**: second acquire in a child process fails with exit 2.
 
@@ -44,7 +44,7 @@ Options in `tests/conftest.py`: `--run-live` (enables `live_llm`), `--run-robot`
 
 **plan validation** (one test per rule, §13.1): lowercase status accepted; `replan_after="2"` rejected (strict); PLAN with 0 steps; DONE with steps; DONE/ABORT without or with blank message; `replan_after` 0, > len, with DONE; too many steps → `horizon_exceeded=True`, `rejection_kind="horizon"`; too many steps **and** a schema error → still `horizon_exceeded=True`; extra top-level key → schema error; missing `params` accepted by the model as `{}`.
 
-**bounds**: unknown skill (message lists names); unknown param; missing required; string for number; bool for number; `2.0` accepted and converted for integer; empty string; enum `" Forward "` normalised to `forward` in filled params; out of range on both sides; defaults filled; several violations collected.
+**bounds**: unknown skill (message lists names); unknown param; missing required; string for number; bool for number; `2.0` accepted and converted for integer; empty string; enum `" Forward "` normalised to `forward` in filled params; out of range on both sides; defaults filled; several violations collected; an int too large for `float` (`10**400`) is a `a finite number` type violation; a long bad value's `repr` is cut to 40 characters.
 
 **precheck**: bounds violation in step 3 of 3 → rejection at plan_step 3 with raw params, nothing filled; motion budget crossing at step 2 → rejection with filled params and budget message; steps after `stop_at` are bounds-checked but not budget-checked.
 
@@ -60,16 +60,16 @@ Options in `tests/conftest.py`: `--run-live` (enables `live_llm`), `--run-robot`
 
 **prompts**: every outcome code has an operator message; StopMove warning appended; notices format with their arguments.
 
-**LLM client** — no network: `anthropic.Anthropic(..., http_client=httpx.Client(transport=httpx.MockTransport(handler)))`, and an injected `wait` that records sleeps and returns `False`:
+**LLM client** — no network: `anthropic.Anthropic(..., http_client=httpx2.Client(transport=httpx2.MockTransport(handler)))` (the SDK 1.x transport, §4.1), and an injected `wait` that records sleeps and returns `False`:
 
-- request body has forced `tool_choice`, two system blocks, one user message, no `strict`;
+- request body has `tool_choice={"type": "auto"}`, `thinking={"type": "between_tools"}` by default (`adaptive` when configured), `model="claude-sonnet-5-5"`, `max_tokens=2048`, two system blocks, one user message, no `strict`, no `temperature`, no `stream`;
 - valid tool_use parsed; `usage` copied verbatim; `attempts == 1`;
-- no tool_use → `no_tool_call`; `stop_reason="max_tokens"` → `max_tokens`;
+- no tool_use → `no_tool_call`; a text-only reply (`stop_reason="end_turn"`) → `no_tool_call`, the text block kept in `content`; a `thinking` block before the `tool_use` is skipped and the plan parsed, both blocks kept in `content`; `stop_reason="max_tokens"` → `max_tokens`;
 - 529 then 200 → `attempts == 2`, one `on_infra_retry` call, recorded sleep 1.0;
 - 429 with `retry-after: 2` → recorded sleep 2.0;
 - 500 three times → `LLMUnavailable`;
 - 400 → `LLMUnavailable` immediately, one request;
-- connection error (handler raises `httpx.ConnectError`) → retried;
+- connection error (handler raises `httpx2.ConnectError`) → retried;
 - `wait` returning `True` (stop set) → `LLMInterrupted("operator")`;
 - `remaining_s` returning 0 → `LLMInterrupted("task_time_limit")` with no request sent.
 
@@ -97,7 +97,7 @@ Options in `tests/conftest.py`: `--run-live` (enables `live_llm`), `--run-robot`
 20. `request_stop()` while idle → `"idle"`.
 21. Time limit: `FakeClock.advance` past the deadline between steps → `TIME_LIMIT_EXCEEDED`, StopMove sent.
 22. Busy: second `run_task` while the first is blocked in FakeExecutor → `BusyError` immediately; planner not called by it.
-23. Exception inside the loop → `INTERNAL_ERROR`, `kill_current` and `stop_move` called, lock released, stop event cleared; next task runs normally.
+23. Exception inside the loop → `INTERNAL_ERROR`, `kill_current` and `stop_move` called, lock released, stop event cleared; next task runs normally. If `stop_move` (a fake) raises, `task_end` and the index row are still written, with an `ok=False` StopMove result.
 24. Previous task: second task's first request contains the first task's outcome and message.
 25. Posture: step with `state_after.posture=sitting` → next request `Posture: sitting`, carried to the next task; killed step without StopMove state → `unknown`.
 26. StopMove failure → `stop_move_failed=True`, warning appended.
@@ -125,7 +125,8 @@ Options in `tests/conftest.py`: `--run-live` (enables `live_llm`), `--run-robot`
 - `kill_current("operator")` from a timer thread during a hang → `interrupted`, `interrupt_cause="operator"`, returns within 2 s, `stop_move` present;
 - `remaining_task_s=0.5` with a hang → `interrupted/task_time_limit`;
 - child env contains no `ANTHROPIC_API_KEY` (set it in the test env; a test-only skill module under `tests/helpers/` prints its env keys into observations);
-- `read_state()` on stub returns a state with the current posture.
+- `read_state()` on stub returns a state with the current posture;
+- `stop_move` never raises: a failure to start the utility returns `ok=False` with the error in `stderr_tail`.
 
 **End-to-end** (ScriptedPlanner + real Executor + stub):
 
@@ -148,7 +149,8 @@ Options in `tests/conftest.py`: `--run-live` (enables `live_llm`), `--run-robot`
 - task while busy → `BUSY`, `run_task` not called;
 - `stop` text and `/stop` while busy → `request_stop` called, `STOPPING`;
 - normal task → `WORKING` then the formatted outcome;
-- `build_application(...)` has concurrent updates enabled (`app.update_processor.max_concurrent_updates > 1`) and a `post_stop` callback.
+- `build_application(...)` has concurrent updates enabled (`app.update_processor.max_concurrent_updates > 1`) and `post_init` and `post_stop` callbacks;
+- SIGINT/SIGTERM during `run_polling` with a running task → `request_stop("shutdown")` first, the task ends `STOPPED`, then the application stops (the test gives `run_polling` a fresh event loop, since PTB 21 calls `asyncio.get_event_loop()`).
 
 ### 19.5 Opt-in tests
 
@@ -180,7 +182,7 @@ Implement the stated default. Each is designed to be a small change later. Keep 
 | OD-4 | What `Move()` does while lying down (non-zero code or silent no-op). If silent, `walk` reports `ok` while nothing moved. | Non-zero is an error; record actual behaviour (checklist item 8). |
 | OD-5 | `message` on a `PLAN` reply: log only, or also send to the operator as progress? | Logged only. |
 | OD-6 | `batch` carries previous task and posture across lines; experiments may need independent tasks. | Carry over. A later `--independent` flag can reset both per line. |
-| OD-7 | All (sketch) values: horizon 5, failures 3, calls 20, time limit 300 s, K 10, budget 10 m / 720°, timeout formulas, walk 0.1–3.0 m, turn 5–180°, request timeout 60 s. | As listed, all in config or named constants. |
+| OD-7 | All (sketch) values: model `claude-sonnet-5-5` (with `thinking = "between_tools"`, `max_tokens` 2048, `tool_choice` auto, no `temperature`), horizon 5, failures 3, calls 20, time limit 300 s, K 10, budget 10 m / 720°, timeout formulas, walk 0.1–3.0 m, turn 5–180°, request timeout 60 s. | As listed, all in config or named constants. |
 | OD-8 | Unsupported `detect_object` target is a skill error (counts as a failure, costs a process start) rather than a bounds rejection. | Skill error with suggestions. |
 | OD-9 | Exact wording of the system text, notices, operator and transport messages. | Draft wording in §11; must be identical across experimental conditions. |
 | OD-10 | Settle waits after `StandDown` (3 s) and `Stretch` (6 s). | Fixed waits via `backend.sleep`; tune from robot checklist items 3 and 7. |

@@ -4,7 +4,7 @@ A condensed overview of the v1 design. The normative detail is in the spec: [`do
 
 ## Purpose
 
-An operator sends a natural-language task over Telegram or the CLI. An LLM returns a **plan**: an ordered list of skill calls, submitted through a single forced tool, `submit_plan`. The dispatcher validates the plan, runs each step as a separate subprocess that drives a Unitree Go2 EDU (or a stub), and feeds structured results back. The model then answers `DONE`, `PLAN` (more steps) or `ABORT`. Limits bound every task. A complete JSONL run log is written per task; it is the dataset for a later study of tokens, latency and replanning (§1).
+An operator sends a natural-language task over Telegram or the CLI. An LLM returns a **plan**: an ordered list of skill calls, submitted through a single tool, `submit_plan`. The dispatcher validates the plan, runs each step as a separate subprocess that drives a Unitree Go2 EDU (or a stub), and feeds structured results back. The model then answers `DONE`, `PLAN` (more steps) or `ABORT`. Limits bound every task. A complete JSONL run log is written per task; it is the dataset for a later study of tokens, latency and replanning (§1).
 
 Design choices behind this shape:
 - The plan is a first-class object, so it can be logged, counted and inspected.
@@ -21,7 +21,7 @@ Design choices behind this shape:
             │    ▲
    context  │    │ plan
             ▼    │
-       LLM client (Anthropic Messages API, forced tool submit_plan)
+       LLM client (Anthropic Messages API, single tool submit_plan)
             │
             ▼
   Plan validation ─► bounds ─► motion budget
@@ -68,7 +68,7 @@ Plan → validate → execute → feed back, until `DONE`, `ABORT` or a limit. I
 
 ## Plan contract
 
-`submit_plan` input: `status` (`PLAN` / `DONE` / `ABORT`), `steps` (`[{skill, params}]`, at most `planning_horizon`), optional `replan_after` (1-based checkpoint), `message` (required for DONE / ABORT). Tool use is non-strict; the dispatcher's own validation enforces the rules. Plans longer than the horizon are rejected, never truncated. No prompt caching, streaming or extended thinking (§12).
+`submit_plan` input: `status` (`PLAN` / `DONE` / `ABORT`), `steps` (`[{skill, params}]`, at most `planning_horizon`), optional `replan_after` (1-based checkpoint), `message` (required for DONE / ABORT). Tool use is non-strict; the dispatcher's own validation enforces the rules. Plans longer than the horizon are rejected, never truncated. `tool_choice` is `auto`, no `temperature` is sent, and thinking is off by default (`llm.thinking = "between_tools"`). No prompt caching or streaming (§12).
 
 ## Context slots
 

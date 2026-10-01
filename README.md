@@ -1,6 +1,6 @@
 # go2-dispatcher
 
-An LLM dispatcher for the Unitree Go2 EDU: it takes a natural-language task from an operator (CLI or Telegram), asks an LLM for a plan of skill calls through a forced `submit_plan` tool, validates it, runs each step as a separate subprocess against the real robot or a stub, feeds results back to the LLM until it reports `DONE` or `ABORT`, and writes a JSONL run log per task.
+An LLM dispatcher for the Unitree Go2 EDU: it takes a natural-language task from an operator (CLI or Telegram), asks an LLM for a plan of skill calls through a single `submit_plan` tool, validates it, runs each step as a separate subprocess against the real robot or a stub, feeds results back to the LLM until it reports `DONE` or `ABORT`, and writes a JSONL run log per task.
 
 ## Quick start
 

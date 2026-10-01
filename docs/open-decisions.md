@@ -10,7 +10,7 @@ The table from spec §20, kept current. v1 implements the stated default for eac
 | OD-4 | What `Move()` does while lying down (non-zero code or silent no-op). If silent, `walk` reports `ok` while nothing moved. | Non-zero is an error; record actual behaviour (checklist item 8). | Open (needs the robot checklist) |
 | OD-5 | `message` on a `PLAN` reply: log only, or also send to the operator as progress? | Logged only. | Open |
 | OD-6 | `batch` carries previous task and posture across lines; experiments may need independent tasks. | Carry over. A later `--independent` flag can reset both per line. | Open |
-| OD-7 | All (sketch) values: horizon 5, failures 3, calls 20, time limit 300 s, K 10, budget 10 m / 720°, timeout formulas, walk 0.1–3.0 m, turn 5–180°, request timeout 60 s. | As listed, all in config or named constants. | Open (tune) |
+| OD-7 | All (sketch) values: model `claude-sonnet-5-5` (with `thinking = "between_tools"`, `max_tokens` 2048, `tool_choice` auto, no `temperature`), horizon 5, failures 3, calls 20, time limit 300 s, K 10, budget 10 m / 720°, timeout formulas, walk 0.1–3.0 m, turn 5–180°, request timeout 60 s. | As listed, all in config or named constants. | Open (tune) |
 | OD-8 | Unsupported `detect_object` target is a skill error (counts as a failure, costs a process start) rather than a bounds rejection. | Skill error with suggestions. | Open |
 | OD-9 | Exact wording of the system text, notices, operator and transport messages. | Draft wording in §11; must be identical across experimental conditions. | Open |
 | OD-10 | Settle waits after `StandDown` (3 s) and `Stretch` (6 s). | Fixed waits via `backend.sleep`; tune from robot checklist items 3 and 7. | Open (needs the robot checklist) |

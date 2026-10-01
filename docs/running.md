@@ -101,7 +101,7 @@ At startup, `go2-bot`:
 - warns if `allowed_user_ids` is empty;
 - takes the lock, resets the stub (stub backend only), and builds the LLM client (exits 2 with `Missing ANTHROPIC_API_KEY.` if the key is missing).
 
-Stop the bot with Ctrl+C. On shutdown it waits up to `robot.stop_move_timeout_s + 5` s for a running task to stop (kill + StopMove).
+Stop the bot with Ctrl+C (or SIGTERM). If a task is running, it is stopped at once, as if `stop` had been sent: the skill is killed, StopMove is sent, the task ends `STOPPED`, and its outcome is still replied. Then the bot shuts down. As a backstop, shutdown waits up to `robot.stop_move_timeout_s + 5` s for the task to end, then kills it and sends StopMove itself. The bot is built on `python-telegram-bot` 21.x (pinned `>=21,<22`).
 
 ### Commands and replies
 

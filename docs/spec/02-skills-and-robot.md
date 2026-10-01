@@ -32,7 +32,7 @@ Frontmatter is the YAML block between the first two lines consisting of `---` at
 |---|---|---|---|
 | `name` | string matching `^[a-z][a-z0-9_]*$` | yes | Must equal the folder name and `POLICY.name`. |
 | `entrypoint` | string | yes | Module run with `python -m`, e.g. `go2_skills.walk`. |
-| `description` | string, one sentence | yes | Goes into the catalog. |
+| `description` | non-empty string, one sentence on a single line | yes | Goes into the catalog (which is line-based). |
 | `params` | mapping name → ParamSpec | no | Declared parameters, in catalog order. Absent = no parameters. |
 | `expect` | any | no | Reserved for v2. Accepted and ignored. |
 
@@ -41,11 +41,13 @@ ParamSpec keys (any other key is a registry error):
 | Key | Type | Applies to | Meaning |
 |---|---|---|---|
 | `type` | `number` \| `integer` \| `string` \| `enum` | all | Required. |
-| `description` | string | all | Required. Short. |
-| `values` | non-empty list of lowercase strings | `enum` | Required for `enum`, forbidden otherwise. |
-| `min`, `max` | number | `number`, `integer` | Optional, inclusive. `min <= max` if both. |
+| `description` | non-empty string | all | Required. Short. |
+| `values` | non-empty list of unique, lowercase, already-stripped strings | `enum` | Required for `enum`, forbidden otherwise. |
+| `min`, `max` | finite number (not a boolean) | `number`, `integer` | Optional, inclusive. `min <= max` if both. Forbidden on other types. |
 | `default` | value of the param's type | all | Optional. If absent the param is required. The default must pass the param's own checks. |
-| `unit` | string | `number`, `integer` | Optional. Shown in the catalog. |
+| `unit` | non-empty string | `number`, `integer` | Optional. Shown in the catalog. Forbidden on other types. |
+
+Parameter names must match `^[a-z][a-z0-9_]*$`. Default checks: `number` = finite int/float, not a boolean; `integer` = int, not a boolean (YAML `2.0` is rejected; declared defaults are not converted); `string` = non-empty after stripping; `enum` = exactly one of `values`; numeric defaults within `min`/`max`. `default: null` is invalid. `params:` with no value (or any non-mapping) is an error.
 
 The markdown body below the frontmatter documents the skill in prose for humans. It is not parsed.
 
@@ -89,6 +91,7 @@ python -m go2_skills.<name> '<params-json>'
 - Output: **exactly one** JSON line on the real stdout, written by `result.emit()`. Everything else goes to stderr.
 - Exit code 0 when `status == "ok"`, 1 when `status == "error"`. Any other exit means no valid response.
 - Skills do minimal parameter checking of their own (presence, type, enum membership) and return `invalid_params` on violations, so they are safe to run by hand. Ranges are enforced only by the dispatcher.
+- Skills apply **no parameter defaults**: they expect filled params (defaults are filled by the dispatcher, §13.2). A missing parameter, including one that has a `default` in SKILL.md (e.g. `walk` without `distance_m`), returns `invalid_params`. Numbers must be finite and not booleans; ints are accepted. Unknown extra keys are ignored. Enum values must match exactly (the dispatcher normalises case); only `detect_object.target` is stripped and lowercased (§8.5).
 
 ### 7.4 `go2_skills/result.py`
 
@@ -300,7 +303,7 @@ Policy: `TIMEOUT_S = 45.0` (sketch; YOLO load on CPU); zero motion cost; `contex
 
 ## 9. Robot backend: real, stub, state sampling
 
-`go2_skills/backend.py` dispatches on env `GO2_BACKEND` (`real` | `stub`). A missing or unknown value raises `BackendNotConfigured`, which `run_skill` maps to `status=error`, `code=backend_not_configured`. The executor always sets it.
+`go2_skills/backend.py` dispatches on env `GO2_BACKEND` (`real` | `stub`). A missing or unknown value raises `BackendNotConfigured` (so does the real backend when `GO2_IFACE` is empty), which `run_skill` and both utilities always map to `status=error`, `code=backend_not_configured`, without a traceback on stderr. It is never reported as a `state_error` or `exception`, even when raised while sampling state. The executor always sets it.
 
 ```python
 def get_sport_client():     # object with Move, StopMove, StandDown, Stretch -> int
@@ -419,7 +422,8 @@ class Registry:
 Loading rules:
 
 - Every direct subfolder of `skills_dir` containing `SKILL.md` is a skill. Other subfolders and top-level files are ignored.
-- `RegistryError` naming the file for: missing or invalid frontmatter, unknown key, missing required key, `name` ≠ folder name, invalid ParamSpec, default failing its own checks, entrypoint not importable, module without `POLICY`, `POLICY.name` ≠ `name`, duplicate names. Zero skills is also a `RegistryError`.
+- `RegistryError` naming the file for: missing or invalid frontmatter, unknown key, missing required key, `name` ≠ folder name, invalid ParamSpec, default failing its own checks, entrypoint not importable, module without `POLICY`, `POLICY.name` ≠ `name`, duplicate names. Zero skills is also a `RegistryError`, as is a missing `skills_dir` (naming the directory).
+- Stricter checks (beyond the tables in §7.1), each a `RegistryError`: frontmatter must start on the first line with exactly `---` (trailing whitespace tolerated) and be closed by the next `---` line; empty, non-mapping or invalid YAML; `params` present but not a mapping; parameter name not matching `^[a-z][a-z0-9_]*$`; skill or param `description` not a non-empty string, or a skill description spanning more than one line; duplicate or unstripped enum `values`; `min`/`max` not finite numbers or booleans; empty `unit`; `min`/`max`/`unit` on a non-numeric type (like `values` on a non-enum); `default: null`; `POLICY` not a `SkillPolicy` instance. Any exception while importing the entrypoint is reported as "not importable".
 - Transports print `Registry error: <message>` and exit with code 2.
 
 Catalog rendering is deterministic: skills sorted by name, params in frontmatter order, numbers formatted with `f"{v:g}"`. Per skill:

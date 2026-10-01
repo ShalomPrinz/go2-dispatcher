@@ -24,7 +24,7 @@ Conventions (apply to all parts):
 A Python program that:
 
 1. Receives a natural-language task from an operator (Telegram or CLI).
-2. Asks an LLM for a **plan** — an ordered list of skill calls — returned through a single forced tool named `submit_plan`.
+2. Asks an LLM for a **plan** — an ordered list of skill calls — returned through a single tool named `submit_plan` (the only tool offered; `tool_choice` is `auto`, §12.3).
 3. Validates the plan (schema, horizon, parameter bounds, motion budget).
 4. Runs each step as a separate subprocess that drives a Unitree Go2 EDU (or a stub).
 5. Feeds structured results back to the LLM, which decides: finished (`DONE`), more work (`PLAN`), or cannot be done (`ABORT`).
@@ -77,7 +77,7 @@ A Python program that:
             │    ▲
    context  │    │ plan
             ▼    │
-       LLM client (Anthropic Messages API, forced tool submit_plan)
+       LLM client (Anthropic Messages API, single tool submit_plan)
             │
             ▼
   Plan validation ─► bounds ─► motion budget
@@ -188,9 +188,10 @@ requires-python = ">=3.10,<3.12"          # see OD-3
 dependencies = [
   "anthropic",                            # current major; pin in uv.lock
   "httpx",
+  "httpx2",                               # used directly by llm.py (anthropic SDK transport)
   "pydantic>=2",
   "PyYAML",
-  "python-telegram-bot>=21",
+  "python-telegram-bot>=21,<22",
   "tomli; python_version < '3.11'",
 ]
 
@@ -229,6 +230,8 @@ Rules:
 
 - No `sys.path.insert` anywhere. No absolute paths in code. No hardcoded network interface.
 - Stub mode and the default test suite must work with only core + dev dependencies. `unitree_sdk2py`, `cyclonedds`, `ultralytics`, `cv2`, `numpy` are imported lazily, only inside real-backend code paths.
+- `httpx2` is a direct dependency: the locked `anthropic` SDK (1.x) runs on `httpx2` and rejects an `httpx.Client`, so `AnthropicPlanner(http_client=...)` takes an `httpx2.Client` and the LLM-client tests use `httpx2.MockTransport` (§12.1, §19.2). `httpx` stays because `python-telegram-bot` uses it.
+- `python-telegram-bot` is pinned to the 21.x line (`uv.lock` resolves 21.11.1). `go2-bot`'s signal handling (§16.3) replaces PTB's loop signal handlers from a `post_init` hook; this is tested against 21.x. PTB 21's `run_polling` calls `asyncio.get_event_loop()`, so the test that drives `run_polling` gives it a fresh event loop.
 - Commands: `uv sync` (core + dev); on the lab machine `uv sync --extra robot --extra vision`.
 - M1 must verify that `uv lock` succeeds on a clean machine without CycloneDDS installed. If it fails because `cyclonedds` cannot be resolved without building, remove the `robot` extra from `pyproject.toml` and document a manual install instead: `uv pip install cyclonedds==0.10.2` and `uv pip install -e <path to unitree_sdk2_python>`, after which the lab machine uses `uv sync --inexact` (so `uv sync` does not remove them). Record which path was taken in `docs/decisions.md`.
 
@@ -261,8 +264,8 @@ condition = ""                      # free-text experiment label, copied into ta
 
 [llm]
 model = "claude-sonnet-5-5"         # (sketch)
-max_tokens = 1024
-temperature = 0.0
+max_tokens = 2048
+thinking = "between_tools"          # "between_tools" (thinking off) | "adaptive"
 request_timeout_s = 60.0            # cap per attempt (sketch)
 infra_max_retries = 2
 infra_backoff_s = [1.0, 4.0]        # sleep before retry 1, retry 2
@@ -309,8 +312,11 @@ Validation (each failure is a config error):
 - `stub.faults[].kind` ∈ `error | hang | crash | garbage`; `stub.faults[].step` integer ≥ 1; steps unique.
 - `stub.detections` keys ∈ `COCO_CLASSES`; values match `^(left|center|right):(near|medium|far)$`.
 - Integers ≥ 1: `planning_horizon`, `max_failures`, `max_llm_calls`, `context_history_k`, `max_tokens`.
+- `llm.thinking` ∈ `between_tools | adaptive` (sent as `thinking={"type": ...}`, §12.3). There is no `temperature` key; giving one is an unknown-key error.
 - Floats > 0: `task_time_limit_s`, `request_timeout_s`, `stop_move_timeout_s`, `read_state_timeout_s`, `stub.time_scale`.
-- Floats ≥ 0: `max_distance_m`, `max_rotation_deg`, `temperature`, every value in `infra_backoff_s`.
+- Floats ≥ 0: `max_distance_m`, `max_rotation_deg`, every value in `infra_backoff_s`.
+- Every float key above is a strict finite float: an int or float only (booleans and strings, including numeric strings, are rejected), NaN and ±inf are rejected; a TOML integer is accepted and stored as a float. (`FiniteFloat` in `config.py`: a before-validator plus `allow_inf_nan=False`.)
+- Integer keys (the ones above plus `infra_max_retries`, `stub.faults[].step`, `telegram.allowed_user_ids[]`) are strict: floats, strings and booleans are rejected.
 - `infra_max_retries` ≥ 0 and `len(infra_backoff_s) >= infra_max_retries`.
 
 ### 5.3 Paths

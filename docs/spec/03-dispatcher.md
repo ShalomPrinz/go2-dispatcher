@@ -181,7 +181,7 @@ Call submit_plan again with a corrected plan.
 this step needs {need:g} {unit} of {kind} but only {left:g} {unit} remain for this task
 ```
 
-`kind` = `travel` (unit `m`) or `rotation` (unit `deg`); numbers rounded to 2 decimals.
+`kind` = `travel` (unit `m`) or `rotation` (unit `deg`); `{need}` is the step's cost in that kind and `{left}` is `max - used` floored at 0, both rounded to 2 decimals. The message is defined once, in `budget.py` (`MOTION_BUDGET_MESSAGE`, `MotionBudget.exceeded_message(kind, cost)`), and `prompts.py` re-exports it rather than duplicating it.
 
 **Operator messages** (`TaskOutcome.message`; also shown in the next task's Previous task slot):
 
@@ -239,7 +239,7 @@ class PlannerClient(Protocol):
 
 class AnthropicPlanner:
     def __init__(self, api_key: str, llm_cfg: LLMConfig, horizon: int, *,
-                 http_client: httpx.Client | None = None,
+                 http_client: httpx2.Client | None = None,   # the anthropic SDK 1.x transport (§4.1)
                  wait: Callable[[threading.Event, float], bool] = lambda ev, s: ev.wait(s)): ...
 ```
 
@@ -302,23 +302,26 @@ Hand-written rather than `Plan.model_json_schema()`, because the horizon must be
 client = anthropic.Anthropic(api_key=api_key, max_retries=0, http_client=http_client)  # own retries
 resp = client.with_options(timeout=attempt_timeout_s).messages.create(
     model=cfg.model,
-    max_tokens=cfg.max_tokens,
-    temperature=cfg.temperature,
+    max_tokens=cfg.max_tokens,                    # default 2048
     system=[{"type": "text", "text": system[0]}, {"type": "text", "text": system[1]}],
     tools=[tool_schema],
-    tool_choice={"type": "tool", "name": "submit_plan"},
+    tool_choice={"type": "auto"},
+    thinking={"type": cfg.thinking},              # "between_tools" (default) | "adaptive"
     messages=[{"role": "user", "content": user}],
 )
 ```
 
+- Default model `claude-sonnet-5-5`. It rejects a forced `tool_choice` (`{"type": "tool"}`) and non-default sampling parameters, so the request uses `tool_choice={"type": "auto"}` and sends **no `temperature`** (there is no such config key). `submit_plan` is the only tool offered and the system text asks for exactly one call; a reply without it is handled as `no_tool_call` (§12.4) and gets the one schema retry (§12.5).
+- `thinking` is always sent. The default `between_tools` keeps thinking off, so latency and output tokens stay comparable across conditions; `adaptive` lets the model think and is meant only as a deliberate experimental condition (recorded in `task_start.config` and `index.jsonl`, §17).
+
 - **Non-strict** tool use (no `"strict": true`). Strict mode does not support `maxItems` or numeric bounds and injects an extra system prompt, which would distort token measurements. Our validation is the enforcer.
-- No prompt caching, no streaming, no extended thinking (forced `tool_choice` is incompatible with extended thinking).
+- No prompt caching, no streaming.
 - `attempt_timeout_s = min(cfg.request_timeout_s, remaining_s())`, computed before **each** attempt. If `remaining_s() <= 0` before an attempt → raise `LLMInterrupted("task_time_limit")`. If `stop_event` is set before an attempt → raise `LLMInterrupted("operator")`.
 
 ### 12.4 Response handling
 
 1. `resp.stop_reason == "max_tokens"` → `rejection_kind="max_tokens"`, error `"reply was cut off; keep the plan shorter"`.
-2. Take the first content block with `type == "tool_use"` and `name == "submit_plan"`. None → `rejection_kind="no_tool_call"`, error `"no submit_plan call in reply"`. More than one → use the first (all content is logged).
+2. Take the first content block with `type == "tool_use"` and `name == "submit_plan"`; `thinking` and `text` blocks before it are skipped. None (for example a text-only reply with `stop_reason="end_turn"`) → `rejection_kind="no_tool_call"`, error `"no submit_plan call in reply"`. More than one → use the first. All blocks, including thinking and text, are kept in `content` and logged.
 3. Validate `block.input` per §13.1.
 4. Always fill `usage` (`resp.usage.model_dump()`), `stop_reason`, `content`, `latency_ms` (monotonic around the successful `create`), `total_ms`, `attempts`, `response_id` (`resp.id`), `request_id` (`getattr(resp, "_request_id", None)`).
 
@@ -379,7 +382,8 @@ Checks in order, collecting all violations for the step:
    - `integer`: `int` not `bool`; a `float` with an integral value (`2.0`) is accepted and **converted to `int`**.
    - `string`: `str`, non-empty after `.strip()`; the **stripped** value is kept.
    - `enum`: `str` whose `.strip().lower()` is in `values`; the **normalised** value is kept.
-   - Violation: `"parameter '{p}' for skill {s} must be {expected}, got {value!r}"`.
+   - Violation: `"parameter '{p}' for skill {s} must be {expected}, got {value!r}"`. The `repr` is cut to 40 characters (39 + `…`) for every type violation, so a huge value cannot flood the message.
+   - Overflow: an `int` too large to convert to `float` (e.g. `10**400`) for a `number` or `integer` param is a type violation with `{expected}` = `a finite number`; it never raises.
 5. Range: `"parameter '{p}' for skill {s} is {v:g}, outside {min:g} to {max:g}"` (or `"below the minimum {min:g}"` / `"above the maximum {max:g}"` when one side is missing).
 6. Fill defaults for absent optional params.
 
@@ -515,6 +519,7 @@ After the loop:
 - Waits up to `cfg.robot.stop_move_timeout_s`; on timeout it is killed.
 - `ok = True` only if it exited with a valid response with `status == "ok"`. There is no retry loop.
 - Returns `StopMoveResult` (including the response, whose `state_after` updates posture per §11.5).
+- **Never raises.** Any exception while starting or reading the utility (e.g. `OSError` from `Popen`) is returned as `ok=False` with `"{ExceptionType}: {message}"` (cut to the last 2000 characters) in `stderr_tail`, so every caller on the stop path still gets a result and the operator warning (§11.8).
 
 StopMove is sent:
 
@@ -662,9 +667,14 @@ def run_task(task, source, sender_id):
             else:
                 remaining = []; remaining_tag = None; return_reason = "plan_complete"
     except Exception as e:
-        log exception (with traceback)
-        self.executor.kill_current("shutdown"); smr = self.executor.stop_move("internal_error")
-        return end("INTERNAL_ERROR", stop_move_result=smr)
+        smr = None
+        try:
+            log exception (with traceback)             # each of these three calls is guarded on its own
+            self.executor.kill_current("shutdown")
+            smr = self.executor.stop_move("internal_error")   # raises → smr = StopMoveResult(ok=False, ...)
+        finally:
+            outcome = end("INTERNAL_ERROR", stop_move_result=smr)   # always: task_end + index row
+        return outcome
     finally:
         with state lock: phase = "idle"; stop_event.clear()
         close run log; release task lock
@@ -690,6 +700,7 @@ Easy to get wrong:
 - A new plan always replaces `remaining`.
 - The stop event is cleared when the task ends, so a stale stop never affects the next task.
 - Every StopMove result that happens during a task is logged as a `stop_move` record.
+- `task_end` and the index row are **always** written, also on `INTERNAL_ERROR`: a failure to write the `exception` record, a raising `kill_current`, or a raising `stop_move` (the real `Executor.stop_move` never raises, §14.4; a fake might) is swallowed, a raising `stop_move` is turned into an `ok=False` `StopMoveResult` with the exception in `stderr_tail`, and `end()` runs in a `finally`, so even a `BaseException` (e.g. `KeyboardInterrupt`) arriving there still writes `task_end` before it propagates.
 
 ---
 
@@ -754,12 +765,13 @@ go2-dispatch [--config PATH] [--backend stub|real] state
 
 ### 16.3 Telegram (`go2-bot [--config PATH]`)
 
-Library: `python-telegram-bot` ≥ 21 (async), long polling.
+Library: `python-telegram-bot` 21.x (`>=21,<22`; async), long polling.
 
 ```python
 def build_application(dispatcher: Dispatcher, cfg: Config, token: str) -> Application:
     app = (ApplicationBuilder().token(token)
            .concurrent_updates(True)        # REQUIRED: otherwise "stop" cannot arrive during a task
+           .post_init(on_post_init)         # stop a running task on SIGINT/SIGTERM first
            .post_stop(on_post_stop)
            .build())
     msg = filters.UpdateType.MESSAGE        # new messages only; ignore edited messages
@@ -784,7 +796,8 @@ Handlers (all use `update.effective_user` and `update.effective_message`):
   - else reply `WORKING`, then `outcome = await asyncio.to_thread(dispatcher.run_task, text.strip(), source="telegram", sender_id=str(user_id))`; `BusyError` (race) → `BUSY`; reply `format_outcome(outcome, registry)`.
 - Replies are plain text (no `parse_mode`).
 - Any exception in a handler: print traceback to stderr, reply `Error: {ExceptionType}`.
-- `on_post_stop(app)`: `await asyncio.to_thread(dispatcher.shutdown, cfg.robot.stop_move_timeout_s + 5)`.
+- `on_post_stop(app)`: `await asyncio.to_thread(dispatcher.shutdown, cfg.robot.stop_move_timeout_s + 5)`. This is the backstop.
+- **Ctrl+C / SIGTERM stops a running task immediately.** PTB's `Application.stop()` waits for every in-flight handler before `post_stop` runs, so a running task would otherwise continue until it ended by itself. `on_post_init(app)` replaces PTB's SIGINT/SIGTERM loop signal handlers with `on_stop_signal(app)`, which calls `dispatcher.request_stop("shutdown")` (non-blocking: kills the skill; the executor sends StopMove; the task ends `STOPPED` and its outcome is still replied) and then, on the first signal only, `app.stop_running()`. `run_polling()` keeps PTB's default `stop_signals`, so a signal before `post_init` still ends the bot; SIGABRT keeps PTB's handler.
 
 ---
 
@@ -793,7 +806,7 @@ Handlers (all use `update.effective_user` and `update.effective_message`):
 ### 17.1 Files
 
 - One file per task: `{log.dir}/{YYYYMMDDTHHMMSS}_{run_id[:8]}.jsonl` (local time at task start).
-- Index: `{log.dir}/index.jsonl`, one line per finished task: `run_id`, `file`, `ts_start`, `task`, `source`, `outcome`, `condition`, `backend`, `planning_horizon`, `max_llm_calls`, `registry_hash`, `llm_calls`, `failures`, `steps_dispatched`, `input_tokens`, `output_tokens`, `duration_ms`.
+- Index: `{log.dir}/index.jsonl`, one line per finished task: `run_id`, `file`, `ts_start`, `task`, `source`, `outcome`, `condition`, `backend`, `model`, `thinking`, `planning_horizon`, `max_llm_calls`, `registry_hash`, `llm_calls`, `failures`, `steps_dispatched`, `input_tokens`, `output_tokens`, `duration_ms`.
 - `session_id`: uuid4 hex generated by `build_dispatcher`, links tasks from one process.
 
 ### 17.2 Writer
@@ -805,7 +818,8 @@ class RunLogFactory:
     def append_index(self, row: dict) -> None
 
 class RunLog:
-    def write(self, type: str, **payload) -> None     # thread-safe
+    def write(self, type: str, /, **payload) -> None  # thread-safe; a payload key that clashes
+                                                      # with the envelope raises ValueError
     def close(self) -> None
     path: Path
 ```
@@ -836,7 +850,7 @@ Every line is one JSON object:
 | `step_result` | full `StepResult` (dispatched or not), `budget_used` (`distance_m`, `rotation_deg`), `failures`, `posture` |
 | `stop_requested` | `source`, `during` (`llm_call` \| `step` \| `between`) |
 | `stop_move` | full `StopMoveResult` |
-| `exception` | `where`, `type`, `message`, `traceback` |
+| `exception` | `where`, `exception_type` (the exception class; not `type`, which would clash with the envelope's record type), `message`, `traceback` |
 | `task_end` | `outcome`, `message`, `llm_calls`, `failures`, `steps_recorded`, `steps_dispatched`, `rejections`, `horizon_rejections`, `usage_totals` (sum over responses of every top-level numeric, non-null `usage` field), `budget_used`, `stop_move_failed`, `final_posture`, `duration_ms` |
 
 ### 17.4 What the log must allow computing
@@ -847,7 +861,7 @@ Every line is one JSON object:
 - LLM calls per task broken down by `return_reason`; failures; rejections; horizon rejections (to monitor the reject-vs-truncate decision).
 - The exact prompts sent (`task_start` system/catalog/tools + `user_text` per call).
 - Robot state before/after every step and after every StopMove.
-- The experimental condition (`condition`, `registry_hash`, `planning_horizon`, `max_llm_calls`).
+- The experimental condition (`condition`, `registry_hash`, `model`, `thinking`, `planning_horizon`, `max_llm_calls`).
 
 ---
 

@@ -82,7 +82,7 @@ If a StopMove failed during the task, the message ends with ` WARNING: the stop 
 
 ## Plan contract
 
-The model must call the single tool `submit_plan` (forced `tool_choice`, non-strict tool use):
+The model must call the single tool `submit_plan` (`tool_choice` is `auto`, so the model is asked rather than forced to call it; non-strict tool use; no `temperature`; `thinking` from `llm.thinking`, off by default):
 
 ```json
 {"status": "PLAN", "steps": [{"skill": "turn", "params": {"direction": "left", "angle_deg": 90}}], "replan_after": 1, "message": "optional"}
@@ -94,7 +94,7 @@ Validation (§13.1), in this order:
 2. **Schema**: `status` ∈ PLAN/DONE/ABORT (case-insensitive), `replan_after` a strict integer, no extra keys.
 3. **Semantics**: PLAN needs ≥ 1 step; DONE/ABORT need no steps and a non-blank message; `replan_after` only with PLAN and within `1..len(steps)`.
 
-Other invalid replies: no `submit_plan` call (`no submit_plan call in reply`), and `stop_reason = max_tokens` (`reply was cut off; keep the plan shorter`).
+Other invalid replies: no `submit_plan` call (`no submit_plan call in reply`; for example a text-only reply), and `stop_reason = max_tokens` (`reply was cut off; keep the plan shorter`). `thinking` and `text` blocks before the `submit_plan` call are skipped; all blocks are logged in `llm_response.content`.
 
 Step bounds (§13.2), checked on every step of a PLAN before anything runs: the skill exists; no undeclared params; required params are present; types are right (enum values are trimmed and lowercased; an integral float is accepted for `integer`); ranges are respected; defaults are filled in. The first step with violations rejects the whole plan. The rejected step is recorded with its raw params, `error_code = "bounds"`, and all its violations joined with `; ` (cut to 200 chars).
 

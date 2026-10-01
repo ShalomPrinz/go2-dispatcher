@@ -5,7 +5,7 @@ Every task writes a complete JSONL log. It is the dataset for the study: tokens,
 ## Files
 
 - One file per task: `{log.dir}/{YYYYMMDDTHHMMSS}_{run_id[:8]}.jsonl`, using the local time at task start. Example: `runs/20261001T113603_b6bb52fe.jsonl`.
-- `{log.dir}/index.jsonl`: one line per finished task.
+- `{log.dir}/index.jsonl`: one line per finished task, including the experimental `condition`, `model` and `thinking`.
 - `{log.dir}/.dispatcher.lock`: the single-instance lock (not a log).
 - `{log.dir}/.stub_state.json`: the stub state, at the default `stub.state_file` (not a log).
 
@@ -37,7 +37,7 @@ Examples below are from a stub run with a scripted planner (long fields shortene
 `task`, `source` (`cli` / `telegram` / `test`), `sender_id` (Telegram user id or null), `condition`, `config` (full config dump; it holds no secrets), `registry_hash`, `system_text`, `catalog_text`, `tool_schema`, `skills` (names), `previous_task` (`TaskSummary` or null), `posture`, `versions` (`python`, `anthropic`, `pydantic`, `go2_dispatcher`), `git_commit` (`git rev-parse HEAD` in the base dir, or null).
 
 ```json
-{"ts":"2026-10-01T11:36:03.637094+03:00","t_mono_ms":0.44,"session_id":"8877711a…","run_id":"b6bb52fe…","seq":0,"type":"task_start","task":"turn left 90 degrees, then tell me if you see a chair","source":"cli","sender_id":null,"condition":"","config":{"run":{"condition":""},"llm":{"model":"claude-opus-4-6",…},…},"registry_hash":"bf06b5af6abd480b","system_text":"You plan actions for a Unitree Go2 …","catalog_text":"detect_object: …","tool_schema":{"name":"submit_plan",…},"skills":["detect_object","sit","stretch","turn","walk"],"previous_task":null,"posture":"standing","versions":{"python":"3.10.12","anthropic":"1.11.0","pydantic":"2.13.5","go2_dispatcher":"0.1.0"},"git_commit":null}
+{"ts":"2026-10-01T11:36:03.637094+03:00","t_mono_ms":0.44,"session_id":"8877711a…","run_id":"b6bb52fe…","seq":0,"type":"task_start","task":"turn left 90 degrees, then tell me if you see a chair","source":"cli","sender_id":null,"condition":"","config":{"run":{"condition":""},"llm":{"model":"claude-sonnet-5-5","max_tokens":2048,"thinking":"between_tools",…},…},"registry_hash":"bf06b5af6abd480b","system_text":"You plan actions for a Unitree Go2 …","catalog_text":"detect_object: …","tool_schema":{"name":"submit_plan",…},"skills":["detect_object","sit","stretch","turn","walk"],"previous_task":null,"posture":"standing","versions":{"python":"3.10.12","anthropic":"1.11.0","pydantic":"2.13.5","go2_dispatcher":"0.1.0"},"git_commit":null}
 ```
 
 ### `llm_request`
@@ -58,7 +58,7 @@ An infra retry (not an LLM call): `call_index`, `attempt` (1-based number of the
 
 ### `llm_response`
 
-`call_index`, `latency_ms` (successful attempt only), `total_ms` (whole call including failed attempts and backoff), `attempts`, `stop_reason`, `usage` (verbatim from the API), `content` (all response blocks), `response_id`, `request_id`.
+`call_index`, `latency_ms` (successful attempt only), `total_ms` (whole call including failed attempts and backoff), `attempts`, `stop_reason`, `usage` (verbatim from the API), `content` (all response blocks, including any `thinking` or `text` blocks; only the first `submit_plan` `tool_use` block is used), `response_id`, `request_id`.
 
 ```json
 {…,"seq":2,"type":"llm_response","call_index":1,"latency_ms":1834.2,"total_ms":1834.9,"attempts":1,"stop_reason":"tool_use","usage":{"input_tokens":100,"output_tokens":20},"content":[{"type":"tool_use","id":"toolu_…","name":"submit_plan","input":{"status":"PLAN","steps":[…]}}],"response_id":"msg_…","request_id":"req_…"}
@@ -115,7 +115,7 @@ All `StepResult` fields at the top level: `index` (null if not dispatched), `cal
 
 ### `stop_move`
 
-All `StopMoveResult` fields: `ok`, `reason` (`operator` / `task_time_limit` / `step_timeout` / `shutdown` / `internal_error`), `duration_ms`, `exit_code`, `response` (its `timing.stop_call_ms` and `state_after`), `stderr_tail`. It is written after the `step_result` of a killed step, and for every StopMove the dispatcher sends itself.
+All `StopMoveResult` fields: `ok`, `reason` (`operator` / `task_time_limit` / `step_timeout` / `shutdown` / `internal_error`), `duration_ms`, `exit_code`, `response` (its `timing.stop_call_ms` and `state_after`), `stderr_tail`. It is written after the `step_result` of a killed step, and for every StopMove the dispatcher sends itself. If the utility process could not even be started, `ok` is false, `exit_code` and `response` are null, and `stderr_tail` holds `"<ExceptionType>: <message>"` (StopMove never raises).
 
 ```json
 {…,"type":"stop_move","ok":true,"reason":"operator","duration_ms":612.3,"exit_code":0,"response":{"schema_version":1,"skill":"stop_move","status":"ok","observations":{"sdk_ret":0},…,"timing":{"stop_call_ms":48.1,"state_ms":5.2,"total_ms":560.4}},"stderr_tail":null}
@@ -123,7 +123,7 @@ All `StopMoveResult` fields: `ok`, `reason` (`operator` / `task_time_limit` / `s
 
 ### `exception`
 
-`where`, `exception_type`, `message`, `traceback`. The task ends `INTERNAL_ERROR`. The exception class is stored as `exception_type`, not `type`, because `type` is the record type (see `docs/decisions.md`, T9).
+`where`, `exception_type`, `message`, `traceback`. The task ends `INTERNAL_ERROR`; `task_end` and the index line are still written, even if writing this record, killing the skill or the StopMove fails. The exception class is stored as `exception_type`, not `type`, because `type` is the record type (see `docs/decisions.md`, T9).
 
 ### `task_end`
 
@@ -138,7 +138,7 @@ All `StopMoveResult` fields: `ok`, `reason` (`operator` / `task_time_limit` / `s
 One line per finished task, without the envelope:
 
 ```json
-{"run_id":"b6bb52fe55bb41589a5a1fc51c463f72","file":"20261001T113603_b6bb52fe.jsonl","ts_start":"2026-10-01T11:36:03.636693+03:00","task":"turn left 90 degrees, then tell me if you see a chair","source":"cli","outcome":"DONE","condition":"","backend":"stub","planning_horizon":5,"max_llm_calls":20,"registry_hash":"bf06b5af6abd480b","llm_calls":2,"failures":0,"steps_dispatched":2,"input_tokens":200,"output_tokens":40,"duration_ms":156.1}
+{"run_id":"b6bb52fe55bb41589a5a1fc51c463f72","file":"20261001T113603_b6bb52fe.jsonl","ts_start":"2026-10-01T11:36:03.636693+03:00","task":"turn left 90 degrees, then tell me if you see a chair","source":"cli","outcome":"DONE","condition":"","backend":"stub","model":"claude-sonnet-5-5","thinking":"between_tools","planning_horizon":5,"max_llm_calls":20,"registry_hash":"bf06b5af6abd480b","llm_calls":2,"failures":0,"steps_dispatched":2,"input_tokens":200,"output_tokens":40,"duration_ms":156.1}
 ```
 
 `file` is relative to `log.dir`. A task whose log could not be opened has no index line.
@@ -158,7 +158,7 @@ One line per finished task, without the envelope:
 | Stop latency | `stop_move.response.timing.stop_call_ms`, `stop_move.duration_ms` |
 | Exact prompts | `task_start.system_text` / `catalog_text` / `tool_schema` + `llm_request.user_text` |
 | Robot state | `step_result.response.state_before` / `state_after`; `stop_move.response.state_after` |
-| Condition | `condition`, `registry_hash`, `planning_horizon`, `max_llm_calls` (index and `task_start`) |
+| Condition | `condition`, `registry_hash`, `model`, `thinking`, `planning_horizon`, `max_llm_calls` (index and `task_start`) |
 
 ## Analysis example
 

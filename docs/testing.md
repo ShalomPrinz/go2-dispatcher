@@ -45,7 +45,7 @@ ANTHROPIC_API_KEY=sk-ant-... uv run pytest --run-live -s tests/integration/test_
 
 It runs the task "turn left 90 degrees, then tell me if you see a chair" on the stub with `stub.detections = {chair = "center:near"}`. It passes if the task ends `DONE`, the message mentions the chair, and the run log has no `plan_invalid` or `horizon_rejection` record. With `-s`, it prints the run log path.
 
-It uses `llm.model` from the defaults (`claude-opus-4-6`). A model that rejects forced `tool_choice` or `temperature` makes the test fail with `LLM_ERROR` (`BadRequestError 400`); see Model compatibility in `docs/configuration.md`. This has not been run live yet.
+It uses `llm.model` from the defaults (`claude-sonnet-5-5`, `thinking = "between_tools"`, `tool_choice` auto, no `temperature`; see Request parameters in `docs/configuration.md`). This has not been run live yet.
 
 ## Helpers (`tests/helpers/`)
 
