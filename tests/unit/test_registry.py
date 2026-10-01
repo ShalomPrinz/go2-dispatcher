@@ -9,6 +9,8 @@ import pytest
 from go2_dispatcher import registry as registry_mod
 from go2_dispatcher.models import RegistryError
 from go2_dispatcher.policies import SkillPolicy
+from go2_dispatcher.llm import plan_tool_schema
+from go2_dispatcher.prompts import system_text
 from go2_dispatcher.registry import MISSING, Registry, registry_hash
 from helpers import REPO_ROOT
 
@@ -84,14 +86,16 @@ def test_catalog_byte_identical_across_loads():
 def test_registry_hash_stable_and_horizon_sensitive():
     cat = Registry.load(SKILLS_DIR).catalog_text()
 
-    def schema(h):
-        return {"name": "submit_plan", "input_schema": {"properties": {"steps": {"maxItems": h}}}}
+    def h(horizon, sys=None):
+        return registry_hash(sys or system_text(horizon), cat, plan_tool_schema(horizon))
 
-    h1 = registry_hash("sys", cat, schema(5))
-    assert h1 == registry_hash("sys", cat, schema(5))
+    h1 = h(5)
+    assert h1 == h(5)
     assert len(h1) == 16 and all(c in "0123456789abcdef" for c in h1)
-    assert h1 != registry_hash("sys", cat, schema(3))
-    assert h1 != registry_hash("sys2", cat, schema(5))
+    assert h1 != h(3)
+    # the schema alone (maxItems) changes the hash
+    assert h1 != registry_hash(system_text(5), cat, plan_tool_schema(3))
+    assert h1 != h(5, sys="other")
 
 
 # --- catalog rendering for every type phrase -------------------------------------------

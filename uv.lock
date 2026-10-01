@@ -412,6 +412,7 @@ source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
     { name = "httpx" },
+    { name = "httpx2" },
     { name = "pydantic" },
     { name = "python-telegram-bot" },
     { name = "pyyaml" },
@@ -442,6 +443,7 @@ requires-dist = [
     { name = "anthropic" },
     { name = "cyclonedds", marker = "extra == 'robot'", specifier = "==0.10.2" },
     { name = "httpx" },
+    { name = "httpx2" },
     { name = "numpy", marker = "extra == 'vision'" },
     { name = "opencv-python", marker = "extra == 'vision'" },
     { name = "pydantic", specifier = ">=2" },
