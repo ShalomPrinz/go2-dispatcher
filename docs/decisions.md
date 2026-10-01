@@ -115,3 +115,19 @@ Implementation choices where the spec was silent, and outcomes of checks the spe
 - **`request_stop` from `shutdown`** still calls `kill_current("operator")`, as §15.1 states. If the task is still busy after `wait_s`, `kill_current("shutdown")` + `stop_move("shutdown")` follow. With `wait_s <= 0`, the task lock is tried once without blocking.
 - **Log open failure:** until the log is open, the task writes to a null log, so a failing `RunLogFactory.open` still ends as `INTERNAL_ERROR` (with an empty `log_path`).
 - **Test helpers:** `tests/helpers/fakes.py` provides `FakeClock(start=1000.0)` (`now`, `advance`), `FakeExecutor(results, *, stop_move_ok=True, stop_move_posture=None, on_kill=None)`, `exec_result(...)` and `stop_move_result(...)`. Each `FakeExecutor` result item is an `ExecResult`, an exception instance (raised), or a callable `f(call_kwargs) -> ExecResult` (to block, set the stop event, or advance the clock). It records `runs`, `kills` and `stop_moves`.
+
+## T10 — CLI
+
+- **`--reset-stub` does not build a dispatcher:** it loads config, refuses a real backend (`--reset-stub needs robot.backend = "stub".`, exit 2), takes the process lock and writes `stub.initial_posture`. All global options (`--backend`, `--horizon`, `--fault`) are accepted with every command; `--reset-stub` with a command, or no command at all, is an argparse usage error (exit 2).
+- **`--fault STEP:KIND`** is parsed into `stub.faults` overrides; a malformed value is `Config error:` (exit 2). The real-backend rule is the existing config validator.
+- **Registry errors** in `build_dispatcher` and `catalog` print `Registry error: <message>` to stderr and exit 2.
+- **`build_dispatcher(need_llm=False)` without a planner or `GO2_TEST_PLANNER`** uses a planner that raises `LLMUnavailable("no planner configured")`. A bad `GO2_TEST_PLANNER` value (not `module:factory`) exits 2.
+- **Initial posture:** an unreadable/invalid stub state file gives `unknown` with a stderr warning (like the real backend's unavailable state).
+- **`catalog` output:** system text, blank line, `## Skills` + catalog (exactly `system[1]`), blank line, `## Tool schema` + the schema as indented JSON, blank line, `Registry hash: <16 hex>`. The horizon is `loop.planning_horizon` (after `--horizon`).
+- **`state`** prints `RobotState.model_dump_json(indent=2)`; unavailable → `Robot state unavailable.` on stderr, exit 1.
+- **`run` with an empty task** prints `prompts.EMPTY_TASK` to stderr and exits 2 before building the dispatcher. A `run` stopped by Ctrl+C prints its outcome and exits 1 (not DONE); only `batch` exits 130 after a first Ctrl+C.
+- **`batch` output:** each task is preceded by `Task {i}: {task}`, with a blank line between tasks. An unreadable tasks file exits 2.
+- **Signals:** SIGINT while a task runs (first time) → `request_stop("cli")` and `Stopping...` on stdout. SIGINT while idle, a second SIGINT, or SIGTERM → `shutdown(0)` (the atexit hook is unregistered first, so it is not repeated) and exit 130/143. The task thread is a daemon thread.
+- **`format_outcome`:** `Steps: {dispatched} run, {failures} failed` uses `TaskOutcome.failures` (which counts rejections too, per `FAILURE_OUTCOMES`). Truncation drops the oldest step lines one at a time until the text is ≤ `OUTCOME_MAX_CHARS` (4000), counting the inserted `({n} earlier lines omitted)` line.
+- **`planner_factory.factory()`** reads `GO2_TEST_SCRIPT` (JSON list of raw tool inputs, default `[]`). It imports `planner` as a top-level module when `tests/helpers` is on `PYTHONPATH`.
+- **Live test** lives in `tests/integration/test_live_llm.py` (builds the Dispatcher directly with `AnthropicPlanner`, no process lock); "every plan validated" = no `plan_invalid` or `horizon_rejection` record in the run log.
