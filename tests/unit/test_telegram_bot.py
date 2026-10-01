@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import signal
+import threading
+import time
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -17,6 +21,7 @@ from go2_dispatcher.transports import telegram_bot
 from go2_dispatcher.transports.telegram_bot import (
     SHUTDOWN_EXTRA_S,
     build_application,
+    on_post_init,
     on_post_stop,
     on_start,
     on_stop,
@@ -172,6 +177,91 @@ def test_build_application(cfg):
     app = build_application(d, cfg, TOKEN)
     assert app.update_processor.max_concurrent_updates > 1
     assert app.post_stop is on_post_stop
+    assert app.post_init is on_post_init
     assert app.bot_data["dispatcher"] is d and app.bot_data["cfg"] is cfg
     asyncio.run(app.post_stop(app))
     d.shutdown.assert_called_once_with(cfg.robot.stop_move_timeout_s + SHUTDOWN_EXTRA_S)
+
+
+class _BlockingDispatcher:
+    """Dispatcher stand-in whose ``run_task`` blocks until ``request_stop`` (or a safety
+    timeout); records the order of calls."""
+
+    def __init__(self, registry, release_after_s):
+        self.registry = registry
+        self.events: list[str] = []
+        self.started = threading.Event()
+        self._stopped = threading.Event()
+        self._release_after_s = release_after_s
+        self._busy = False
+
+    def is_busy(self):
+        return self._busy
+
+    def run_task(self, text, *, source, sender_id=None):
+        self._busy = True
+        self.started.set()
+        killed = self._stopped.wait(self._release_after_s)
+        self.events.append("task_stopped" if killed else "task_ran_to_time_limit")
+        self._busy = False
+        return "outcome"
+
+    def request_stop(self, source):
+        self.events.append(f"request_stop:{source}")
+        if self._busy:
+            self._stopped.set()
+            return "stopping"
+        return "idle"
+
+    def shutdown(self, wait_s):
+        self.events.append("shutdown")
+
+
+def test_stop_signal_kills_task_before_ptb_waits_for_handlers(cfg, registry, monkeypatch):
+    """SIGTERM during a running task: the task is stopped promptly, before PTB's
+    ``Application.stop()`` waits for in-flight handlers and before ``post_stop``. Runs the
+    real ``run_polling`` with network calls patched out."""
+    from telegram import Update, User
+    from telegram.ext import ExtBot, Updater
+
+    async def noop(*args, **kwargs):
+        return None
+
+    async def bot_initialize(self):            # instead of getMe over the network
+        self._bot_user = User(id=1, is_bot=True, first_name="bot", username="test_bot")
+
+    sent: list[str] = []
+
+    async def send_message(self, chat_id, text, *args, **kwargs):
+        sent.append(text)
+
+    monkeypatch.setattr(ExtBot, "initialize", bot_initialize)
+    monkeypatch.setattr(ExtBot, "shutdown", noop)
+    monkeypatch.setattr(ExtBot, "send_message", send_message)
+    monkeypatch.setattr(Updater, "start_polling", noop)
+    monkeypatch.setattr(telegram_bot, "format_outcome", lambda outcome, reg: "formatted")
+
+    release_after_s = 5.0              # old behaviour: the task only ends at this timeout
+    d = _BlockingDispatcher(registry, release_after_s)
+    app = build_application(d, cfg, TOKEN)
+    update = Update.de_json({
+        "update_id": 1,
+        "message": {"message_id": 1, "date": 0, "text": "walk forward",
+                    "chat": {"id": USER, "type": "private"},
+                    "from": {"id": USER, "is_bot": False, "first_name": "Op"}},
+    }, app.bot)
+    app.update_queue.put_nowait(update)
+
+    def send_signal():
+        if d.started.wait(5):
+            os.kill(os.getpid(), signal.SIGTERM)
+
+    t0 = time.monotonic()
+    threading.Thread(target=send_signal, daemon=True).start()
+    app.run_polling(close_loop=False)
+    elapsed = time.monotonic() - t0
+
+    assert d.events[:2] == ["request_stop:shutdown", "task_stopped"]
+    assert d.events[-1] == "shutdown"          # post_stop backstop still runs
+    assert elapsed < release_after_s
+    assert sent == [prompts.WORKING, "formatted"]

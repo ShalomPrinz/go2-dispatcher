@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import functools
 import os
+import signal
 import sys
 import traceback
 from pathlib import Path
@@ -27,13 +28,17 @@ from ..dispatcher import Dispatcher
 from ..models import BusyError
 from . import build_dispatcher, format_outcome, load_config_and_env
 
-__all__ = ["build_application", "on_start", "on_stop", "on_text", "on_post_stop", "main",
-           "TOKEN_ENV", "SOURCE", "STOP_WORD", "SHUTDOWN_EXTRA_S"]
+__all__ = ["build_application", "on_start", "on_stop", "on_text", "on_post_init",
+           "on_post_stop", "on_stop_signal", "main", "TOKEN_ENV", "SOURCE", "STOP_WORD",
+           "SHUTDOWN_EXTRA_S", "STOP_SIGNALS", "SHUTDOWN_SOURCE"]
 
 SOURCE = "telegram"
 TOKEN_ENV = "TELEGRAM_BOT_TOKEN"
 STOP_WORD = "stop"                   # matched after strip().lower() (OD-12)
 SHUTDOWN_EXTRA_S = 5.0               # post_stop waits stop_move_timeout_s + this (§16.3)
+SHUTDOWN_SOURCE = "shutdown"         # request_stop source on SIGINT/SIGTERM (as shutdown())
+STOP_SIGNALS = (signal.SIGINT, signal.SIGTERM)
+_STOPPING_KEY = "stop_signal_received"
 MISSING_TOKEN = f"Missing {TOKEN_ENV}."
 NO_ALLOWED_USERS_WARNING = ("Warning: telegram.allowed_user_ids is empty; "
                             "the bot will answer nobody.")
@@ -112,7 +117,29 @@ async def on_text(user: Any, message: Any, context: Any) -> None:
     await message.reply_text(format_outcome(outcome, dispatcher.registry))
 
 
+def on_stop_signal(app: Application) -> None:
+    """SIGINT/SIGTERM: stop the running task *first*, then end ``run_polling``.
+
+    PTB's ``Application.stop()`` waits for every in-flight handler (including a running
+    ``run_task``) before ``post_stop`` runs, so the kill must happen here, not only in
+    ``on_post_stop``. ``request_stop`` is non-blocking: it kills the current skill; the
+    executor then sends StopMove and the task ends ``STOPPED`` (§14.4, §15.1)."""
+    app.bot_data["dispatcher"].request_stop(SHUTDOWN_SOURCE)
+    if not app.bot_data.get(_STOPPING_KEY):
+        app.bot_data[_STOPPING_KEY] = True
+        app.stop_running()
+
+
+async def on_post_init(app: Application) -> None:
+    """Replace PTB's stop-signal handlers (which only raise ``SystemExit``) with
+    ``on_stop_signal``. Runs inside ``run_polling`` after PTB installed its own."""
+    loop = asyncio.get_running_loop()
+    for sig in STOP_SIGNALS:
+        loop.add_signal_handler(sig, on_stop_signal, app)
+
+
 async def on_post_stop(app: Application) -> None:
+    """Backstop (§16.3, Appendix A #32): waits for / force-ends a task still running."""
     dispatcher: Dispatcher = app.bot_data["dispatcher"]
     cfg: Config = app.bot_data["cfg"]
     await asyncio.to_thread(dispatcher.shutdown,
@@ -122,6 +149,7 @@ async def on_post_stop(app: Application) -> None:
 def build_application(dispatcher: Dispatcher, cfg: Config, token: str) -> Application:
     app = (ApplicationBuilder().token(token)
            .concurrent_updates(True)        # REQUIRED: otherwise "stop" cannot arrive during a task
+           .post_init(on_post_init)        # stop the task on SIGINT/SIGTERM first
            .post_stop(on_post_stop)
            .build())
     msg = filters.UpdateType.MESSAGE        # new messages only; ignore edited messages

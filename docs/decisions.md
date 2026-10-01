@@ -191,3 +191,7 @@ One entry per design decision taken in the spec (date = spec adoption, 2026-10-0
 - **Examples** in `docs/run-log.md`, `docs/skills.md` and `docs/loop-and-context.md` come from real stub runs (scripted planner, `--fault 2:error`). Long fields are shortened with `…`. The `llm_retry`, `stop_move` and `llm_error` examples are illustrative.
 - **Telegram user id**: `docs/running.md` suggests @userinfobot, or reading the bot's own "unauthorised user <id>" stderr warning.
 - **Known issue documented**: the default `llm.model` (`claude-sonnet-5-5`) may reject forced `tool_choice` and non-default `temperature` (HTTP 400). This is noted in `docs/configuration.md` and `docs/testing.md`. It has not been verified live.
+
+## T13 — Conformance fixes
+
+- **`go2-bot` stops the running task on SIGINT/SIGTERM before PTB's own shutdown** (§16.3, §14.5, Appendix A #32): in python-telegram-bot 22.x, `run_polling` calls `post_stop` only after `Application.stop()`, which waits for every in-flight handler, so a running task would continue until it ended by itself. A `post_init` hook (`on_post_init`) replaces PTB's SIGINT/SIGTERM loop handlers with `on_stop_signal`, which calls `dispatcher.request_stop("shutdown")` (kills the skill; the executor sends StopMove; the task ends `STOPPED` and its outcome is still replied) and then `app.stop_running()` (first signal only). `on_post_stop` → `shutdown(stop_move_timeout_s + 5)` stays as the backstop. `run_polling()` keeps PTB's default `stop_signals`, so signals before `post_init` still end the bot, and SIGABRT keeps PTB's handler.
