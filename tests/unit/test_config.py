@@ -317,3 +317,38 @@ def test_load_config_and_env_reads_dotenv_from_base_dir(tmp_path, monkeypatch):
         assert os.environ["GO2_T1_BASE"] == "yes"
     finally:
         os.environ.pop("GO2_T1_BASE", None)
+
+
+FLOAT_FIELDS = [
+    ("llm", "request_timeout_s"),
+    ("loop", "task_time_limit_s"),
+    ("motion_budget", "max_distance_m"),
+    ("motion_budget", "max_rotation_deg"),
+    ("robot", "stop_move_timeout_s"),
+    ("robot", "read_state_timeout_s"),
+    ("stub", "time_scale"),
+]
+
+
+@pytest.mark.parametrize("section,key", FLOAT_FIELDS)
+@pytest.mark.parametrize("value", [True, "1.5", float("inf"), float("-inf"), float("nan")])
+def test_float_fields_strict_and_finite(tmp_path, section, key, value):
+    bad(tmp_path, {section: {key: value}}, f"{section}.{key}")
+
+
+@pytest.mark.parametrize("value", [True, "1.5", float("inf"), float("nan")])
+def test_backoff_values_strict_and_finite(tmp_path, value):
+    bad(tmp_path, {"llm": {"infra_backoff_s": [1.0, value]}}, "infra_backoff_s")
+
+
+@pytest.mark.parametrize("section,key", FLOAT_FIELDS)
+def test_float_fields_accept_int(tmp_path, section, key):
+    cfg = ok(tmp_path, {section: {key: 2}})
+    v = getattr(getattr(cfg, section), key)
+    assert v == 2.0 and type(v) is float
+
+
+def test_float_rejections_from_toml(tmp_path):
+    path = write(tmp_path / "config.toml", "[stub]\ntime_scale = nan\n")
+    with pytest.raises(ConfigError, match="stub.time_scale"):
+        load_config(path)

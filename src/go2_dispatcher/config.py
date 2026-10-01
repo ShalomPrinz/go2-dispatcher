@@ -7,10 +7,11 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Any, Literal, NoReturn
+from typing import Annotated, Any, Literal, NoReturn
 
 from pydantic import (
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     Field,
     PrivateAttr,
@@ -35,6 +36,16 @@ ENV_FILE_NAME = ".env"
 DETECTION_VALUE_RE = re.compile(r"^(left|center|right):(near|medium|far)$")
 
 
+def _strict_number(v: Any) -> Any:
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        raise ValueError(f"must be a number, got {v!r}")
+    return v
+
+
+# Floats in config: int or float only (no bool, no numeric strings), finite; stored as float.
+FiniteFloat = Annotated[float, BeforeValidator(_strict_number), Field(allow_inf_nan=False)]
+
+
 class _Section(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -47,9 +58,9 @@ class LLMConfig(_Section):
     model: StrictStr = "claude-sonnet-5-5"  # (sketch)
     max_tokens: StrictInt = Field(2048, ge=1)
     thinking: Literal["between_tools", "adaptive"] = "between_tools"
-    request_timeout_s: float = Field(60.0, gt=0)  # (sketch)
+    request_timeout_s: FiniteFloat = Field(60.0, gt=0)  # (sketch)
     infra_max_retries: StrictInt = Field(2, ge=0)
-    infra_backoff_s: list[float] = [1.0, 4.0]
+    infra_backoff_s: list[FiniteFloat] = [1.0, 4.0]
 
     @field_validator("infra_backoff_s")
     @classmethod
@@ -73,13 +84,13 @@ class LoopConfig(_Section):
     planning_horizon: StrictInt = Field(5, ge=1)  # (sketch)
     max_failures: StrictInt = Field(3, ge=1)  # (sketch)
     max_llm_calls: StrictInt = Field(20, ge=1)  # (sketch)
-    task_time_limit_s: float = Field(300.0, gt=0)  # (sketch)
+    task_time_limit_s: FiniteFloat = Field(300.0, gt=0)  # (sketch)
     context_history_k: StrictInt = Field(10, ge=1)  # (sketch)
 
 
 class MotionBudgetConfig(_Section):
-    max_distance_m: float = Field(10.0, ge=0)  # (sketch)
-    max_rotation_deg: float = Field(720.0, ge=0)  # (sketch)
+    max_distance_m: FiniteFloat = Field(10.0, ge=0)  # (sketch)
+    max_rotation_deg: FiniteFloat = Field(720.0, ge=0)  # (sketch)
 
 
 class SkillsConfig(_Section):
@@ -90,8 +101,8 @@ class RobotConfig(_Section):
     backend: Literal["stub", "real"] = "stub"
     network_interface: StrictStr = ""
     yolo_weights: Path = Path("models/yolov8n.pt")
-    stop_move_timeout_s: float = Field(10.0, gt=0)
-    read_state_timeout_s: float = Field(10.0, gt=0)
+    stop_move_timeout_s: FiniteFloat = Field(10.0, gt=0)
+    read_state_timeout_s: FiniteFloat = Field(10.0, gt=0)
 
 
 class FaultConfig(_Section):
@@ -100,7 +111,7 @@ class FaultConfig(_Section):
 
 
 class StubConfig(_Section):
-    time_scale: float = Field(0.1, gt=0)
+    time_scale: FiniteFloat = Field(0.1, gt=0)
     initial_posture: Literal["standing", "sitting"] = "standing"
     state_file: Path = Path("runs/.stub_state.json")
     detections: dict[str, StrictStr] = {}

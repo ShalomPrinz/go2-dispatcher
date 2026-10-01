@@ -350,6 +350,32 @@ def test_internal_error_then_next_task(tmp_path, registry):
     assert r.run("next").outcome == "DONE"
 
 
+def test_internal_error_stop_move_and_kill_raise_task_end_still_written(tmp_path, registry):
+    class RaisingExecutor(FakeExecutor):
+        def kill_current(self, cause):
+            super().kill_current(cause)
+            raise OSError("kill failed")
+
+        def stop_move(self, reason):
+            self.stop_moves.append(reason)
+            raise RuntimeError("stop_move exploded")
+
+    ex = RaisingExecutor([RuntimeError("boom")])
+    r = Rig(tmp_path, registry, [plan(walk()), done()], executor=ex)
+    o = r.run()
+    assert o.outcome == "INTERNAL_ERROR"
+    assert o.stop_move_failed
+    assert ex.stop_moves == ["internal_error"]
+    (sm,) = records(o, "stop_move")
+    assert sm["ok"] is False and "stop_move exploded" in sm["stderr_tail"]
+    (end,) = records(o, "task_end")
+    assert end["outcome"] == "INTERNAL_ERROR" and end["stop_move_failed"] is True
+    index = r.cfg.log.dir / "index.jsonl"
+    rows = [json.loads(line) for line in index.read_text(encoding="utf-8").splitlines()]
+    assert rows[-1]["run_id"] == o.run_id and rows[-1]["outcome"] == "INTERNAL_ERROR"
+    assert not r.d.is_busy()
+
+
 # 24
 def test_previous_task(tmp_path, registry):
     r = Rig(tmp_path, registry, [done("first done"), done("second done")])

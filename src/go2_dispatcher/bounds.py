@@ -25,6 +25,21 @@ def cut_message(text: str, limit: int = ERROR_MESSAGE_MAX) -> str:
 # --- step bounds -------------------------------------------------------------------
 
 _MISSING = object()
+_OVERFLOW = object()          # a number too large to convert to float (e.g. 10**400)
+REPR_MAX = 40                 # max chars of a bad value's repr in a violation
+
+
+def _short_repr(value: Any) -> str:
+    r = repr(value)
+    return r if len(r) <= REPR_MAX else r[: REPR_MAX - 1] + ELLIPSIS
+
+
+def _finite(value: int | float) -> bool | None:
+    """True/False for finite/non-finite; None if the value overflows float conversion."""
+    try:
+        return math.isfinite(float(value))
+    except OverflowError:
+        return None
 
 
 def _expected(spec: ParamSpec) -> str:
@@ -40,7 +55,12 @@ def _expected(spec: ParamSpec) -> str:
 def _coerce(spec: ParamSpec, value: Any) -> Any:
     """Type check without other coercion (§13.2 step 4); returns the normalised value or _MISSING."""
     if spec.type in ("number", "integer"):
-        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return _MISSING
+        finite = _finite(value)
+        if finite is None:
+            return _OVERFLOW
+        if not finite:
             return _MISSING
         if spec.type == "number":
             return value
@@ -91,8 +111,10 @@ def check_step(step: PlanStep, registry: Registry) -> tuple[dict | None, list[st
         if p not in raw:
             continue
         value = _coerce(spec, raw[p])
-        if value is _MISSING:
-            violations.append(f"parameter '{p}' for skill {s} must be {_expected(spec)}, got {raw[p]!r}")
+        if value is _MISSING or value is _OVERFLOW:
+            expected = "a finite number" if value is _OVERFLOW else _expected(spec)
+            violations.append(
+                f"parameter '{p}' for skill {s} must be {expected}, got {_short_repr(raw[p])}")
         else:
             typed[p] = value
 

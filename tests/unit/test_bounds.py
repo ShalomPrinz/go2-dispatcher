@@ -79,6 +79,18 @@ def test_non_finite_number(registry):
     assert len(v) == 1 and "must be a finite number" in v[0]
 
 
+def test_huge_integer_is_violation_not_exception(registry, typed_registry):
+    huge = 10**400
+    _, v = check_step(step("walk", direction="forward", distance_m=huge), registry)
+    assert v == [f"parameter 'distance_m' for skill walk must be a finite number, "
+                 f"got {repr(huge)[:39]}…"]
+    _, v = check_step(step("count", n=-huge), typed_registry)
+    assert len(v) == 1 and v[0].startswith("parameter 'n' for skill count must be a finite number")
+    plan = make_plan(step("walk", direction="forward", distance_m=huge))
+    res = precheck(plan, 1, registry, MotionBudget(10, 720), call_index=1)
+    assert res.rejection is not None and res.rejection.error_code == "bounds"
+
+
 def test_integer_accepts_integral_float_and_converts(typed_registry):
     filled, v = check_step(step("count", n=2.0), typed_registry)
     assert v == []

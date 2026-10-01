@@ -169,3 +169,13 @@ def test_stop_move_direct(executor):
     assert res.ok and res.reason == "internal_error" and res.exit_code == 0
     assert res.response.skill == "stop_move"
     assert executor.kill_current("operator") is False       # never registered as current
+
+
+def test_stop_move_never_raises(executor, monkeypatch):
+    def boom(*a, **k):
+        raise OSError("cannot spawn")
+
+    monkeypatch.setattr(executor, "_popen", boom)
+    smr = executor.stop_move("internal_error")
+    assert smr.ok is False and smr.reason == "internal_error"
+    assert "OSError: cannot spawn" in smr.stderr_tail

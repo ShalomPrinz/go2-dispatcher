@@ -258,7 +258,15 @@ def test_stop_signal_kills_task_before_ptb_waits_for_handlers(cfg, registry, mon
 
     t0 = time.monotonic()
     threading.Thread(target=send_signal, daemon=True).start()
-    app.run_polling(close_loop=False)
+    # PTB 21 uses asyncio.get_event_loop(), which fails once an earlier asyncio.run() in this
+    # thread has cleared the current loop; give run_polling a fresh one.
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        app.run_polling(close_loop=False)
+    finally:
+        asyncio.set_event_loop(None)
+        loop.close()
     elapsed = time.monotonic() - t0
 
     assert d.events[:2] == ["request_stop:shutdown", "task_stopped"]

@@ -243,8 +243,14 @@ class Executor:
         return proc.returncode, response, tail, duration_ms
 
     def stop_move(self, reason: str) -> StopMoveResult:
-        rc, response, tail, duration_ms = self._run_utility(
-            STOP_MOVE_MODULE, self.cfg.robot.stop_move_timeout_s)
+        """Never raises: any failure is returned as ``ok=False`` with the error in stderr_tail."""
+        t0 = time.monotonic()
+        try:
+            rc, response, tail, duration_ms = self._run_utility(
+                STOP_MOVE_MODULE, self.cfg.robot.stop_move_timeout_s)
+        except Exception as e:  # noqa: BLE001 - the stop path must not raise (§14.4)
+            return StopMoveResult(ok=False, reason=reason, duration_ms=_ms(t0),
+                                  stderr_tail=f"{type(e).__name__}: {e}"[-STDERR_TAIL_CHARS:])
         ok = response is not None and response.status == "ok"
         return StopMoveResult(ok=ok, reason=reason, duration_ms=duration_ms,
                               exit_code=rc, response=response, stderr_tail=tail)

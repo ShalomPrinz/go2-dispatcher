@@ -408,12 +408,30 @@ class Dispatcher:
         return result
 
     def _internal_error(self, t: _Task, e: Exception) -> TaskOutcome:
-        t.log.write("exception", where=EXCEPTION_WHERE, exception_type=type(e).__name__,
-                    message=str(e), traceback=traceback.format_exc())
-        self.executor.kill_current("shutdown")
-        smr = self.executor.stop_move("internal_error")
-        return self._end(t, "INTERNAL_ERROR", stop_move_result=smr,
-                         exception_type=type(e).__name__)
+        """Nothing may escape before task_end and the index row are written (§15.3)."""
+        smr: StopMoveResult | None = None
+        try:
+            try:
+                t.log.write("exception", where=EXCEPTION_WHERE, exception_type=type(e).__name__,
+                            message=str(e), traceback=traceback.format_exc())
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                self.executor.kill_current("shutdown")
+            except Exception:  # noqa: BLE001
+                pass
+            t0 = self.clock.now()
+            try:
+                smr = self.executor.stop_move("internal_error")
+            except Exception as se:  # noqa: BLE001 - Executor.stop_move never raises; fakes might
+                smr = StopMoveResult(ok=False, reason="internal_error",
+                                     duration_ms=(self.clock.now() - t0) * 1000.0,
+                                     stderr_tail=f"{type(se).__name__}: {se}")
+        finally:
+            # also runs if a BaseException (e.g. KeyboardInterrupt) arrives above; it then propagates
+            outcome = self._end(t, "INTERNAL_ERROR", stop_move_result=smr,
+                                exception_type=type(e).__name__)
+        return outcome
 
     # --- the loop (§15.3) ----------------------------------------------------------------------
 
