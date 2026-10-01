@@ -5,9 +5,9 @@
 condition = ""                      # free-text experiment label, copied into task_start and index.jsonl
 
 [llm]
-model = "claude-opus-4-6"           # (sketch) must accept forced tool_choice + temperature
-max_tokens = 1024
-temperature = 0.0
+model = "claude-sonnet-5-5"         # (sketch)
+max_tokens = 2048
+thinking = "between_tools"          # "between_tools" (thinking off) | "adaptive"
 request_timeout_s = 60.0            # cap per attempt (sketch)
 infra_max_retries = 2
 infra_backoff_s = [1.0, 4.0]        # sleep before retry 1, retry 2

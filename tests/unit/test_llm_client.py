@@ -82,16 +82,25 @@ def test_request_body(tmp_path):
     req = h.requests[0]
     assert req.url.path == "/v1/messages"
     body = json.loads(req.content)
-    assert body["tool_choice"] == {"type": "tool", "name": "submit_plan"}
+    assert body["tool_choice"] == {"type": "auto"}
+    assert body["thinking"] == {"type": "between_tools"}
     assert body["system"] == [{"type": "text", "text": SYSTEM[0]},
                               {"type": "text", "text": SYSTEM[1]}]
     assert body["messages"] == [{"role": "user", "content": USER}]
     assert body["tools"] == [plan_tool_schema(H)]
     assert "strict" not in json.dumps(body)
-    assert "thinking" not in body and not body.get("stream")
+    assert not body.get("stream")
+    assert "temperature" not in body and "extra_body" not in body
+    assert "temperature" not in json.dumps(body)
     cfg = make_config(tmp_path).llm
     assert body["model"] == cfg.model and body["max_tokens"] == cfg.max_tokens
-    assert body["temperature"] == cfg.temperature
+    assert body["model"] == "claude-sonnet-5-5" and body["max_tokens"] == 2048
+
+
+def test_request_thinking_adaptive(tmp_path):
+    h = Harness(tmp_path, [ok()], llm={"thinking": "adaptive"})
+    h.plan()
+    assert json.loads(h.requests[0].content)["thinking"] == {"type": "adaptive"}
 
 
 def test_valid_tool_use_parsed(tmp_path):
@@ -131,6 +140,23 @@ def test_no_tool_use(tmp_path):
     r = Harness(tmp_path, [ok(body)]).plan()
     assert r.plan is None and r.rejection_kind == "no_tool_call"
     assert r.errors == [ERR_NO_TOOL_CALL] and r.tool_input is None
+
+
+def test_text_only_reply_is_no_tool_call(tmp_path):
+    body = message([{"type": "text", "text": "I would sit down."}], stop_reason="end_turn")
+    r = Harness(tmp_path, [ok(body)]).plan()
+    assert r.plan is None and r.rejection_kind == "no_tool_call"
+    assert r.errors == [ERR_NO_TOOL_CALL] and r.tool_input is None
+    assert r.content[0]["type"] == "text"
+
+
+def test_thinking_block_before_tool_use(tmp_path):
+    body = message([{"type": "thinking", "thinking": "", "signature": "sig"},
+                    tool_use(GOOD_INPUT)])
+    r = Harness(tmp_path, [ok(body)]).plan()
+    assert r.errors == [] and r.rejection_kind == "none"
+    assert r.plan is not None and r.plan.steps[0].skill == "sit"
+    assert [b["type"] for b in r.content] == ["thinking", "tool_use"]
 
 
 def test_max_tokens(tmp_path):

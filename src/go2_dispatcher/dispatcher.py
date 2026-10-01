@@ -394,6 +394,7 @@ class Dispatcher:
                 "run_id": t.run_id, "file": t.log.path.name, "ts_start": t.ts_start,
                 "task": t.task, "source": t.source, "outcome": outcome,
                 "condition": self.cfg.run.condition, "backend": self.cfg.robot.backend,
+                "model": self.cfg.llm.model, "thinking": self.cfg.llm.thinking,
                 "planning_horizon": self.cfg.loop.planning_horizon,
                 "max_llm_calls": self.cfg.loop.max_llm_calls,
                 "registry_hash": self.registry_hash, "llm_calls": t.llm_calls,

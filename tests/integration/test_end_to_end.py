@@ -67,6 +67,7 @@ def test_turn_then_detect(tmp_path, registry):
     index = read_jsonl(cfg.log.dir / INDEX_FILE)
     assert len(index) == 1 and index[0]["run_id"] == o.run_id
     assert index[0]["input_tokens"] == 200
+    assert index[0]["model"] == cfg.llm.model and index[0]["thinking"] == cfg.llm.thinking
 
 
 def test_fault_at_step_two(tmp_path, registry):

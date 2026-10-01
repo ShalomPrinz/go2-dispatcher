@@ -44,9 +44,9 @@ class RunConfig(_Section):
 
 
 class LLMConfig(_Section):
-    model: StrictStr = "claude-opus-4-6"  # (sketch); see docs/decisions.md T13
-    max_tokens: StrictInt = Field(1024, ge=1)
-    temperature: float = Field(0.0, ge=0)
+    model: StrictStr = "claude-sonnet-5-5"  # (sketch)
+    max_tokens: StrictInt = Field(2048, ge=1)
+    thinking: Literal["between_tools", "adaptive"] = "between_tools"
     request_timeout_s: float = Field(60.0, gt=0)  # (sketch)
     infra_max_retries: StrictInt = Field(2, ge=0)
     infra_backoff_s: list[float] = [1.0, 4.0]

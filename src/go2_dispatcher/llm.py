@@ -171,10 +171,9 @@ class AnthropicPlanner:
                     system=[{"type": "text", "text": system[0]},
                             {"type": "text", "text": system[1]}],
                     tools=[tool_schema],
-                    tool_choice={"type": "tool", "name": TOOL_NAME},
+                    tool_choice={"type": "auto"},
+                    thinking={"type": cfg.thinking},
                     messages=[{"role": "user", "content": user}],
-                    # SDK 1.x dropped the sampling kwargs; the API field is sent as-is
-                    extra_body={"temperature": cfg.temperature},
                 )
             except anthropic.APIError as e:
                 attempt_latency_ms = (time.monotonic() - t_attempt) * 1000.0
@@ -209,7 +208,8 @@ class AnthropicPlanner:
 
     def _result(self, resp: Any, *, latency_ms: float, total_ms: float,
                 attempts: int) -> LLMResult:
-        """Response handling (§12.4)."""
+        """Response handling (§12.4). Thinking and text blocks are skipped when choosing the
+        tool_use block; all blocks are kept in ``content``."""
         block = next((b for b in resp.content
                       if b.type == "tool_use" and b.name == TOOL_NAME), None)
         tool_input = block.input if block is not None else None

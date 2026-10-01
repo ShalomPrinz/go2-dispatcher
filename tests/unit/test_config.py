@@ -212,11 +212,27 @@ def test_floats_positive(tmp_path, section, key):
 
 @pytest.mark.parametrize("section,key", [
     ("motion_budget", "max_distance_m"), ("motion_budget", "max_rotation_deg"),
-    ("llm", "temperature"),
 ])
 def test_floats_non_negative(tmp_path, section, key):
     ok(tmp_path, {section: {key: 0.0}})
     bad(tmp_path, {section: {key: -0.1}}, f"{section}.{key}")
+
+
+def test_llm_defaults(tmp_path):
+    cfg = make_config(tmp_path).llm
+    assert cfg.model == "claude-sonnet-5-5"
+    assert cfg.max_tokens == 2048 and cfg.thinking == "between_tools"
+
+
+def test_llm_thinking(tmp_path):
+    ok(tmp_path, {"llm": {"thinking": "between_tools"}})
+    ok(tmp_path, {"llm": {"thinking": "adaptive"}})
+    bad(tmp_path, {"llm": {"thinking": "disabled"}}, "thinking")
+    bad(tmp_path, {"llm": {"thinking": "enabled"}}, "thinking")
+
+
+def test_llm_temperature_removed(tmp_path):
+    bad(tmp_path, {"llm": {"temperature": 0.0}}, "temperature")
 
 
 def test_backoff_values_non_negative(tmp_path):
