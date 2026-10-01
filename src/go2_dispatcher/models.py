@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr, model_validator
 
 
 # --- Exceptions (§6.6) -------------------------------------------------------
@@ -36,6 +36,33 @@ class LLMInterrupted(Exception):
     def __init__(self, cause: Literal["operator", "task_time_limit"]):
         super().__init__(cause)
         self.cause = cause
+
+
+class _Model(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+# --- Plan (§6.1) -------------------------------------------------------------
+
+
+class PlanStep(_Model):
+    skill: StrictStr
+    params: dict[str, Any] = {}
+
+
+class Plan(_Model):
+    status: Literal["PLAN", "DONE", "ABORT"]
+    steps: list[PlanStep] = []
+    replan_after: StrictInt | None = None      # 1-based step index within this plan
+    message: StrictStr | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalise_status(cls, data: Any) -> Any:
+        # the API does not guarantee enum casing in non-strict mode
+        if isinstance(data, dict) and isinstance(data.get("status"), str):
+            data = {**data, "status": data["status"].strip().upper()}
+        return data
 
 
 # --- SkillResponse (§6.2) -----------------------------------------------------
@@ -83,3 +110,75 @@ class SkillResponse(BaseModel):
         if (self.status == "error") != (self.error is not None):
             raise ValueError("error must be present if and only if status == 'error'")
         return self
+
+
+# --- StepResult (§6.3) --------------------------------------------------------
+
+StepOutcome = Literal["ok", "error", "timeout", "malformed",
+                      "rejected", "motion_budget_exceeded", "interrupted"]
+FAILURE_OUTCOMES = frozenset({"error", "timeout", "malformed", "rejected", "motion_budget_exceeded"})
+
+
+class MotionCostModel(_Model):                  # pydantic mirror of policy_base.MotionCost
+    distance_m: float = 0.0
+    rotation_deg: float = 0.0
+
+
+class StopMoveResult(_Model):
+    ok: bool
+    reason: Literal["operator", "task_time_limit", "step_timeout", "shutdown", "internal_error"]
+    duration_ms: float
+    exit_code: int | None = None
+    response: SkillResponse | None = None      # includes state_after sampled after StopMove
+    stderr_tail: str | None = None
+
+
+class StepResult(_Model):
+    index: int | None                  # 1-based count of dispatched steps in the task; None if not dispatched
+    call_index: int                    # LLM call that produced the plan (1-based)
+    plan_step: int                     # 1-based position within that plan
+    skill: str
+    params: dict[str, Any]             # dispatched: filled + normalised params; rejected: raw params as received
+    outcome: StepOutcome
+    error_code: str | None = None
+    error_message: str | None = None   # one line, <= 200 chars, safe for LLM context
+    response: SkillResponse | None = None
+    duration_ms: float = 0.0           # wall clock around the subprocess; 0 if not dispatched
+    timeout_s: float | None = None
+    motion_cost: MotionCostModel = MotionCostModel()
+    fault: str | None = None           # stub fault kind injected, if any
+    exit_code: int | None = None
+    pid: int | None = None             # LOG ONLY
+    stderr_tail: str | None = None     # last 2000 chars; LOG ONLY, never in context
+    stop_move: StopMoveResult | None = None
+    verification: Literal["unverified"] = "unverified"
+
+
+# --- Task outcome (§6.4) and summary (§6.5) -------------------------------------
+
+TaskOutcomeCode = Literal[
+    "DONE", "ABORTED", "STOPPED", "TIME_LIMIT_EXCEEDED",
+    "FAILURE_BUDGET_EXHAUSTED", "CALL_BUDGET_EXHAUSTED",
+    "LLM_INVALID", "LLM_ERROR", "INTERNAL_ERROR",
+]
+
+
+class TaskOutcome(_Model):
+    run_id: str
+    task: str
+    outcome: TaskOutcomeCode
+    message: str                        # operator-facing (§11.8)
+    steps: list[StepResult]             # every recorded step, in order
+    llm_calls: int
+    failures: int
+    stop_move_failed: bool = False
+    duration_ms: float
+    final_posture: Literal["standing", "sitting", "unknown"]
+    log_path: str
+
+
+class TaskSummary(_Model):
+    task: str
+    outcome: TaskOutcomeCode
+    message: str
+    last_step: StepResult | None        # last dispatched step, if any

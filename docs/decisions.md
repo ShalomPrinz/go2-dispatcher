@@ -43,3 +43,17 @@ Implementation choices where the spec was silent, and outcomes of checks the spe
 - **Settle waits** run only after a successful `StandDown`/`Stretch`; `exec_ms` includes them.
 - **`SDK_TIMEOUT_S`** in walk/turn is documentary: the timeout is applied by `real.get_sport_client()` (`real.SPORT_CLIENT_TIMEOUT_S = 10.0`), since `backend.get_sport_client()` takes no arguments (§9).
 - **`detect_object` errors:** any `DetectorError` maps to its `.code`, message `"<Type>: <msg>"`. Observations on error contain only `target`. `unsupported_object` still samples state (only the detector is skipped).
+
+## T4 — Models and registry
+
+- **Models:** every §6 model uses `extra="forbid"` via a private `_Model` base (only `RobotState` allows extras).
+- **`catalog_text()` has no trailing newline**; `tests/golden/catalog.txt` is byte-identical (no final newline). The registry hash separator `"\n"` then joins the parts cleanly.
+- **`registry_hash(system_text, catalog_text, tool_schema) -> str`** is a module-level function in `registry.py`; callers pass `prompts`/`llm.plan_tool_schema(horizon)` output.
+- **Frontmatter:** the first line must be exactly `---` (trailing whitespace tolerated), closed by the next `---` line; empty, non-mapping or invalid YAML is a `RegistryError`. `params` must be a mapping when present (`params:` with no value is an error).
+- **Stricter-than-stated checks** (spec silent): parameter names must match `^[a-z][a-z0-9_]*$`; `description` (skill and param) must be a non-empty string, and the skill description a single line (the catalog is line-based); enum `values` must be unique and already stripped; `min`/`max` must be finite numbers (not booleans); `unit` must be a non-empty string; `min`/`max`/`unit` on a non-numeric type are errors (like `values` on a non-enum).
+- **Default checks:** `number` = finite int/float, not bool; `integer` = int, not bool (YAML `2.0` rejected — no conversion for declared defaults); `string` = non-empty after strip; `enum` = exactly one of `values`; numeric defaults within `min`/`max`. `default: null` is invalid.
+- **`POLICY` must be a `SkillPolicy` instance** (besides existing and having the right `name`). Any exception during the entrypoint import is reported as "not importable".
+- **No-default sentinel:** `registry.MISSING` (falsy singleton); `ParamSpec.required` property is `default is MISSING`.
+- **Duplicate names** cannot arise from distinct folders (name must equal folder name), but the check exists; its test monkeypatches the per-folder loader.
+- **Missing `skills_dir`** is a `RegistryError` naming the directory, as is zero skills.
+- **Test entrypoint modules** live in `tests/helpers/skill_modules/` (importable as `helpers.skill_modules.*`, no `sys.path` changes).

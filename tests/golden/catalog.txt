@@ -1,0 +1,12 @@
+detect_object: Look through the front camera once and report whether an object is visible, where it is in the frame, and roughly how close it is. Does not move the robot.
+  - target (required): text. Object to look for, as a lowercase COCO class name (for example chair, person, bottle, cell phone).
+sit: Lower the robot's body to the ground (sit or lie down).
+  - no parameters
+stretch: Perform the robot's built-in stretch routine.
+  - no parameters
+turn: Turn in place to the left or right by an angle, then stop.
+  - direction (required): one of left, right. Which way to turn.
+  - angle_deg (optional, default 45): number from 5 to 180 degrees. Angle to turn.
+walk: Walk in a straight line forward, backward, or sideways by a distance, then stop.
+  - direction (required): one of forward, backward, left, right. Direction of travel relative to the robot's current heading.
+  - distance_m (optional, default 0.9): number from 0.1 to 3 metres. Distance to travel.
