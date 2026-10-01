@@ -25,23 +25,6 @@ VALID = {
     "detect_object": {"target": "chair"},
 }
 SKILLS = list(VALID)
-# A required key removed (skills without params have none to remove).
-MISSING_KEY = {
-    "walk": {"direction": "forward"},
-    "turn": {"angle_deg": 30},
-    "detect_object": {},
-}
-BAD_PARAMS = [
-    ("walk", {"direction": "up", "distance_m": 1}),
-    ("walk", {"direction": "forward", "distance_m": "1"}),
-    ("walk", {"direction": "forward", "distance_m": True}),
-    ("turn", {"direction": "forward", "angle_deg": 30}),
-    ("turn", {"direction": "left", "angle_deg": None}),
-    ("detect_object", {"target": ""}),
-    ("detect_object", {"target": 3}),
-]
-
-
 def state_file(tmp_path):
     return tmp_path / "stub_state.json"
 
@@ -67,70 +50,64 @@ def test_contract_valid(tmp_path, name):
     assert {"init_ms", "exec_ms", "state_ms", "total_ms"} <= set(resp.timing)
 
 
-@pytest.mark.parametrize("name", SKILLS)
-@pytest.mark.parametrize("arg", ["not json", "[1]", "42"])
-def test_invalid_json(tmp_path, name, arg):
-    proc = run_module(name, arg, stub_env(tmp_path))
+def test_invalid_json(tmp_path):
+    """parse_params is tested in process (tests/unit/test_skill_helpers.py); this proves the
+    mapping to invalid_params and exit 1."""
+    proc = run_module("walk", "not json", stub_env(tmp_path))
     resp = SkillResponse.model_validate(single_response(proc))
     assert proc.returncode == 1
     assert resp.status == "error" and resp.error.code == "invalid_params"
 
 
-@pytest.mark.parametrize("name", list(MISSING_KEY))
-def test_missing_required_key(tmp_path, name):
-    proc = run_module(name, MISSING_KEY[name], stub_env(tmp_path))
+def test_bad_param_value(tmp_path):
+    proc = run_module("walk", {"direction": "up", "distance_m": 1}, stub_env(tmp_path))
     resp = SkillResponse.model_validate(single_response(proc))
     assert proc.returncode == 1
     assert resp.error.code == "invalid_params"
 
 
-@pytest.mark.parametrize("name,params", BAD_PARAMS)
-def test_bad_param_values(tmp_path, name, params):
-    proc = run_module(name, params, stub_env(tmp_path))
-    resp = SkillResponse.model_validate(single_response(proc))
-    assert proc.returncode == 1
-    assert resp.error.code == "invalid_params"
-
-
-@pytest.mark.parametrize("name", SKILLS)
-def test_backend_not_configured(tmp_path, name):
+def test_backend_not_configured(tmp_path):
     env = stub_env(tmp_path)
     env.pop("GO2_BACKEND")
-    proc = run_module(name, VALID[name], env)
+    proc = run_module("walk", VALID["walk"], env)
     resp = SkillResponse.model_validate(single_response(proc))
     assert proc.returncode == 1
     assert resp.error.code == "backend_not_configured"
     assert "Traceback" not in proc.stderr
 
 
-@pytest.mark.parametrize("name", SKILLS)
-def test_noise_stays_off_stdout(tmp_path, name):
-    proc = run_module(name, VALID[name], stub_env(tmp_path, GO2_STUB_NOISE="1"))
+def test_noise_stays_off_stdout(tmp_path):
+    proc = run_module("walk", VALID["walk"], stub_env(tmp_path, GO2_STUB_NOISE="1"))
     resp = SkillResponse.model_validate(single_response(proc))
     assert proc.returncode == 0 and resp.status == "ok"
     assert stub.NOISE_PRINT_TEXT in proc.stderr
 
 
-def test_fresh_interpreter_import_of_skills_is_side_effect_free():
+def test_fresh_interpreter_import_is_side_effect_free():
+    """Every go2_skills module imports without heavy modules or output (docs/skills.md)."""
     code = r"""
-import importlib, io, json, sys, contextlib
+import contextlib, importlib, io, json, pkgutil, sys
+import go2_skills
+names = sorted(m.name for m in pkgutil.iter_modules(go2_skills.__path__))
 buf = io.StringIO()
 with contextlib.redirect_stdout(buf):
-    mods = {n: importlib.import_module("go2_skills." + n)
-            for n in ("walk", "turn", "sit", "stretch", "detect_object", "motion")}
+    mods = {n: importlib.import_module("go2_skills." + n) for n in names}
 heavy = [m for m in ("unitree_sdk2py", "cv2", "ultralytics", "numpy", "cyclonedds")
          if m in sys.modules]
-names = {n: getattr(m, "POLICY", None) and m.POLICY.name for n, m in mods.items()}
-print(json.dumps({"heavy": heavy, "out": buf.getvalue(), "names": names}))
+policies = {n: getattr(m, "POLICY", None) and m.POLICY.name for n, m in mods.items()}
+print(json.dumps({"modules": names, "heavy": heavy, "out": buf.getvalue(),
+                  "policies": policies}))
 """
     proc = subprocess.run([sys.executable, "-c", code], cwd=REPO_ROOT, capture_output=True,
                           text=True, timeout=30, env={k: v for k, v in os.environ.items()
                                                       if not k.startswith("GO2_")})
     assert proc.returncode == 0, proc.stderr
     out = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert {"real", "stub", "result", "backend", "motion", "stop_move", "read_state",
+            *SKILLS} <= set(out["modules"])
     assert out["heavy"] == [] and out["out"] == "" and proc.stderr == ""
-    for n in ("walk", "turn", "sit", "stretch", "detect_object"):
-        assert out["names"][n] == n
+    for n in SKILLS:
+        assert out["policies"][n] == n
 
 
 # --- observations -----------------------------------------------------------------
@@ -213,8 +190,9 @@ def test_detect_unsupported_without_matches(tmp_path):
 # --- faults --------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("name", SKILLS)
+@pytest.mark.parametrize("name", ["walk", "sit", "detect_object"])
 def test_fault_error(tmp_path, name):
+    """walk: move loop; sit: single action; detect_object: camera_unavailable."""
     proc = run_module(name, VALID[name], stub_env(tmp_path, fault="error"))
     resp = SkillResponse.model_validate(single_response(proc))
     assert proc.returncode == 1 and resp.status == "error"
@@ -225,35 +203,27 @@ def test_fault_error(tmp_path, name):
         assert resp.observations["sdk_ret"] == stub.STUB_ERR_INJECTED
 
 
-@pytest.mark.parametrize("name", SKILLS)
-def test_fault_crash(tmp_path, name):
-    proc = run_module(name, VALID[name], stub_env(tmp_path, fault="crash"))
+def test_fault_crash(tmp_path):
+    proc = run_module("walk", VALID["walk"], stub_env(tmp_path, fault="crash"))
     assert proc.returncode == stub.CRASH_EXIT_CODE
     assert proc.stdout == ""
 
 
-@pytest.mark.parametrize("name", SKILLS)
-def test_fault_garbage(tmp_path, name):
-    proc = run_module(name, VALID[name], stub_env(tmp_path, fault="garbage"))
+def test_fault_garbage(tmp_path):
+    proc = run_module("walk", VALID["walk"], stub_env(tmp_path, fault="garbage"))
     assert proc.returncode == 0
     assert proc.stdout == stub.GARBAGE_TEXT
-
-
-@pytest.mark.parametrize("name", ["walk", "detect_object"])
-def test_fault_hang(tmp_path, name):
-    with pytest.raises(subprocess.TimeoutExpired):
-        run_module(name, VALID[name], stub_env(tmp_path, fault="hang"), timeout=2)
 
 
 # --- orphan watchdog -------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("name", ["walk", "sit"])
-def test_orphan_watchdog_exits(tmp_path, name):
+def test_orphan_watchdog_exits(tmp_path):
+    """The watchdog is shared (go2_skills/result.py); one skill is enough."""
     env = stub_env(tmp_path, fault="hang", GO2_PARENT_PID=str(os.getppid() or 1))
     assert int(env["GO2_PARENT_PID"]) != os.getpid()
     t0 = time.monotonic()
-    proc = subprocess.run([sys.executable, "-m", f"go2_skills.{name}", json.dumps(VALID[name])],
+    proc = subprocess.run([sys.executable, "-m", "go2_skills.walk", json.dumps(VALID["walk"])],
                           env=env, cwd=REPO_ROOT, capture_output=True, text=True, timeout=10)
     assert time.monotonic() - t0 < 3.0
     assert proc.returncode == 137

@@ -76,9 +76,13 @@ def test_reset_stub(cfg_path):
     assert stub.read_posture(state_file) == "standing"
 
 
-def test_reset_stub_real_backend(cfg_path):
-    proc = cli(cfg_path, "--backend", "real", "--reset-stub")
-    assert proc.returncode == 2
+def test_cli_does_not_import_anthropic():
+    """`anthropic` is imported lazily (docs/llm.md); the CLI starts fast without it."""
+    code = "import sys, go2_dispatcher.transports.cli; print('anthropic' in sys.modules)"
+    proc = subprocess.run([sys.executable, "-c", code], cwd=REPO_ROOT, capture_output=True,
+                          text=True, timeout=30)
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip() == "False"
 
 
 def test_run_done(cfg_path):

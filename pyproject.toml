@@ -21,7 +21,7 @@ go2-dispatch = "go2_dispatcher.transports.cli:main"
 go2-bot      = "go2_dispatcher.transports.telegram_bot:main"
 
 [dependency-groups]
-dev = ["pytest", "pytest-timeout"]
+dev = ["pytest", "pytest-timeout", "pytest-xdist"]
 
 [tool.uv.sources]
 unitree_sdk2py = { git = "https://github.com/unitreerobotics/unitree_sdk2_python" }

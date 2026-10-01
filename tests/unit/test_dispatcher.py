@@ -79,7 +79,6 @@ def reasons(outcome):
     return [r["return_reason"] for r in records(outcome, "llm_request")]
 
 
-# 1
 def test_plan_then_done(tmp_path, registry):
     r = Rig(tmp_path, registry, [plan(walk(), turn(), detect()), done()], [exec_result()] * 3)
     o = r.run()
@@ -90,21 +89,18 @@ def test_plan_then_done(tmp_path, registry):
     assert prompts.NOTICES["plan_complete"] in r.user(1)
 
 
-# 2
 def test_immediate_done(tmp_path, registry):
     r = Rig(tmp_path, registry, [done("nothing to do")])
     o = r.run()
     assert (o.outcome, o.message, o.steps, r.executor.runs) == ("DONE", "nothing to do", [], [])
 
 
-# 3
 def test_abort_with_question(tmp_path, registry):
     r = Rig(tmp_path, registry, [Plan(status="ABORT", message="Which chair?")])
     o = r.run()
     assert (o.outcome, o.message) == ("ABORTED", "Which chair?")
 
 
-# 4
 def test_checkpoint(tmp_path, registry):
     r = Rig(tmp_path, registry,
             [plan(walk(), turn(), detect(), replan_after=1), plan(turn()), done()],
@@ -118,7 +114,6 @@ def test_checkpoint(tmp_path, registry):
     assert o.failures == 0
 
 
-# 5
 def test_failure_abandons_rest(tmp_path, registry):
     r = Rig(tmp_path, registry, [plan(walk(), turn(), detect()), done()],
             [exec_result(), exec_result("error", skill="turn")])
@@ -131,7 +126,6 @@ def test_failure_abandons_rest(tmp_path, registry):
     assert reasons(o)[1] == "failure"
 
 
-# 6
 def test_failure_budget(tmp_path, registry):
     r = Rig(tmp_path, registry, [plan(walk())] * 3, [exec_result("error")] * 3,
             loop={"max_failures": 3})
@@ -141,7 +135,6 @@ def test_failure_budget(tmp_path, registry):
     assert o.failures == 3
 
 
-# 7
 def test_checkpoints_never_count(tmp_path, registry):
     items = [plan(walk(0.2), walk(0.2), replan_after=1)] * 5 + [done()]
     r = Rig(tmp_path, registry, items, [exec_result()] * 5, loop={"max_failures": 1})
@@ -150,7 +143,6 @@ def test_checkpoints_never_count(tmp_path, registry):
     assert o.failures == 0
 
 
-# 8
 def test_call_budget(tmp_path, registry):
     r = Rig(tmp_path, registry, [plan(walk(0.2))] * 4, [exec_result()] * 4,
             loop={"max_llm_calls": 4})
@@ -159,7 +151,6 @@ def test_call_budget(tmp_path, registry):
     assert len(r.planner.calls) == 4 and o.llm_calls == 4
 
 
-# 9
 def test_schema_retry_success(tmp_path, registry):
     bad = {"status": "PLAN", "steps": []}
     r = Rig(tmp_path, registry, [bad, plan(walk()), done()], [exec_result()])
@@ -173,7 +164,6 @@ def test_schema_retry_success(tmp_path, registry):
     assert len(records(o, "plan_invalid")) == 1
 
 
-# 10
 def test_schema_retry_failure(tmp_path, registry):
     bad = {"status": "PLAN", "steps": []}
     r = Rig(tmp_path, registry, [bad, bad])
@@ -182,7 +172,6 @@ def test_schema_retry_failure(tmp_path, registry):
     assert o.llm_calls == 2
 
 
-# 11
 def test_horizon_rejection(tmp_path, registry):
     too_long = {"status": "PLAN", "steps": [walk().model_dump()] * 3}
     r = Rig(tmp_path, registry, [too_long, plan(turn()), done()], [exec_result()],
@@ -195,7 +184,6 @@ def test_horizon_rejection(tmp_path, registry):
     assert records(o, "task_end")[0]["horizon_rejections"] == 1
 
 
-# 12
 def test_bounds_rejection(tmp_path, registry):
     r = Rig(tmp_path, registry, [plan(walk(), turn(), walk(99)), done()])
     o = r.run()
@@ -210,7 +198,6 @@ def test_bounds_rejection(tmp_path, registry):
     assert "- rejected before running: walk(" in user
 
 
-# 13
 def test_motion_budget_rejection(tmp_path, registry):
     r = Rig(tmp_path, registry, [plan(walk(1.5), walk(1.0)), done()],
             motion_budget={"max_distance_m": 2})
@@ -222,7 +209,6 @@ def test_motion_budget_rejection(tmp_path, registry):
     assert o.failures == 1
 
 
-# 14
 def test_budget_charged_on_error(tmp_path, registry):
     r = Rig(tmp_path, registry, [plan(walk(1.5)), done()], [exec_result("error")])
     o = r.run()
@@ -230,7 +216,6 @@ def test_budget_charged_on_error(tmp_path, registry):
     assert records(o, "step_result")[0]["budget_used"]["distance_m"] == 1.5
 
 
-# 15
 def test_llm_unavailable(tmp_path, registry):
     r = Rig(tmp_path, registry, [LLMUnavailable("APIStatusError 500")])
     o = r.run()
@@ -239,7 +224,6 @@ def test_llm_unavailable(tmp_path, registry):
     assert len(records(o, "llm_error")) == 1
 
 
-# 16
 def test_llm_interrupted_operator(tmp_path, registry):
     r = Rig(tmp_path, registry, [LLMInterrupted("operator")])
     o = r.run()
@@ -248,20 +232,19 @@ def test_llm_interrupted_operator(tmp_path, registry):
     assert len(records(o, "llm_interrupted")) == 1
 
 
-# 17
 def test_stop_during_step(tmp_path, registry):
     res = exec_result("interrupted", interrupt_cause="operator",
                       stop_move=stop_move_result("operator", posture="standing"))
     r = Rig(tmp_path, registry, [plan(walk(), turn())], [res])
     o = r.run()
     assert o.outcome == "STOPPED"
+    assert o.failures == 0  # interrupted is not a failure
     assert len(r.planner.calls) == 1
     assert r.executor.stop_moves == []
     sm = records(o, "stop_move")
     assert len(sm) == 1 and sm[0]["ok"] is True and sm[0]["reason"] == "operator"
 
 
-# 18
 def test_stop_between_steps(tmp_path, registry):
     def step1(call):
         call["stop_event"].set()
@@ -274,7 +257,6 @@ def test_stop_between_steps(tmp_path, registry):
     assert r.executor.stop_moves == ["operator"]
 
 
-# 19
 def test_stop_during_llm_call_skips_retry(tmp_path, registry):
     planner_ref = {}
 
@@ -289,13 +271,11 @@ def test_stop_during_llm_call_skips_retry(tmp_path, registry):
     assert r.executor.stop_moves == ["operator"]
 
 
-# 20
 def test_request_stop_idle(tmp_path, registry):
     r = Rig(tmp_path, registry, [])
     assert r.d.request_stop("test") == "idle"
 
 
-# 21
 def test_time_limit_between_steps(tmp_path, registry):
     rig = {}
 
@@ -319,7 +299,6 @@ def _blocking_step(entered: threading.Event, release: threading.Event):
     return step
 
 
-# 22
 def test_busy(tmp_path, registry):
     entered, release = threading.Event(), threading.Event()
     r = Rig(tmp_path, registry, [plan(walk()), done()], [_blocking_step(entered, release)])
@@ -337,7 +316,6 @@ def test_busy(tmp_path, registry):
     assert not r.d.is_busy()
 
 
-# 23
 def test_internal_error_then_next_task(tmp_path, registry):
     r = Rig(tmp_path, registry, [plan(walk()), done()], [RuntimeError("boom")])
     o = r.run()
@@ -414,7 +392,6 @@ def test_task_end_write_fails_index_row_still_written(tmp_path, registry, monkey
     assert not r.d.is_busy()
 
 
-# 24
 def test_previous_task(tmp_path, registry):
     r = Rig(tmp_path, registry, [done("first done"), done("second done")])
     r.run("first task")
@@ -423,7 +400,6 @@ def test_previous_task(tmp_path, registry):
     assert r.d.previous.task == "second task"
 
 
-# 25
 def test_posture(tmp_path, registry):
     sit = PlanStep(skill="sit", params={})
     timeout = exec_result("timeout", stop_move=stop_move_result("step_timeout"))
@@ -437,7 +413,6 @@ def test_posture(tmp_path, registry):
     assert r.d.posture == "unknown"
 
 
-# 26
 def test_stop_move_failure_warns(tmp_path, registry):
     def step1(call):
         call["stop_event"].set()
@@ -451,7 +426,6 @@ def test_stop_move_failure_warns(tmp_path, registry):
     assert o.message.endswith(prompts.STOP_MOVE_WARNING)
 
 
-# 27
 def test_fault_lookup(tmp_path, registry):
     r = Rig(tmp_path, registry, [plan(walk(), turn(), detect()), done()], [exec_result()] * 3,
             stub={"faults": [{"step": 2, "kind": "error"}]})
@@ -459,7 +433,6 @@ def test_fault_lookup(tmp_path, registry):
     assert [c["fault"] for c in r.executor.runs] == [None, "error", None]
 
 
-# 28
 def test_shutdown_while_step_blocks(tmp_path, registry):
     entered, release = threading.Event(), threading.Event()
 

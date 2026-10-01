@@ -15,7 +15,7 @@ The YAML block between the first two lines that are exactly `---` (the file must
 
 | Key | Type | Required | Meaning |
 |---|---|---|---|
-| `name` | string matching `^[a-z][a-z0-9_]*$` | yes | Must equal the folder name and `POLICY.name`. |
+| `name` | string matching `^[a-z][a-z0-9_]*$` | yes | Must equal the folder name and `POLICY.name`; this also makes names unique, so there is no separate duplicate check. |
 | `entrypoint` | string | yes | Module run with `python -m`, for example `go2_skills.walk`. |
 | `description` | one-line string | yes | Shown in the catalog. |
 | `params` | mapping name → ParamSpec | no | Parameters, in catalog order. Absent means no parameters. |

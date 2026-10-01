@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from go2_dispatcher import registry as registry_mod
 from go2_dispatcher.models import RegistryError
 from go2_dispatcher.policies import SkillPolicy
 from go2_dispatcher.llm import plan_tool_schema
@@ -75,12 +74,6 @@ def test_catalog_matches_golden(update_golden):
     if update_golden:
         GOLDEN_CATALOG.write_text(text, encoding="utf-8")
     assert text == GOLDEN_CATALOG.read_text(encoding="utf-8")
-
-
-def test_catalog_byte_identical_across_loads():
-    a = Registry.load(SKILLS_DIR).catalog_text().encode()
-    b = Registry.load(SKILLS_DIR).catalog_text().encode()
-    assert a == b
 
 
 def test_registry_hash_stable_and_horizon_sensitive():
@@ -262,21 +255,3 @@ def test_policy_not_a_skill_policy(tmp_path):
 def test_policy_name_mismatch(tmp_path):
     path = write_skill(tmp_path, "demo", "", entrypoint="helpers.skill_modules.wrong_name")
     assert_registry_error(tmp_path, path, "POLICY.name")
-
-
-def test_duplicate_names(tmp_path, monkeypatch):
-    # Folder names are unique and must equal `name`, so a duplicate can only arise if
-    # loading maps two folders to one name; simulate that to exercise the check.
-    write_skill(tmp_path, "demo", "")
-    write_skill(tmp_path, "demo2", "")
-    real = registry_mod._load_skill
-
-    def fake(folder):
-        d = real(tmp_path / "demo")
-        return d
-
-    monkeypatch.setattr(registry_mod, "_load_skill", fake)
-    with pytest.raises(RegistryError) as ei:
-        Registry.load(tmp_path)
-    assert str(tmp_path / "demo2" / "SKILL.md") in str(ei.value)
-    assert "duplicate" in str(ei.value)

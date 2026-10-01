@@ -279,9 +279,7 @@ class Registry:
         for folder in sorted(skills_dir.iterdir()):
             if not folder.is_dir() or not (folder / SKILL_FILE).is_file():
                 continue
-            desc = _load_skill(folder)
-            if desc.name in skills:
-                raise RegistryError(f"{folder / SKILL_FILE}: duplicate skill name '{desc.name}'")
+            desc = _load_skill(folder)   # name == folder name, so names are unique
             skills[desc.name] = desc
         if not skills:
             raise RegistryError(f"{skills_dir}: no skills found (no */{SKILL_FILE})")

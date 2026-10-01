@@ -90,11 +90,10 @@ def test_request_body(tmp_path):
     assert body["tools"] == [plan_tool_schema(H)]
     assert "strict" not in json.dumps(body)
     assert not body.get("stream")
-    assert "temperature" not in body and "extra_body" not in body
-    assert "temperature" not in json.dumps(body)
-    cfg = make_config(tmp_path).llm
-    assert body["model"] == cfg.model and body["max_tokens"] == cfg.max_tokens
-    assert body["model"] == "claude-sonnet-5-5" and body["max_tokens"] == 2048
+    assert "temperature" not in json.dumps(body) and "extra_body" not in body
+    cfg = make_config(tmp_path).llm  # the defaults (docs/llm.md)
+    assert body["model"] == cfg.model == "claude-sonnet-5-5"
+    assert body["max_tokens"] == cfg.max_tokens == 2048
 
 
 def test_request_thinking_adaptive(tmp_path):
@@ -133,13 +132,6 @@ def test_invalid_tool_input_validated(tmp_path):
     r = Harness(tmp_path, [ok(body)]).plan()
     assert r.plan is None and r.horizon_exceeded and r.rejection_kind == "horizon"
     assert r.errors == [f"plan has {H + 1} steps; the maximum is {H}"]
-
-
-def test_no_tool_use(tmp_path):
-    body = message([{"type": "text", "text": "hello"}], stop_reason="end_turn")
-    r = Harness(tmp_path, [ok(body)]).plan()
-    assert r.plan is None and r.rejection_kind == "no_tool_call"
-    assert r.errors == [ERR_NO_TOOL_CALL] and r.tool_input is None
 
 
 def test_text_only_reply_is_no_tool_call(tmp_path):

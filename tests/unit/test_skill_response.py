@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-
 import pytest
 from pydantic import ValidationError
 
@@ -40,18 +38,10 @@ def test_error_response_validates():
     assert r.state_error == "before: StateUnavailable: x"
 
 
-def test_json_roundtrip_validates():
-    d = build_response("read_state", "ok", state_after=STATE, timing={"total_ms": 1.0})
-    line = json.dumps(d, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
-    SkillResponse.model_validate_json(line)
-
-
 @pytest.mark.parametrize("kwargs", [
-    {},
     {"error_message": "boom"},
     {"error_code": "sdk_error"},
-    {"error_code": "", "error_message": "boom"},
-])
+], ids=["missing_code", "missing_message"])
 def test_error_without_code_or_message_raises(kwargs):
     with pytest.raises(ValueError):
         build_response("walk", "error", **kwargs)

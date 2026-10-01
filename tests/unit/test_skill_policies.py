@@ -1,4 +1,4 @@
-"""Skill policies: constants as class attributes, formulas, motion costs (docs/skills.md)."""
+"""Skill policies: timeouts cover the commanded motion, motion costs (docs/skills.md)."""
 
 from __future__ import annotations
 
@@ -6,38 +6,50 @@ import math
 
 import pytest
 
+from go2_dispatcher.registry import Registry
 from go2_skills import detect_object, sit, stretch, turn, walk
 from go2_skills.policy_base import MotionCost
+from helpers import REPO_ROOT
+
+REGISTRY = Registry.load(REPO_ROOT / "skills")
+
+
+def max_params(name: str) -> dict:
+    """Each param at its registry maximum (enums: first value)."""
+    out = {}
+    for pname, spec in REGISTRY.get(name).params.items():
+        out[pname] = spec.max if spec.max is not None else (spec.values or ("chair",))[0]
+    return out
+
+
+# Commanded motion time plus settle wait, from the skills' own constants.
+MOTION_S = {
+    "walk": lambda p: p["distance_m"] / walk.VELOCITY_MPS,
+    "turn": lambda p: math.radians(p["angle_deg"]) / turn.YAW_RATE_RPS,
+    "sit": lambda p: sit.SitPolicy.SETTLE_S,
+    "stretch": lambda p: stretch.StretchPolicy.SETTLE_S,
+    "detect_object": lambda p: 0.0,
+}
 
 
 def test_names_match_modules():
     for mod in (walk, turn, sit, stretch, detect_object):
         assert mod.POLICY.name == mod.SKILL
+    assert sorted(MOTION_S) == REGISTRY.names()
 
 
-def test_walk_policy():
-    p = {"direction": "forward", "distance_m": 1.5}
-    assert walk.POLICY.timeout_s(p) == pytest.approx(10.0 + 1.5 * 1.5 / 0.3)
-    assert walk.POLICY.motion_cost(p) == MotionCost(distance_m=1.5)
+@pytest.mark.parametrize("name", sorted(MOTION_S))
+def test_timeout_exceeds_motion_at_max_params(name):
+    p = max_params(name)
+    assert REGISTRY.get(name).policy.timeout_s(p) > MOTION_S[name](p)
 
 
-def test_turn_policy():
-    p = {"direction": "left", "angle_deg": 90}
-    assert turn.POLICY.timeout_s(p) == pytest.approx(10.0 + 1.5 * math.radians(90) / 1.0)
-    assert turn.POLICY.motion_cost(p) == MotionCost(rotation_deg=90)
-
-
-def test_fixed_policies():
-    assert sit.POLICY.timeout_s({}) == 15.0 and sit.SitPolicy.SETTLE_S == 3.0
-    assert stretch.POLICY.timeout_s({}) == 20.0 and stretch.StretchPolicy.SETTLE_S == 6.0
-    assert detect_object.POLICY.timeout_s({"target": "chair"}) == 45.0
+def test_motion_costs():
+    assert walk.POLICY.motion_cost({"direction": "forward", "distance_m": 1.5}) == \
+        MotionCost(distance_m=1.5)
+    assert turn.POLICY.motion_cost({"direction": "left", "angle_deg": 90}) == \
+        MotionCost(rotation_deg=90)
     for mod in (sit, stretch, detect_object):
         assert mod.POLICY.motion_cost({}) == MotionCost()
     assert detect_object.POLICY.context_observations == (
         "object_found", "position", "closeness", "confidence")
-
-
-def test_constants_can_be_monkeypatched(monkeypatch):
-    monkeypatch.setattr(walk.WalkPolicy, "BASE_S", 0.0)
-    monkeypatch.setattr(walk.WalkPolicy, "FACTOR", 0.5)
-    assert walk.POLICY.timeout_s({"distance_m": 3.0}) == pytest.approx(5.0)

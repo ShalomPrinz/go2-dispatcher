@@ -1,0 +1,114 @@
+=== operator_message DONE ===
+Walked 1 m.
+
+=== operator_message DONE stop_move_failed ===
+Walked 1 m. WARNING: the stop command to the robot failed. Stop the robot manually.
+
+=== operator_message ABORTED ===
+Which chair?
+
+=== operator_message ABORTED stop_move_failed ===
+Which chair? WARNING: the stop command to the robot failed. Stop the robot manually.
+
+=== operator_message STOPPED ===
+Stopped on request. A stop command was sent to the robot.
+
+=== operator_message STOPPED stop_move_failed ===
+Stopped on request. A stop command was sent to the robot. WARNING: the stop command to the robot failed. Stop the robot manually.
+
+=== operator_message TIME_LIMIT_EXCEEDED ===
+Stopped: the task exceeded its 300s time limit. A stop command was sent to the robot.
+
+=== operator_message TIME_LIMIT_EXCEEDED stop_move_failed ===
+Stopped: the task exceeded its 300s time limit. A stop command was sent to the robot. WARNING: the stop command to the robot failed. Stop the robot manually.
+
+=== operator_message FAILURE_BUDGET_EXHAUSTED ===
+Stopped: the robot failed 3 times while trying this task. Last failure: walk: Move returned 3104
+
+=== operator_message FAILURE_BUDGET_EXHAUSTED stop_move_failed ===
+Stopped: the robot failed 3 times while trying this task. Last failure: walk: Move returned 3104 WARNING: the stop command to the robot failed. Stop the robot manually.
+
+=== operator_message CALL_BUDGET_EXHAUSTED ===
+Stopped: the task reached the limit of 20 planning calls without finishing.
+
+=== operator_message CALL_BUDGET_EXHAUSTED stop_move_failed ===
+Stopped: the task reached the limit of 20 planning calls without finishing. WARNING: the stop command to the robot failed. Stop the robot manually.
+
+=== operator_message LLM_INVALID ===
+Stopped: the model returned an invalid plan twice.
+
+=== operator_message LLM_INVALID stop_move_failed ===
+Stopped: the model returned an invalid plan twice. WARNING: the stop command to the robot failed. Stop the robot manually.
+
+=== operator_message LLM_ERROR ===
+Stopped: the model could not be reached (overloaded).
+
+=== operator_message LLM_ERROR stop_move_failed ===
+Stopped: the model could not be reached (overloaded). WARNING: the stop command to the robot failed. Stop the robot manually.
+
+=== operator_message INTERNAL_ERROR ===
+Stopped: internal error (KeyError). See run log abc123.
+
+=== operator_message INTERNAL_ERROR stop_move_failed ===
+Stopped: internal error (KeyError). See run log abc123. WARNING: the stop command to the robot failed. Stop the robot manually.
+
+=== notice initial ===
+(none)
+
+=== notice plan_complete ===
+Your previous plan ran to completion. Return DONE with a message if the task is complete; otherwise plan the next steps.
+
+=== notice checkpoint ===
+You asked to review results after step 2 of your previous plan. Its remaining steps are listed under "Remaining plan"; include them again if you still want them.
+
+=== notice failure ===
+Your previous plan failed at step 2 (walk): error. This is failure 1 of 3. Revise the plan to avoid that failure, or return ABORT with a message if the task cannot be done.
+
+=== motion budget message ===
+this step needs 1.5 m of travel but only 0.5 m remain for this task
+
+=== rejection_section ===
+## Your previous reply was rejected
+a bad thing
+b
+Call submit_plan again with a corrected plan.
+
+=== BUSY ===
+Busy: a task is running. Send "stop" to stop it.
+
+=== STOPPING ===
+Stopping.
+
+=== NOTHING_RUNNING ===
+Nothing is running.
+
+=== WORKING ===
+Working on it.
+
+=== EMPTY_TASK ===
+Send a task, for example: walk forward one metre.
+
+=== help_text("stub") ===
+I control the Go2 robot. Send a task in plain words. Send "stop" to stop the current task. Backend: stub.
+
+=== system_blocks(5) block 0 ===
+You plan actions for a Unitree Go2 quadruped robot. An operator gives you a task in natural language. You answer by calling the submit_plan tool exactly once.
+
+How the loop works:
+- You return a plan: an ordered list of skill calls. The system runs the steps in order and then calls you again with the results.
+- Each call is independent. Everything you know is in the message: the previous task, the robot's posture, the task, the remaining budget, the steps already executed, and any steps left over from your previous plan.
+- A new plan replaces any previous plan. Steps listed under "Remaining plan" do not run unless you include them again.
+
+Rules:
+- Use only skills from the skill list, with only their declared parameters, and keep values inside the declared ranges.
+- A plan may contain at most 5 steps.
+- status PLAN: one or more steps to run. message is optional.
+- status DONE: the task is complete. No steps. message is required: tell the operator what was done and anything they asked to find out.
+- status ABORT: the task cannot or should not be done with these skills, or it is ambiguous. No steps. message is required: explain why, or ask the operator a clarifying question.
+- replan_after N: stop after step N and call you again before running the rest. Use it when later steps depend on what earlier steps find. Omit it to run the whole plan.
+- If a step fails, the rest of that plan is abandoned and you are called again with the failure.
+- The motion budget limits total travel and total rotation for this task. A plan that would exceed it is rejected before any step runs.
+
+=== system_blocks(5) block 1 ===
+## Skills
+<catalog>

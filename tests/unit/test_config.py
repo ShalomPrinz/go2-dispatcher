@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import os
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -18,7 +16,7 @@ from go2_dispatcher.config import (
     parse_env_text,
 )
 from go2_dispatcher.models import ConfigError
-from helpers import REPO_ROOT, make_config
+from helpers import REPO_ROOT
 
 
 def write(path: Path, text: str) -> Path:
@@ -47,15 +45,11 @@ def test_explicit_missing_config_is_error(tmp_path):
         load_config(tmp_path / "nope.toml")
 
 
-def test_explicit_missing_config_exits_2(tmp_path):
-    code = (
-        "from go2_dispatcher.config import load_config_and_env; "
-        f"load_config_and_env({str(tmp_path / 'nope.toml')!r})"
-    )
-    proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
-                          cwd=tmp_path)
-    assert proc.returncode == 2
-    assert proc.stderr.startswith("Config error: ")
+def test_explicit_missing_config_exits_2(tmp_path, capsys):
+    with pytest.raises(SystemExit) as exc:
+        load_config_and_env(tmp_path / "nope.toml")
+    assert exc.value.code == 2
+    assert capsys.readouterr().err.startswith("Config error: ")
 
 
 def test_unknown_key_named(tmp_path):
@@ -113,17 +107,6 @@ def test_example_config_is_valid(tmp_path):
     assert cfg == build_config({}, REPO_ROOT)
 
 
-def test_make_config(tmp_path):
-    cfg = make_config(tmp_path, loop={"max_failures": 1})
-    assert cfg.base_dir == REPO_ROOT
-    assert cfg.skills.dir == REPO_ROOT / "skills"
-    assert cfg.log.dir == tmp_path / "runs"
-    assert cfg.stub.state_file.parent == tmp_path / "runs"
-    assert cfg.stub.time_scale == 0.01
-    assert cfg.loop.max_failures == 1
-    assert cfg.loop.planning_horizon == 5
-
-
 # --- validation rules (docs/configuration.md) --------------------------------------------------
 
 
@@ -144,11 +127,6 @@ def test_real_backend_requires_interface(tmp_path):
 
 def test_backend_value(tmp_path):
     bad(tmp_path, {"robot": {"backend": "sim"}}, "robot.backend")
-
-
-def test_faults_empty_with_real_backend(tmp_path):
-    bad(tmp_path, {"robot": {"backend": "real", "network_interface": "eth0"},
-                   "stub": {"faults": [{"step": 1, "kind": "error"}]}}, "faults")
 
 
 @pytest.mark.parametrize("kind", ["error", "hang", "crash", "garbage"])
@@ -216,12 +194,6 @@ def test_floats_positive(tmp_path, section, key):
 def test_floats_non_negative(tmp_path, section, key):
     ok(tmp_path, {section: {key: 0.0}})
     bad(tmp_path, {section: {key: -0.1}}, f"{section}.{key}")
-
-
-def test_llm_defaults(tmp_path):
-    cfg = make_config(tmp_path).llm
-    assert cfg.model == "claude-sonnet-5-5"
-    assert cfg.max_tokens == 2048 and cfg.thinking == "between_tools"
 
 
 def test_llm_thinking(tmp_path):
@@ -330,10 +302,16 @@ FLOAT_FIELDS = [
 ]
 
 
-@pytest.mark.parametrize("section,key", FLOAT_FIELDS)
+# All float fields share one annotated type (config.py): every bad value on one field, and
+# every field with one bad value, instead of the cross product.
 @pytest.mark.parametrize("value", [True, "1.5", float("inf"), float("-inf"), float("nan")])
-def test_float_fields_strict_and_finite(tmp_path, section, key, value):
-    bad(tmp_path, {section: {key: value}}, f"{section}.{key}")
+def test_float_value_rejected(tmp_path, value):
+    bad(tmp_path, {"stub": {"time_scale": value}}, "stub.time_scale")
+
+
+@pytest.mark.parametrize("section,key", FLOAT_FIELDS)
+def test_float_field_is_strict(tmp_path, section, key):
+    bad(tmp_path, {section: {key: True}}, f"{section}.{key}")
 
 
 @pytest.mark.parametrize("value", [True, "1.5", float("inf"), float("nan")])

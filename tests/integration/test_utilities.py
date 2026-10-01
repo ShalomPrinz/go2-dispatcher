@@ -3,15 +3,12 @@
 from __future__ import annotations
 
 import json
-import os
-import subprocess
-import sys
 
 import pytest
 
 from go2_dispatcher.models import SkillResponse
 from go2_skills import stub
-from helpers import REPO_ROOT, run_module, single_response, stub_env
+from helpers import run_module, single_response, stub_env
 
 pytestmark = pytest.mark.integration
 
@@ -47,21 +44,17 @@ def test_reports_sitting_from_state_file(tmp_path, name):
 
 
 @pytest.mark.parametrize("name", UTILITIES)
-@pytest.mark.parametrize("arg", ["not json", "[1, 2]", '"x"'])
-def test_invalid_params(tmp_path, name, arg):
-    proc = run_module(name, arg, stub_env(tmp_path))
+def test_invalid_params(tmp_path, name):
+    proc = run_module(name, "not json", stub_env(tmp_path))
     resp = SkillResponse.model_validate(single_response(proc))
     assert proc.returncode == 1
     assert resp.status == "error" and resp.error.code == "invalid_params"
 
 
 @pytest.mark.parametrize("name", UTILITIES)
-@pytest.mark.parametrize("backend", [None, "", "simulator"])
-def test_backend_not_configured(tmp_path, name, backend):
-    env = stub_env(tmp_path)
-    env.pop("GO2_BACKEND")
-    if backend is not None:
-        env["GO2_BACKEND"] = backend
+def test_backend_not_configured(tmp_path, name):
+    """The three bad values are tested in process (tests/unit/test_skill_helpers.py)."""
+    env = stub_env(tmp_path, GO2_BACKEND="simulator")
     proc = run_module(name, {}, env)
     resp = SkillResponse.model_validate(single_response(proc))
     assert proc.returncode == 1
@@ -79,9 +72,9 @@ def test_noise_goes_to_stderr(tmp_path, name):
 
 
 @pytest.mark.parametrize("name", UTILITIES)
-@pytest.mark.parametrize("fault", ["error", "hang", "crash", "garbage"])
-def test_utilities_ignore_faults(tmp_path, name, fault):
-    proc = run_module(name, {}, stub_env(tmp_path, fault=fault), timeout=10)
+def test_utilities_ignore_faults(tmp_path, name):
+    """One `os.environ.pop` covers every kind; hang is the one whose failure is dangerous."""
+    proc = run_module(name, {}, stub_env(tmp_path, fault="hang"), timeout=10)
     resp = SkillResponse.model_validate(single_response(proc))
     assert proc.returncode == 0 and resp.status == "ok"
 
@@ -93,23 +86,3 @@ def test_stub_state_file_missing_parent_is_created(tmp_path):
     assert json.loads(path.read_text()) == {"posture": "sitting"}
     assert stub.read_posture(tmp_path / "nope.json") == "standing"
 
-
-def test_fresh_interpreter_import_has_no_heavy_modules():
-    code = r"""
-import json, pkgutil, importlib, sys
-import go2_skills
-names = sorted(m.name for m in pkgutil.iter_modules(go2_skills.__path__))
-for n in names:
-    importlib.import_module("go2_skills." + n)
-heavy = [m for m in ("unitree_sdk2py", "cv2", "ultralytics", "numpy", "cyclonedds")
-         if m in sys.modules]
-print(json.dumps({"modules": names, "heavy": heavy}))
-"""
-    proc = subprocess.run([sys.executable, "-c", code], cwd=REPO_ROOT, capture_output=True,
-                          text=True, timeout=30, env={k: v for k, v in os.environ.items()
-                                                      if not k.startswith("GO2_")})
-    assert proc.returncode == 0, proc.stderr
-    out = json.loads(proc.stdout.strip().splitlines()[-1])
-    assert {"real", "stub", "result", "backend", "stop_move", "read_state"} <= set(out["modules"])
-    assert out["heavy"] == []
-    assert proc.stderr == ""

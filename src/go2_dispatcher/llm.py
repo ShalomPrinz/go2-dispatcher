@@ -5,15 +5,21 @@ from __future__ import annotations
 import math
 import threading
 import time
-from typing import Any, Callable, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Callable, Literal, Protocol
 
-import anthropic
-import httpx2  # the anthropic SDK (1.x) runs on httpx2; an injected client must be httpx2
 from pydantic import BaseModel
 
 from .config import LLMConfig
 from .models import LLMInterrupted, LLMUnavailable, Plan
 from .validation import validate_tool_input
+
+if TYPE_CHECKING:
+    import anthropic
+    import httpx2  # the anthropic SDK (1.x) runs on httpx2; an injected client must be httpx2
+
+# `anthropic` is imported only inside AnthropicPlanner and the retry helper: it costs about 0.8 s
+# at start-up, and stub runs with the test planner, `catalog`, `state` and `--reset-stub` never
+# call the API (docs/llm.md).
 
 __all__ = [
     "TOOL_NAME", "TOOL_REQUIRED", "STEP_REQUIRED", "plan_tool_schema",
@@ -131,6 +137,8 @@ def _retry_after_s(e: Exception) -> float | None:
 
 
 def _is_retryable(e: anthropic.APIError) -> bool:
+    import anthropic
+
     if isinstance(e, anthropic.APIConnectionError):     # includes APITimeoutError
         return True
     if isinstance(e, anthropic.APIStatusError):
@@ -147,12 +155,16 @@ class AnthropicPlanner:
         self._cfg = llm_cfg
         self._horizon = horizon
         self._wait = wait
+        import anthropic
+
         self._client = anthropic.Anthropic(api_key=api_key, max_retries=0,
                                            http_client=http_client)
 
     def plan(self, *, system: list[str], user: str, tool_schema: dict, call_index: int,
              remaining_s: Callable[[], float], stop_event: threading.Event,
              on_infra_retry: Callable[[dict], None]) -> LLMResult:
+        import anthropic
+
         cfg = self._cfg
         t_start = time.monotonic()
         retries = 0

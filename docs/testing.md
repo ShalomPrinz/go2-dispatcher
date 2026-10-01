@@ -9,17 +9,18 @@ uv run pytest                    # everything that needs no network, API key, ro
 uv run pytest -q tests/unit      # unit tests only
 uv run pytest -m integration     # real subprocesses on the stub backend
 uv run pytest -k context         # by name
+uv run pytest -n auto            # in parallel (pytest-xdist); about 5 s instead of about 12 s
 ```
 
-The default run must pass on any machine after `uv sync` (core + dev dependencies only). Every test has a 30 s timeout (`pytest-timeout`).
+The default run must pass on any machine after `uv sync` (core + dev dependencies only). Every test has a 30 s timeout (`pytest-timeout`). Parallel runs are opt-in (see design decisions below).
 
 ## Layout
 
 | Folder | What |
 |---|---|
-| `tests/unit/` | config, process lock, registry, tool schema, plan validation, bounds, precheck, motion budget, policies, render + context, skill response, posture, prompts, LLM client (mock HTTP), dispatcher loop, `format_outcome`, Telegram handlers |
-| `tests/integration/` | skill contract and stub behaviour, utilities, orphan watchdog, executor, end-to-end with the real executor, CLI subprocesses, live LLM |
-| `tests/golden/` | expected catalog and context texts |
+| `tests/unit/` | config, process lock, registry, tool schema, plan validation, bounds, precheck, motion budget, skill policies (timeout covers the motion), shared skill helpers (`parse_params`, `require_*`, backend selection), render + context, skill response, posture, prompts (fixed-texts golden file), LLM client (mock HTTP), dispatcher loop, `format_outcome`, Telegram handlers |
+| `tests/integration/` | per-skill contract (one subprocess per skill), stub behaviour, one subprocess case per shared mechanism (invalid params, backend not configured, noise, faults), utilities, orphan watchdog, side-effect-free imports, executor, end-to-end with the real executor, CLI subprocesses (including "the CLI does not import `anthropic`"), live LLM |
+| `tests/golden/` | expected catalog, context and fixed texts |
 | `tests/helpers/` | shared helpers (below) |
 | `tests/robot/` | reserved for opt-in robot tests; empty in v1 (the robot checks are manual) |
 
@@ -76,7 +77,7 @@ The stub fault kinds `error`, `hang`, `crash` and `garbage` ([skills.md](skills.
 
 ## Golden files
 
-`tests/golden/catalog.txt` is the exact catalog for the five skills (no trailing newline). The `context_*.txt` files are exact user messages: first call, after a checkpoint, after a failure, after a rejection, with a previous task, and a schema retry. Any change to the wording in `prompts.py`, the renderer, or a `SKILL.md` changes them. Run `uv run pytest --update-golden`, review the diff, and remember that changing the prompt surface changes the registry hash and makes runs incomparable across the change ([skills.md](skills.md#catalog-and-registry-hash)). The fixed texts must stay identical across experimental conditions ([loop-and-context.md](loop-and-context.md)).
+`tests/golden/catalog.txt` is the exact catalog for the five skills (no trailing newline). The `context_*.txt` files are exact user messages: first call, after a checkpoint, after a failure, after a rejection, with a previous task, and a schema retry. `fixed_texts.txt` renders every fixed text in `prompts.py` with example arguments, one labelled section each: every operator message with and without the StopMove warning, every notice, the motion-budget message, the rejection section, the transport texts, `help_text("stub")` and both system blocks for horizon 5. Any change to the wording in `prompts.py`, the renderer, or a `SKILL.md` changes them. Run `uv run pytest --update-golden`, review the diff, and remember that changing the prompt surface changes the registry hash and makes runs incomparable across the change ([skills.md](skills.md#catalog-and-registry-hash)). The fixed texts must stay identical across experimental conditions ([loop-and-context.md](loop-and-context.md)).
 
 ## Robot checks
 
@@ -87,3 +88,12 @@ There are no automated robot tests in v1. The real backend is checked by hand wi
 - The default run must stay offline: no network, API key, SDK or robot. Mark anything else `live_llm` or `robot`.
 - Keep the suite fast. Most of its size comes from parameterised cases; prefer fewer, meaningful tests over more parameter combinations.
 - Use the fakes above for dispatcher logic and the stub with real subprocesses (`integration`) for anything that depends on processes, timeouts or kills.
+- Cut cases only for redundancy (same code path, same input class) or cost (one interpreter start per subprocess case), never to lower the count.
+- Keep parametrisation and shrink the input set; never fold cases into a loop inside one test, which stops at the first failure. Instead of a cross product (fields × values), write two parametrised tests: all bad values on one field, and every field with one bad value.
+- For thresholds and ranges, test just below, at and above each boundary, plus `None`; drop interior points.
+- Test shared skill code (`parse_params`, `require_*`, `capture_stdout`, stub faults, the orphan watchdog) once, in process where possible, plus one subprocess case per mechanism. Per-skill fan-out is only for per-skill code: `test_contract_valid` runs every skill, because each skill is its own entrypoint.
+- Do not re-type fixed texts or constants in assertions; fixed texts are checked through `fixed_texts.txt`. Do not test pydantic, Python, or the test helpers themselves.
+
+## Design decisions
+
+- **Parallel runs are opt-in, not the default.** `pytest-xdist` is a dev dependency and the suite passes with `-n auto` (each test isolates its state under `tmp_path`; the Telegram SIGTERM test signals its own worker process, and xdist runs tests in the worker's main thread, so the signal handler is installed). It is not in `addopts` because `-s` output (used by the live LLM test) is not shown under xdist, and the executor's real-timer tests run under extra CPU load on slower lab machines.
