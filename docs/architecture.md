@@ -100,7 +100,7 @@ Cross-cutting decisions. Decisions that belong to one topic are in that topic's 
 
 ```
 go2-dispatcher/
-├── pyproject.toml, uv.lock     # packaging; extras: robot (SDK, CycloneDDS), vision (YOLO)
+├── pyproject.toml, uv.lock     # packaging; extras: robot (SDK), vision (YOLO)
 ├── config.example.toml         # copy to config.toml
 ├── .env.example                # ANTHROPIC_API_KEY, TELEGRAM_BOT_TOKEN
 ├── dispatcher/                 # dispatcher package; never imports the SDK

@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-robot  = ["unitree_sdk2py", "cyclonedds==0.10.2"]
+robot  = ["unitree_sdk2py"]
 vision = ["ultralytics", "opencv-python", "numpy"]
 
 [project.scripts]

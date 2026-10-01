@@ -9,7 +9,7 @@ Installing the project on a development machine (stub only) and on the lab machi
 - `git`.
 - An Anthropic API key, for `run`, `batch` and `go2 bot`. You do not need one for `catalog`, `state`, `--reset-stub` or the test suite.
 - A Telegram bot token, for `go2 bot` only ([running.md](running.md#setup)).
-- For the real robot (lab machine only): a Unitree Go2 EDU on a wired network interface, CycloneDDS 0.10.2, and the YOLO weights file.
+- For the real robot (lab machine only): a Unitree Go2 EDU on a wired network interface and the YOLO weights file.
 
 ## Install `uv`
 
@@ -31,43 +31,27 @@ This creates `.venv/` from `uv.lock`. Stub mode and the default tests need no SD
 
 ## Lab machine (real robot)
 
-**Unverified.** These steps have not yet been run on the lab machine; `uv sync --extra robot` (which builds the CycloneDDS bindings) has not been tried anywhere. Correct this section when it has been done.
+**Unverified.** These steps have not yet been run on the lab machine; `uv sync --extra robot` has not been tried anywhere. Correct this section when it has been done.
 
-### 1. CycloneDDS
-
-The Python package `cyclonedds==0.10.2` builds against a CycloneDDS C install, which it finds through `CYCLONEDDS_HOME`. Build the C library at the matching release:
-
-```bash
-sudo apt install -y cmake build-essential
-git clone https://github.com/eclipse-cyclonedds/cyclonedds -b releases/0.10.x
-cd cyclonedds && mkdir build install && cd build
-cmake .. -DCMAKE_INSTALL_PREFIX=../install
-cmake --build . --target install
-export CYCLONEDDS_HOME="$(cd ../install && pwd)"
-```
-
-Add the `export CYCLONEDDS_HOME=...` line to your shell profile, so later `uv sync` runs can find it.
-
-### 2. Robot and vision extras
+### 1. Robot and vision extras
 
 ```bash
 cd go2-dispatcher
 uv sync --extra robot --extra vision
 ```
 
-- `robot`: `unitree_sdk2py` (from the `unitree_sdk2_python` git repository) and `cyclonedds==0.10.2`.
+- `robot`: `unitree_sdk2py` (from the `unitree_sdk2_python` git repository), which pulls in `cyclonedds` itself.
 - `vision`: `ultralytics`, `opencv-python`, `numpy`.
 
-**Fallback.** If the `robot` extra cannot be resolved or built on a machine, install the two packages by hand into the project environment, then sync without removing them:
+**Fallback.** If the `robot` extra cannot be resolved or built on a machine, install the SDK by hand into the project environment, then sync without removing it:
 
 ```bash
-uv pip install cyclonedds==0.10.2
 git clone https://github.com/unitreerobotics/unitree_sdk2_python
 uv pip install -e ./unitree_sdk2_python
 uv sync --inexact --extra vision
 ```
 
-### 3. Network interface
+### 2. Network interface
 
 Connect the robot by Ethernet and find the interface name:
 
@@ -85,7 +69,7 @@ network_interface = "enp0s31f6"
 
 The interface is never hardcoded. With `backend = "real"`, a blank `network_interface` is a config error.
 
-### 4. YOLO weights
+### 3. YOLO weights
 
 `detect_object` never downloads weights. Place the file at the configured path (`robot.yolo_weights`, default `models/yolov8n.pt` relative to the base dir; `models/` is gitignored):
 
@@ -96,6 +80,10 @@ mv yolov8n.pt models/
 ```
 
 If the file is missing, `detect_object` returns the error `weights_missing`.
+
+### Troubleshooting
+
+**`Could not locate cyclonedds`.** The SDK depends on `cyclonedds==0.10.2`, which has prebuilt wheels only for Python 3.10 on x86-64. Elsewhere it compiles against a CycloneDDS C install: build release `0.10.x` from <https://github.com/eclipse-cyclonedds/cyclonedds>, set `CYCLONEDDS_HOME` to its install prefix in your shell profile, and rerun `uv sync`.
 
 ## Configuration and secrets
 
@@ -134,6 +122,7 @@ uv run go2 --backend real state     # should return within about 1 s
 
 ## Design decisions
 
-- **Python `>=3.10,<3.12`**, the range expected to work with `unitree_sdk2py` and `cyclonedds==0.10.2`; `tomli` covers TOML parsing on 3.10. Pin the exact version once the lab machine is set up ([roadmap.md](roadmap.md#pending-human-work)).
-- **The robot packages are a locked optional extra, not a manual install.** `uv lock` works with the `robot` extra on the development machine (WSL2, Python 3.10, no CycloneDDS installed): `cyclonedds==0.10.2` resolves from PyPI and `unitree_sdk2py` from git, so `uv.lock` pins the robot packages too and the lab machine installs from the same lock as everyone else. The worry was that locking would fail on machines without CycloneDDS; it did not. The manual install stays documented as a fallback for a machine where the extra cannot be resolved or built.
+- **Python `>=3.10,<3.12`**, the range expected to work with `unitree_sdk2py` and its `cyclonedds==0.10.2` dependency; `tomli` covers TOML parsing on 3.10. Pin the exact version once the lab machine is set up ([roadmap.md](roadmap.md#pending-human-work)).
+- **The robot packages are a locked optional extra, not a manual install.** `uv lock` works with the `robot` extra on the development machine (WSL2, Python 3.10, no CycloneDDS installed): `unitree_sdk2py` resolves from git and its `cyclonedds` dependency from PyPI, so `uv.lock` pins the robot packages too and the lab machine installs from the same lock as everyone else. The worry was that locking would fail on machines without CycloneDDS; it did not. The manual install stays documented as a fallback for a machine where the extra cannot be resolved or built.
+- **`cyclonedds` is not listed in the `robot` extra.** The project never imports it; the SDK declares and pins it, and `uv.lock` records the version. Building the C library is a troubleshooting step, not a setup step, because the Python 3.10 x86-64 wheel needs none.
 - **`robot` and `vision` are optional extras**, so the core install, stub mode and the default tests need no SDK, CycloneDDS or vision libraries ([architecture.md](architecture.md#design-decisions)).

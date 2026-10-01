@@ -7,7 +7,7 @@ The Go2 EDU side of the system: what the code assumes about the robot, how it ta
 ## Robot facts
 
 - **Unitree Go2 EDU**, controlled directly through the Unitree SDK2 Python bindings (`unitree_sdk2py`) over CycloneDDS. No ROS.
-- Reached over a wired Ethernet interface, on the robot's subnet (usually `192.168.123.x`; the robot is `192.168.123.161`). The interface name is a config value (`robot.network_interface`), never hardcoded ([setup.md](../../docs/setup.md#3-network-interface)).
+- Reached over a wired Ethernet interface, on the robot's subnet (usually `192.168.123.x`; the robot is `192.168.123.161`). The interface name is a config value (`robot.network_interface`), never hardcoded ([setup.md](../../docs/setup.md#2-network-interface)).
 - DDS domain 0.
 - The IMU and sport mode are assumed available through `SportModeState` on topic `rt/sportmodestate` (*unverified*).
 - **SDK action calls return when the command is accepted, not when the motion ends.** This is why `sit` and `stretch` wait after their call ([settle waits](#settle-waits)).

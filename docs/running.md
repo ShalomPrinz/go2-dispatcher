@@ -125,7 +125,7 @@ Only `stop` is recognised during a task. Other messages sent during a task are a
 
 | | Stub (`robot.backend = "stub"`, default) | Real (`robot.backend = "real"`) |
 |---|---|---|
-| Needs | core dependencies only | `uv sync --extra robot --extra vision`, CycloneDDS, `robot.network_interface`, YOLO weights ([setup.md](setup.md#lab-machine-real-robot)) |
+| Needs | core dependencies only | `uv sync --extra robot --extra vision`, `robot.network_interface`, YOLO weights ([setup.md](setup.md#lab-machine-real-robot)) |
 | Motion | none; the stub remembers only standing/sitting in `stub.state_file` | real SDK calls ([robot.md](../skills/docs/robot.md)) |
 | Durations | real durations × `stub.time_scale` | real time |
 | `detect_object` | reports what `stub.detections` lists (confidence 0.9) | front camera + YOLO |

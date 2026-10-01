@@ -20,7 +20,7 @@ Documents that cover the whole system or both services.
 | [architecture.md](architecture.md) | Components and data flow, process model, repository layout, glossary, why a purpose-built dispatcher instead of OpenClaw (with what was lost and how it is covered), cross-cutting design decisions. |
 | [safety.md](safety.md) | Everything that limits or stops the robot: the stop path and stop word, step timeouts, task time limit, motion budget, single-instance lock, orphan handling, the e-stop, supervised-operation rules. |
 | [configuration.md](configuration.md) | Every config key (type, default, tunable or not), `.env` and secrets, precedence, CLI overrides, path resolution, validation rules. |
-| [setup.md](setup.md) | Installing on a development machine and on the lab machine (uv, CycloneDDS, robot and vision extras, network interface, YOLO weights), Python version, verifying an install. |
+| [setup.md](setup.md) | Installing on a development machine and on the lab machine (uv, robot and vision extras, CycloneDDS troubleshooting, network interface, YOLO weights), Python version, verifying an install. |
 | [running.md](running.md) | Operating the system: CLI commands and exit codes, `batch` files, Ctrl+C, Telegram setup, commands and replies, stub vs real backend, switching skill sets. |
 | [testing.md](testing.md) | Running the tests: layout, markers and opt-in flags (live LLM, robot), helpers and fakes, golden files. |
 | [roadmap.md](roadmap.md) | What comes next: the v2 plan (verification layer, verdicts, verifiability per skill, preconditions, escalation, `ASK`, stub upgrade, existing seams), future ideas, open questions (including experiment design), the gate before experiments, and pending human work with owners. |

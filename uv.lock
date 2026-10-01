@@ -464,7 +464,6 @@ dependencies = [
 
 [package.optional-dependencies]
 robot = [
-    { name = "cyclonedds" },
     { name = "unitree-sdk2py" },
 ]
 vision = [
@@ -485,7 +484,6 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "anthropic" },
-    { name = "cyclonedds", marker = "extra == 'robot'", specifier = "==0.10.2" },
     { name = "httpx" },
     { name = "httpx2" },
     { name = "numpy", marker = "extra == 'vision'" },
