@@ -1,6 +1,6 @@
 # Testing
 
-Spec: §19.
+Running the test suite: layout, markers and opt-in flags, helpers and fakes, golden files. The manual robot checks are in [robot.md](robot.md#supervised-robot-checklist).
 
 ## Running the tests
 
@@ -21,7 +21,7 @@ The default run must pass on any machine after `uv sync` (core + dev dependencie
 | `tests/integration/` | skill contract and stub behaviour, utilities, orphan watchdog, executor, end-to-end with the real executor, CLI subprocesses, live LLM |
 | `tests/golden/` | expected catalog and context texts |
 | `tests/helpers/` | shared helpers (below) |
-| `tests/robot/` | reserved for opt-in robot tests; the robot checks are the manual checklist below |
+| `tests/robot/` | reserved for opt-in robot tests; empty in v1 (the robot checks are manual) |
 
 ## Markers and flags
 
@@ -34,7 +34,7 @@ The default run must pass on any machine after `uv sync` (core + dev dependencie
 Options (defined in `tests/conftest.py`):
 
 - `--run-live`: run `live_llm` tests. They are skipped without it, and also skipped if `ANTHROPIC_API_KEY` is not set.
-- `--run-robot`: run `robot` tests. There are none in v1; the robot checks are manual (below).
+- `--run-robot`: run `robot` tests. There are none in v1; the robot checks are the supervised checklist in [robot.md](robot.md#supervised-robot-checklist).
 - `--update-golden`: rewrite the golden files instead of comparing against them. Review the diff with `git diff tests/golden` before committing.
 
 ### Live LLM test
@@ -45,7 +45,7 @@ ANTHROPIC_API_KEY=sk-ant-... uv run pytest --run-live -s tests/integration/test_
 
 It runs the task "turn left 90 degrees, then tell me if you see a chair" on the stub with `stub.detections = {chair = "center:near"}`. It passes if the task ends `DONE`, the message mentions the chair, and the run log has no `plan_invalid` or `horizon_rejection` record. With `-s`, it prints the run log path.
 
-It uses `llm.model` from the defaults (`claude-sonnet-5-5`, `thinking = "between_tools"`, `tool_choice` auto, no `temperature`; see Request parameters in `docs/configuration.md`). This has not been run live yet.
+It uses the default LLM settings (`claude-sonnet-5-5`, `thinking = "between_tools"`, `tool_choice` auto, no `temperature`; see [llm.md](llm.md#the-request)). **It has not been run live yet**; running it is the pending check of the request parameters ([roadmap.md](roadmap.md#pending-human-work)).
 
 ## Helpers (`tests/helpers/`)
 
@@ -72,38 +72,18 @@ uv run go2-dispatch run "turn left"
 
 ## Fault injection in tests
 
-The stub fault kinds `error`, `hang`, `crash` and `garbage` (`docs/running.md`) drive the executor and end-to-end tests through `stub.faults` (by dispatched step) or the `GO2_STUB_FAULT` env var (one process). `GO2_STUB_NOISE=1` makes the stub write junk to stdout, to check that the response line stays clean.
+The stub fault kinds `error`, `hang`, `crash` and `garbage` ([skills.md](skills.md#fault-injection)) drive the executor and end-to-end tests through `stub.faults` (by dispatched step) or the `GO2_STUB_FAULT` env var (one process). `GO2_STUB_NOISE=1` makes the stub write junk to stdout, to check that the response line stays clean.
 
 ## Golden files
 
-`tests/golden/catalog.txt` is the exact catalog for the five skills (no trailing newline). The `context_*.txt` files are exact user messages: first call, after a checkpoint, after a failure, after a rejection, with a previous task, and a schema retry. Any change to the wording in `prompts.py`, the renderer, or a `SKILL.md` changes them. Run `uv run pytest --update-golden`, review the diff, and remember that changing the prompt surface changes the registry hash and makes runs incomparable across the change (OD-9).
+`tests/golden/catalog.txt` is the exact catalog for the five skills (no trailing newline). The `context_*.txt` files are exact user messages: first call, after a checkpoint, after a failure, after a rejection, with a previous task, and a schema retry. Any change to the wording in `prompts.py`, the renderer, or a `SKILL.md` changes them. Run `uv run pytest --update-golden`, review the diff, and remember that changing the prompt surface changes the registry hash and makes runs incomparable across the change ([skills.md](skills.md#catalog-and-registry-hash)). The fixed texts must stay identical across experimental conditions ([loop-and-context.md](loop-and-context.md)).
 
-## Robot checklist (supervised, manual)
+## Robot checks
 
-Run this on the lab machine with `robot.backend = "real"`, **in this order**, with the robot **standing**, the area clear, and the remote e-stop in hand. Read `docs/safety.md` first. Record every result in `docs/decisions.md` (date, value measured, what was decided).
+There are no automated robot tests in v1. The real backend is checked by hand with the supervised checklist in [robot.md](robot.md#supervised-robot-checklist), where its results are also recorded.
 
-Commands use `go2-dispatch` with a real-backend config. Steps are run as one-step tasks, or with the skill by hand (`docs/skills.md`), whichever is easier to observe.
+## Writing tests
 
-1. `go2-dispatch state` returns within 1 s. Record `mode`, `body_height` and `position` while standing.
-2. `walk` forward 0.5 m; `turn` left 90°. Check the angle visually.
-3. `stretch` from standing. Measure how long the routine takes (this tunes `StretchPolicy.SETTLE_S`; OD-10).
-4. `detect_object person` with a person in view.
-5. Operator `stop` during a 3 m walk. **Measure** the kill-to-stop latency (`stop_move.timing.stop_call_ms` from the run log, plus the observed time). Record it; there is no pass threshold.
-6. Step timeout during a walk: temporarily set `WalkPolicy.BASE_S = 0` and `FACTOR = 0.5` in `src/go2_skills/walk.py`. The robot must stop, and the outcome must be `timeout`. Restore the values afterwards.
-7. `sit`. Measure how long StandDown takes (this tunes `SitPolicy.SETTLE_S`). Then `go2-dispatch state`: record `mode` and `body_height` while sitting (this resolves OD-2).
-8. `walk` while down. Record the actual SDK return code and behaviour (this resolves OD-4).
-9. Stand the robot up with the remote (there is no `stand` skill; OD-1).
-
-| # | Date | Result / value | Decision |
-|---|---|---|---|
-| 1 | | | |
-| 2 | | | |
-| 3 | | | |
-| 4 | | | |
-| 5 | | | |
-| 6 | | | |
-| 7 | | | |
-| 8 | | | |
-| 9 | | | |
-
-(Use this table as a worksheet. The record of each result goes in `docs/decisions.md`.)
+- The default run must stay offline: no network, API key, SDK or robot. Mark anything else `live_llm` or `robot`.
+- Keep the suite fast. Most of its size comes from parameterised cases; prefer fewer, meaningful tests over more parameter combinations.
+- Use the fakes above for dispatcher logic and the stub with real subprocesses (`integration`) for anything that depends on processes, timeouts or kills.

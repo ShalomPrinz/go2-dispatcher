@@ -1,6 +1,8 @@
 # Run log
 
-Every task writes a complete JSONL log. It is the dataset for the study: tokens, latency and replanning can all be measured from it. Spec: §17.
+Every task writes a complete JSONL log. It is the dataset for the study ([project.md](project.md)): tokens, latency and replanning are all computed from it, and it holds the exact prompts and every robot state sample. The record types and their fields are a contract: analysis scripts depend on them, so a change here is a change to the dataset.
+
+What counts as a failure, an LLM call or a rejection is defined in [loop-and-context.md](loop-and-context.md#what-counts); this page says where each is recorded.
 
 ## Files
 
@@ -12,6 +14,10 @@ Every task writes a complete JSONL log. It is the dataset for the study: tokens,
 `run_id` is a uuid4 hex per task. `session_id` is a uuid4 hex per process (one CLI invocation, one bot run); it links the tasks of one session.
 
 Each line is written and flushed while a lock is held, so a crash leaves a usable partial log, and the `stop_requested` record written from the transport thread cannot interleave with other lines.
+
+## Record order
+
+A task's file starts with `task_start` and ends with `task_end`. In between, for each LLM call: `llm_request`, any `llm_retry`, then `llm_response` (followed by `plan`, `plan_invalid` or `horizon_rejection`) or `llm_error` / `llm_interrupted`. For each step of a valid plan: `step_start` and `step_result` for a dispatched step, only `step_result` for a step rejected by the pre-check, and a `stop_move` after the `step_result` of a killed step. `stop_requested` can appear anywhere (it is written from the transport thread). A stop or time limit that kills a step shows up as that step's `stop_move`; one that arrives while no step runs adds a `stop_move` just before `task_end`. An internal error adds `exception` and a `stop_move`.
 
 ## Envelope
 
@@ -123,7 +129,7 @@ All `StopMoveResult` fields: `ok`, `reason` (`operator` / `task_time_limit` / `s
 
 ### `exception`
 
-`where`, `exception_type`, `message`, `traceback`. The task ends `INTERNAL_ERROR`; `task_end` and the index line are still written, even if writing this record, killing the skill or the StopMove fails. The exception class is stored as `exception_type`, not `type`, because `type` is the record type (see `docs/decisions.md`, T9).
+`where` (`run_task`), `exception_type`, `message`, `traceback`. The task ends `INTERNAL_ERROR`; `task_end` and the index line are still written, even if writing this record, killing the skill or the StopMove fails. The exception class is stored as `exception_type`, not `type`, because `type` is the record type.
 
 ### `task_end`
 
@@ -141,24 +147,31 @@ One line per finished task, without the envelope:
 {"run_id":"b6bb52fe55bb41589a5a1fc51c463f72","file":"20261001T113603_b6bb52fe.jsonl","ts_start":"2026-10-01T11:36:03.636693+03:00","task":"turn left 90 degrees, then tell me if you see a chair","source":"cli","outcome":"DONE","condition":"","backend":"stub","model":"claude-sonnet-5-5","thinking":"between_tools","planning_horizon":5,"max_llm_calls":20,"registry_hash":"bf06b5af6abd480b","llm_calls":2,"failures":0,"steps_dispatched":2,"input_tokens":200,"output_tokens":40,"duration_ms":156.1}
 ```
 
-`file` is relative to `log.dir`. A task whose log could not be opened has no index line.
+`file` is relative to `log.dir`. A task whose log could not be opened has no index line. `input_tokens` and `output_tokens` are the sums of those two `usage` fields only; any other numeric `usage` fields (for example cache counters) are summed in `task_end.usage_totals`. Use the index to select tasks by condition, then read their files for per-call detail.
 
 ## Computing the study metrics
 
-| Metric | From |
+Group tasks by condition first: `condition`, `registry_hash` (the skill set and prompt surface), `model`, `thinking`, `planning_horizon` and `max_llm_calls` are in every index line; the full config is in `task_start.config`. Runs with different registry hashes saw different prompts and are not directly comparable.
+
+| Metric | How to compute it |
 |---|---|
-| Tokens per task | `index.jsonl` `input_tokens` / `output_tokens`, or `task_end.usage_totals` (includes cache fields if any) |
+| Task outcome, success rate | `index.jsonl` `outcome` (`DONE` = success); outcome codes in [loop-and-context.md](loop-and-context.md#task-outcomes) |
+| Tokens per task | `index.jsonl` `input_tokens` / `output_tokens`, or `task_end.usage_totals` (all numeric usage fields) |
 | Tokens per call | `llm_response.usage` |
-| LLM latency per call | `llm_response.latency_ms` (successful attempt) and `total_ms` (with retries and backoff); `llm_retry.attempt_latency_ms` |
-| Calls by return reason | count `llm_request` by `return_reason` |
-| Failures, rejections | `task_end.failures`, `task_end.rejections`; `step_result.outcome` |
-| Horizon rejection rate | `horizon_rejection` records ÷ `llm_response` records |
-| Skill wall time | `step_result.duration_ms` |
-| Process overhead | `step_result.duration_ms − response.timing.total_ms` |
-| Stop latency | `stop_move.response.timing.stop_call_ms`, `stop_move.duration_ms` |
+| LLM calls per task | `index.jsonl` `llm_calls` = number of `llm_response` records (schema retries included, infra retries not) |
+| Replanning frequency | count `llm_request` by `return_reason`. Replans are the calls after the first: `failure` (stop-and-report after a failed or rejected step), `checkpoint` (the model asked to review), `plan_complete` (the plan ran out before the task was done). Report `schema_retry` separately: it re-asks the same question after an invalid reply. At horizon 1 every step ends in `plan_complete`, so compare reasons, not just counts |
+| LLM latency per call | `llm_response.latency_ms` (successful attempt only) and `total_ms` (including failed attempts and backoff) |
+| Infrastructure retries | `llm_retry` records (`error_type`, `status_code`, `attempt_latency_ms`, `sleep_s`); `llm_response.attempts` |
+| Task latency | `index.jsonl` / `task_end` `duration_ms` |
+| Failures and rejections | `task_end.failures`, `task_end.rejections` (pre-check rejections only); per step `step_result.outcome` and `error_code` |
+| Invalid replies | `plan_invalid` by `rejection_kind`; horizon rejection rate = `horizon_rejection` records ÷ `llm_response` records (monitoring rule in [llm.md](llm.md#horizon-rejection)) |
+| Skill wall time | `step_result.duration_ms` (whole subprocess) |
+| Process overhead per step | `step_result.duration_ms − response.timing.total_ms` (interpreter start and teardown outside the skill's own timing) |
+| Stop latency | `stop_move.response.timing.stop_call_ms` (utility start to `StopMove()` return) and `stop_move.duration_ms` (whole utility process) |
+| Motion commanded | `step_start.motion_cost`, `task_end.budget_used` |
+| Robot state | `step_result.response.state_before` / `state_after`; `stop_move.response.state_after` ([robot.md](robot.md#state-sampling)) |
 | Exact prompts | `task_start.system_text` / `catalog_text` / `tool_schema` + `llm_request.user_text` |
-| Robot state | `step_result.response.state_before` / `state_after`; `stop_move.response.state_after` |
-| Condition | `condition`, `registry_hash`, `model`, `thinking`, `planning_horizon`, `max_llm_calls` (index and `task_start`) |
+| Session continuity | `session_id` links tasks of one process; `task_start.previous_task` and `posture` show what carried over |
 
 ## Analysis example
 
@@ -197,3 +210,13 @@ for cond, rows in sorted(by_cond.items()):
           f"horizon rejections {horizon_rej}/{responses}, "
           f"mean process overhead {sum(overhead)/max(len(overhead),1):.0f} ms")
 ```
+
+## Design decisions
+
+- **One file per task plus an index.** A task is the unit of analysis; the index lets analysis select tasks by condition without parsing every file.
+- **Every line is flushed as it is written**, under a lock, so a crash leaves a usable partial log and lines from the transport thread never interleave.
+- **The exact prompt surface is logged with every task** (system text, catalog, tool schema, registry hash) and the exact user message with every call, so any call can be reconstructed and conditions can be told apart by hash.
+- **The return reason is logged on every call.** Without it, horizon 1 would look like constant replanning; with it, `plan_complete` calls can be separated from replans after a failure ([loop-and-context.md](loop-and-context.md#return-reasons)).
+- **Horizon rejections are their own record type**, so their rate can be measured per condition rather than hidden among other invalid replies ([llm.md](llm.md#horizon-rejection)).
+- **Infrastructure retries are logged separately and never counted as LLM calls or replans**, so provider trouble does not contaminate the replanning metric.
+- **Full robot state is logged, not just posture**, as the data for setting v2 verification thresholds ([roadmap.md](roadmap.md#v2-plan)).

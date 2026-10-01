@@ -1,25 +1,24 @@
 # Running
 
-There are two entry points over the same dispatcher: `go2-dispatch` (CLI) and `go2-bot` (Telegram). Run them with `uv run`, or activate `.venv` first. Spec: §16.
+Operating the system. There are two entry points over the same dispatcher: `go2-dispatch` (CLI) and `go2-bot` (Telegram). Run them with `uv run`, or activate `.venv` first. Installing is in [setup.md](setup.md); what the dispatcher does with a task is in [loop-and-context.md](loop-and-context.md); stopping and limits are in [safety.md](safety.md).
 
 ## CLI: `go2-dispatch`
 
 ```
-go2-dispatch [--config PATH] [--backend {stub,real}] [--horizon N] [--fault STEP:KIND ...] run TASK
-go2-dispatch [same options] batch TASKS_FILE
-go2-dispatch [--config PATH] --reset-stub
-go2-dispatch [--config PATH] catalog
-go2-dispatch [--config PATH] [--backend {stub,real}] state
+go2-dispatch [-h] [--config CONFIG] [--backend {stub,real}] [--horizon HORIZON]
+             [--fault STEP:KIND] [--reset-stub] COMMAND ...
+
+COMMAND: run TASK | batch TASKS_FILE | catalog | state
 ```
 
-Global options go **before** the command (argparse), for example `go2-dispatch --backend real state`, not `go2-dispatch state --backend real`. Every command accepts every global option. Exactly one of a command or `--reset-stub` is required.
+Global options go **before** the command (argparse), for example `go2-dispatch --backend real state`, not `go2-dispatch state --backend real`. Every command accepts every global option; the commands take no options of their own. Exactly one of a command or `--reset-stub` is required; `--reset-stub` with a command is a usage error. `-h` / `--help` works globally and after each command.
 
 | Option | Meaning |
 |---|---|
-| `--config PATH` | Config file (default `./config.toml`; see `docs/configuration.md`). |
+| `--config CONFIG` | Config file (default `./config.toml`; see [configuration.md](configuration.md)). |
 | `--backend {stub,real}` | Overrides `robot.backend`. |
-| `--horizon N` | Overrides `loop.planning_horizon`. |
-| `--fault STEP:KIND` | Injects a stub fault at dispatched step `STEP`. Repeatable. Replaces `stub.faults`. |
+| `--horizon HORIZON` | Overrides `loop.planning_horizon` (an integer). |
+| `--fault STEP:KIND` | Injects a stub fault at dispatched step `STEP`. Repeatable. Replaces `stub.faults` ([skills.md](skills.md#fault-injection)). |
 | `--reset-stub` | Resets the stub state file to `stub.initial_posture` and exits. |
 
 | Command | Takes the lock | Resets the stub | Needs `ANTHROPIC_API_KEY` | What it does |
@@ -43,7 +42,7 @@ Steps: 2 run, 0 failed
 2. detect_object(target=chair) -> ok: object_found=true, position=center, closeness=near, confidence=0.9
 ```
 
-The first line is `{OUTCOME}: {message}`. `Steps:` counts dispatched steps and failures (rejections count as failures). Then each recorded step is shown, rendered as in the LLM context (`docs/loop-and-context.md`). If the whole text is longer than 4000 characters, the oldest step lines are replaced by `({n} earlier lines omitted)`.
+The first line is `{OUTCOME}: {message}`. `Steps:` counts dispatched steps and failures (rejections count as failures). Then each recorded step is shown, rendered as in the LLM context ([loop-and-context.md](loop-and-context.md#user-message)). If the whole text is longer than 4000 characters, the oldest step lines are replaced by `({n} earlier lines omitted)`.
 
 `batch` prints `Task {i}: {task}` before each outcome, with a blank line between tasks.
 
@@ -75,7 +74,7 @@ walk forward one metre, then tell me if you see a person
 sit down
 ```
 
-Tasks run one after another in one process. The previous task's summary and the robot posture **carry over** from line to line (OD-6). One `sit` affects every later task, because no skill can stand the robot up (OD-1).
+Tasks run one after another in one process. The previous task's summary and the robot posture **carry over** from line to line, as they do between Telegram messages. One `sit` affects every later task, because no skill can stand the robot up ([robot.md](robot.md#open-robot-side-questions)). A reset per task is a future idea ([roadmap.md](roadmap.md#future-ideas)).
 
 ## Telegram: `go2-bot`
 
@@ -118,14 +117,14 @@ Messages from users who are not in `allowed_user_ids` get no reply (a warning li
 
 If a handler raises an error, the bot replies `Error: {ExceptionType}` and prints the traceback to stderr.
 
-Only `stop` is recognised during a task. Other messages sent during a task are answered `Busy` and are not forwarded to the model (a future idea; see `docs/future-ideas.md`).
+Only `stop` is recognised during a task. Other messages sent during a task are answered `Busy` and are not forwarded to the model (forwarding them is a future idea; see [roadmap.md](roadmap.md#future-ideas)).
 
 ## Stub vs real
 
 | | Stub (`robot.backend = "stub"`, default) | Real (`robot.backend = "real"`) |
 |---|---|---|
-| Needs | core dependencies only | `uv sync --extra robot --extra vision`, CycloneDDS, `robot.network_interface`, YOLO weights (see `docs/setup.md`) |
-| Motion | none; the stub remembers only standing/sitting in `stub.state_file` | real SDK calls |
+| Needs | core dependencies only | `uv sync --extra robot --extra vision`, CycloneDDS, `robot.network_interface`, YOLO weights ([setup.md](setup.md#lab-machine-real-robot)) |
+| Motion | none; the stub remembers only standing/sitting in `stub.state_file` | real SDK calls ([robot.md](robot.md)) |
 | Durations | real durations × `stub.time_scale` | real time |
 | `detect_object` | reports what `stub.detections` lists (confidence 0.9) | front camera + YOLO |
 | Startup posture | reset to `stub.initial_posture` | read with `read_state` (`unknown` if that fails) |
@@ -148,7 +147,7 @@ The registry loads every subfolder of `skills.dir` that contains a `SKILL.md`. T
 dir = "skill_sets/fine"
 ```
 
-The registry hash changes with the catalog, so runs with different skill sets can be told apart in `index.jsonl`. Check a skill set with `go2-dispatch --config ... catalog`. A bad skill set exits 2 with `Registry error: <message naming the file>`. See `docs/skills.md` for the SKILL.md format.
+The registry hash changes with the catalog, so runs with different skill sets can be told apart in `index.jsonl`. Check a skill set with `go2-dispatch --config ... catalog`. A bad skill set exits 2 with `Registry error: <message naming the file>`. The `SKILL.md` format is in [skills.md](skills.md).
 
 ## Single-instance lock
 
@@ -159,3 +158,10 @@ Another dispatcher is running (lock: /path/to/runs/.dispatcher.lock).
 ```
 
 and exit code 2. This stops two processes from driving one robot, overwriting the stub state file, or mixing lines in `index.jsonl`. `catalog` and `state` do not take the lock, so you can run them while a task is running. The lock is tied to `log.dir`: two configs with different `log.dir` values do not block each other, so do not point two configs at the same robot.
+
+## Design decisions
+
+- **Two thin transports over one dispatcher.** The CLI and the bot only parse input, format the outcome and handle signals; everything else is shared, so CLI runs and Telegram runs produce the same logs. The Telegram integration replaces OpenClaw's channels ([architecture.md](architecture.md#why-a-purpose-built-dispatcher)).
+- **`batch` carries the previous task and posture across lines**, because that is how the robot behaves between messages: it remembers. Experiments may need independent tasks later ([roadmap.md](roadmap.md#future-ideas)).
+- **The bot stops a running task on SIGINT/SIGTERM before the Telegram library shuts down.** In python-telegram-bot 22.x, shutdown waits for every in-flight handler, so without this a running task would continue until it ended by itself. The bot replaces the library's signal handlers with one that calls the stop path, keeping `Dispatcher.shutdown()` as the backstop.
+- **Long polling**, so the bot needs no public address on the lab network.

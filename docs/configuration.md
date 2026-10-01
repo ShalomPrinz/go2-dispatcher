@@ -1,6 +1,6 @@
 # Configuration
 
-Configuration is defined in `src/go2_dispatcher/config.py` (pydantic models). This page lists every key it accepts. Spec: §5.
+Configuration is defined in `src/go2_dispatcher/config.py` (pydantic models); `config.example.toml` lists every key with its default. This page describes every key it accepts, where values come from, and how they are validated.
 
 ## Sources and precedence
 
@@ -26,7 +26,7 @@ So `go2-dispatch --config /lab/exp1/config.toml run ...` writes logs to `/lab/ex
 
 ## Keys
 
-Every section and every model rejects unknown keys (`extra="forbid"`). (sketch) marks a starting value that is expected to be tuned (OD-7).
+Every section and every model rejects unknown keys (`extra="forbid"`). *tunable* marks a starting value that is expected to be tuned from logs and robot runs (marked `*tunable*` in the code and the example file).
 
 Types:
 - **int** keys reject floats, strings and booleans (`3`, not `3.0`).
@@ -43,31 +43,31 @@ Types:
 
 | Key | Type | Default | Rule | Meaning |
 |---|---|---|---|---|
-| `model` | str | `"claude-sonnet-5-5"` (sketch) | | Anthropic model id. Logged in `task_start.config` and `index.jsonl`. |
+| `model` | str | `"claude-sonnet-5-5"` *tunable* | | Anthropic model id. Logged in `task_start.config` and `index.jsonl`. |
 | `max_tokens` | int | `2048` | ≥ 1 | `max_tokens` for each request. |
 | `thinking` | `"between_tools"` \| `"adaptive"` | `"between_tools"` | | Sent as `thinking={"type": ...}`. `between_tools` keeps thinking off; `adaptive` lets the model think (use it only as a deliberate experimental condition). Logged in `index.jsonl`. |
-| `request_timeout_s` | float | `60.0` (sketch) | > 0 | Upper limit for one HTTP attempt. Each attempt uses `min(request_timeout_s, remaining task time)`. |
+| `request_timeout_s` | float | `60.0` *tunable* | > 0 | Upper limit for one HTTP attempt. Each attempt uses `min(request_timeout_s, remaining task time)`. |
 | `infra_max_retries` | int | `2` | ≥ 0 | Retries after transport or overload errors. Infra retries are not LLM calls. |
 | `infra_backoff_s` | list of float | `[1.0, 4.0]` | each ≥ 0; length ≥ `infra_max_retries` | Seconds to sleep before retry 1, retry 2, and so on. A `retry-after` header can raise a sleep, capped at 30 s. |
 
-**Request parameters (§12.3).** Every request uses `tool_choice={"type": "auto"}` with `submit_plan` as the only tool, sends `thinking={"type": <llm.thinking>}`, and sends no `temperature` (there is no `temperature` key; adding one is an unknown-key error). The default model, `claude-sonnet-5-5`, rejects a forced `tool_choice` and non-default sampling parameters with HTTP 400, which is why the request is shaped this way. A reply without a `submit_plan` call (for example plain text) is an invalid reply and gets the one schema retry. Thinking off (`between_tools`) keeps latency and output tokens comparable across conditions. See `docs/decisions.md` (F1).
+There is no `temperature` key (adding one is an unknown-key error), and `tool_choice` is not configurable. The request these keys feed, and why it is shaped that way for Sonnet 5.5, is in [llm.md](llm.md#the-request). Read it before changing `llm.model`.
 
 ### `[loop]`
 
 | Key | Type | Default | Rule | Meaning |
 |---|---|---|---|---|
-| `planning_horizon` | int | `5` (sketch) | ≥ 1 | Maximum steps in one plan. A plan with more steps is rejected, not truncated. Also the tool schema's `maxItems`. |
-| `max_failures` | int | `3` (sketch) | ≥ 1 | The task ends `FAILURE_BUDGET_EXHAUSTED` when the failure count reaches this. |
-| `max_llm_calls` | int | `20` (sketch) | ≥ 1 | LLM calls per task, schema retries included. When it is reached, the task ends `CALL_BUDGET_EXHAUSTED`. See OD-13. |
-| `task_time_limit_s` | float | `300.0` (sketch) | > 0 | Wall-clock limit per task. When it is reached, the task ends `TIME_LIMIT_EXCEEDED`. |
-| `context_history_k` | int | `10` (sketch) | ≥ 1 | How many of the latest executed entries are shown in the context. Older entries are counted, not shown. |
+| `planning_horizon` | int | `5` *tunable* | ≥ 1 | Maximum steps in one plan. A plan with more steps is rejected, not truncated. Also the tool schema's `maxItems`. |
+| `max_failures` | int | `3` *tunable* | ≥ 1 | The task ends `FAILURE_BUDGET_EXHAUSTED` when the failure count reaches this. |
+| `max_llm_calls` | int | `20` *tunable* | ≥ 1 | LLM calls per task, schema retries included. When it is reached, the task ends `CALL_BUDGET_EXHAUSTED`. Its interaction with the horizon: [loop-and-context.md](loop-and-context.md#horizon-and-call-budget). |
+| `task_time_limit_s` | float | `300.0` *tunable* | > 0 | Wall-clock limit per task. When it is reached, the task ends `TIME_LIMIT_EXCEEDED`. |
+| `context_history_k` | int | `10` *tunable* | ≥ 1 | How many of the latest executed entries are shown in the context. Older entries are counted, not shown. |
 
 ### `[motion_budget]`
 
 | Key | Type | Default | Rule | Meaning |
 |---|---|---|---|---|
-| `max_distance_m` | float | `10.0` (sketch) | ≥ 0 | Commanded travel allowed per task, in metres. |
-| `max_rotation_deg` | float | `720.0` (sketch) | ≥ 0 | Commanded rotation allowed per task, in degrees. |
+| `max_distance_m` | float | `10.0` *tunable* | ≥ 0 | Commanded travel allowed per task, in metres. |
+| `max_rotation_deg` | float | `720.0` *tunable* | ≥ 0 | Commanded rotation allowed per task, in degrees. |
 
 ### `[skills]`
 
@@ -93,7 +93,7 @@ Types:
 | `initial_posture` | `"standing"` \| `"sitting"` | `"standing"` | | Posture written to the state file at startup by `run`, `batch`, `go2-bot` and `--reset-stub`. |
 | `state_file` | path | `"runs/.stub_state.json"` | | JSON file that holds the stub posture. Shared by all skill processes. |
 | `detections` | table str → str | `{}` | keys are COCO class names; values match `^(left\|center\|right):(near\|medium\|far)$` | What the stub detector "sees". |
-| `faults` | list of `{step, kind}` | `[]` | `step` int ≥ 1, unique; `kind` ∈ `error`, `hang`, `crash`, `garbage`; must be empty when `backend = "real"` | Faults injected by dispatched step number (counted across the task). See `docs/running.md`. |
+| `faults` | list of `{step, kind}` | `[]` | `step` int ≥ 1, unique; `kind` ∈ `error`, `hang`, `crash`, `garbage`; must be empty when `backend = "real"` | Faults injected by dispatched step number (counted across the task). See [skills.md](skills.md#fault-injection). |
 
 COCO class names that contain a space must be quoted as TOML keys:
 
@@ -144,7 +144,7 @@ $ go2-dispatch --config bad.toml catalog
 Config error: loop.planning_horizon: Input should be greater than or equal to 1; loop.colour: unknown key
 ```
 
-Other startup errors also exit with code 2 (registry error, missing API key or bot token, lock held). See `docs/running.md`.
+Other startup errors also exit with code 2 (registry error, missing API key or bot token, lock held). See [running.md](running.md#exit-codes).
 
 ## CLI overrides
 
@@ -185,11 +185,21 @@ Secrets are never written to the run log, never printed, and never passed to ski
 
 ## Where the other tunables live
 
-Some (sketch) values are named constants in code, not config keys (§7.2):
+Some *tunable* values are named constants in code, not config keys:
 
 | Value | Where |
 |---|---|
-| Per-skill timeouts and settle waits (`BASE_S`, `FACTOR`, `TIMEOUT_S`, `SETTLE_S`) | Policy class attributes in `src/go2_skills/<skill>.py` (see `docs/skills.md`) |
+| Per-skill timeouts and settle waits (`BASE_S`, `FACTOR`, `TIMEOUT_S`, `SETTLE_S`) | Policy class attributes in `src/go2_skills/<skill>.py` ([skills.md](skills.md#policies)) |
 | Walking speed, yaw rate, command period | `VELOCITY_MPS`, `YAW_RATE_RPS`, `CMD_PERIOD_S` in `walk.py` / `turn.py` |
-| Posture thresholds (0.15 / 0.22 m) | `POSTURE_SITTING_MAX_M`, `POSTURE_STANDING_MIN_M` in `src/go2_skills/posture.py` |
+| Posture thresholds (0.15 / 0.22 m) | `POSTURE_SITTING_MAX_M`, `POSTURE_STANDING_MIN_M` in `src/go2_skills/posture.py` ([robot.md](robot.md#posture-rule)) |
+| Detector thresholds | `RealDetector` constants in `src/go2_skills/real.py` ([robot.md](robot.md#object-detection)) |
+| `StopMove` settle wait (0.5 s) | `SETTLE_S` in `src/go2_skills/stop_move.py` |
 | Stub durations and body heights | Constants at the top of `src/go2_skills/stub.py` |
+
+## Design decisions
+
+- **Secrets only from environment variables or `.env`**, never config keys; real environment variables win; they are removed from skill processes and never logged. The full config can then be logged with every task (`task_start.config`) without leaking anything, and skills never see credentials.
+- **Relative paths resolve against the config file's folder (the base dir), which is also every subprocess's working directory.** A config folder is self-contained, so a run behaves the same whatever the current directory is.
+- **Unknown keys and loosely typed values are errors** (`extra="forbid"`, strict ints and finite floats). A typo in an experiment config would otherwise silently run the defaults under the wrong condition label.
+- **CLI overrides go through the same validation** as the file: they are applied to the raw data before the models are built.
+- **Every starting value is a config key or a named constant**, never inline ([architecture.md](architecture.md#design-decisions)).
