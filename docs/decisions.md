@@ -31,3 +31,15 @@ Implementation choices where the spec was silent, and outcomes of checks the spe
 - **Stub noise** (`GO2_STUB_NOISE=1`) fires on the first `get_sport_client`/`get_detector`/`sample_state` call. A faulted `Move` returns `STUB_ERR_INJECTED` even while sitting (fault checked first).
 - **Real state mapping:** a list field (`position`, `velocity`, `imu_rpy`, `foot_force`) becomes `null` as a whole if any element is non-finite or the length is wrong, because `RobotState` lists cannot hold `null` elements. `RealDetector` checks that the weights file exists before touching the camera.
 - **Test helper `tests/helpers/skills.py`:** `stub_env(tmp_path, detections=None, fault=None, **extra)`, `run_module(name, params, env)`, `single_response(proc)`.
+
+## T3 — The five skills
+
+- **Shared helper `go2_skills/motion.py`:** `require_enum`, `require_number` (parameter checks raising `InvalidParams`), `move_loop(vx, vy, vyaw, duration_s, period_s)` (the 10 Hz loop + `StopMove`, used by walk and turn) and `single_action(call, settle_s)` (used by sit and stretch).
+- **No defaults applied by skills:** skills expect filled params (§7.3); a missing `distance_m` / `angle_deg` is `invalid_params`, like a missing `direction`. Numbers must be finite and not booleans; ints are accepted. Unknown extra keys are ignored. Enum values must match exactly (the dispatcher normalises case); only `detect_object.target` is stripped and lowercased, per §8.5.
+- **`sdk_ret` on a failed `Move`** is the failing call's code (not the cleanup `StopMove`'s 0). If the cleanup `StopMove` also fails, the message becomes `"Move returned X; StopMove returned Y"`.
+- **`duration_s`** = Move commands actually sent × `CMD_PERIOD_S`. On a full run this equals `n × CMD_PERIOD_S` (§8.1); after an `sdk_error` or an orphan break it shows what was really commanded.
+- **Orphan break** (`orphaned: true`) still reports `status=ok` if the final `StopMove` returns 0 (the dispatcher that would read it is gone anyway).
+- **Exceptions inside the motion loop** trigger a best-effort `StopMove()` before the exception propagates to `run_skill` (`code=exception`).
+- **Settle waits** run only after a successful `StandDown`/`Stretch`; `exec_ms` includes them.
+- **`SDK_TIMEOUT_S`** in walk/turn is documentary: the timeout is applied by `real.get_sport_client()` (`real.SPORT_CLIENT_TIMEOUT_S = 10.0`), since `backend.get_sport_client()` takes no arguments (§9).
+- **`detect_object` errors:** any `DetectorError` maps to its `.code`, message `"<Type>: <msg>"`. Observations on error contain only `target`. `unsupported_object` still samples state (only the detector is skipped).
