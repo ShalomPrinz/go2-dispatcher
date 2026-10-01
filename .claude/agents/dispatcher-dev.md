@@ -4,7 +4,7 @@ description: Implements and fixes changes in the `dispatcher` package (loop, pla
 model: inherit
 ---
 
-You work on the `dispatcher` package of the Go2 LLM dispatcher (Python 3.10–3.11, managed with `uv`). You receive a self-contained brief from an orchestrator session; do that task and nothing else.
+You work on the `dispatcher` package of the Go2 LLM dispatcher (Python 3.10, managed with `uv`). You receive a self-contained brief from an orchestrator session; do that task and nothing else.
 
 ## Scope
 

@@ -29,7 +29,7 @@ uv run pytest --cov              # branch coverage of dispatcher and skills, wit
 
 Coverage is opt-in (`pytest-cov`; settings in `[tool.coverage.*]` in `pyproject.toml`). It measures branches, and it also measures the skill, utility and CLI subprocesses the integration tests start (coverage's `[run] patch = ["subprocess", "_exit"]`; `_exit` is needed because skills end with `os._exit`). Processes killed with SIGKILL (timeouts, stops) record nothing. A covered run takes about 20 s instead of about 12 s.
 
-The default run must pass on any machine after `uv sync` (core + dev dependencies only). CI (`.github/workflows/ci.yml`) runs it on every push to any branch, on Python 3.10 and 3.11, after `uv sync --locked`. Every test has a 30 s timeout (`pytest-timeout`). Parallel runs are opt-in (see design decisions below).
+The default run must pass on any machine after `uv sync` (core + dev dependencies only). CI (`.github/workflows/ci.yml`) runs it on every push to any branch, on Python 3.10, after `uv sync --locked`. Every test has a 30 s timeout (`pytest-timeout`). Parallel runs are opt-in (see design decisions below).
 
 ## Layout
 

@@ -4,7 +4,7 @@ description: Implements and fixes changes in the `skills` package (skill contrac
 model: inherit
 ---
 
-You work on the `skills` package of the Go2 LLM dispatcher (Python 3.10–3.11, managed with `uv`). Each skill runs as a subprocess against the real Unitree Go2 EDU or a stub. You receive a self-contained brief from an orchestrator session; do that task and nothing else.
+You work on the `skills` package of the Go2 LLM dispatcher (Python 3.10, managed with `uv`). Each skill runs as a subprocess against the real Unitree Go2 EDU or a stub. You receive a self-contained brief from an orchestrator session; do that task and nothing else.
 
 ## Scope
 

@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Go2 LLM dispatcher: a research system that turns an operator's natural-language task (CLI or Telegram) into a validated plan of skill calls on a Unitree Go2 EDU, runs each skill as a subprocess against the real robot or a stub, and logs every task as JSONL for the study. Python 3.10–3.11, managed with `uv`.
+Go2 LLM dispatcher: a research system that turns an operator's natural-language task (CLI or Telegram) into a validated plan of skill calls on a Unitree Go2 EDU, runs each skill as a subprocess against the real robot or a stub, and logs every task as JSONL for the study. Python 3.10, managed with `uv`.
 
 **Read [docs/README.md](docs/README.md) first.** It is the index and says which document owns which topic.
 
