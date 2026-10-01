@@ -68,3 +68,13 @@ Implementation choices where the spec was silent, and outcomes of checks the spe
 - **Motion-budget message** is defined in `budget.py` (`MOTION_BUDGET_MESSAGE`, `MotionBudget.exceeded_message(kind, cost)`); `{need}` is the step's cost in that kind, `{left}` is `max - used` (floored at 0), both rounded to 2 decimals. T6's `prompts.py` should re-export it rather than duplicate it.
 - **`MotionBudget` extras:** `max_distance_m`/`max_rotation_deg` attributes and `remaining(kind)`. Tolerance `BUDGET_EPSILON = 1e-9`.
 - **Rejected StepResults** keep `motion_cost` at zero (not dispatched, never charged), including `motion_budget_exceeded`.
+
+## T6 — Prompts, renderer, context builder
+
+- **Context input:** `context.ContextInput` (frozen dataclass, a view of §15.2) + `build_user_message(inp, registry)`; the schema retry message is `context.schema_retry_message(user, errors)`. The user message has no trailing newline; sections are joined by `"\n\n"`.
+- **Extra prompt helpers:** `prompts.system_text(horizon)`, `system_blocks(horizon, catalog_text)` (`[S1, "## Skills\n" + catalog]`), `notice(reason, **args)`, `rejection_section(errors)`, `operator_message(outcome, *, stop_move_failed=False, **args)`, `help_text(backend)`. The INTERNAL_ERROR placeholder `{ExceptionType}` is named `{exception_type}`.
+- **Rejection lines:** each validation error is collapsed to one line (whitespace runs → one space).
+- **Failure notice** takes `max_failures` from the context input; `notice_args` holds `n`, `skill`, `outcome`, `f` as in §15.2.
+- **Renderer:** a failure line with no `error_message` renders as `-> {outcome}` (no `: `). The renderer re-applies `bounds.cut_message` to `error_message` defensively. Observation values use the same value formatting as params. A step with `index is None` (or a non-dispatched outcome) always uses the `- rejected before running:` form, also when `numbered=False`. `ok` observations come from the registry's policy; an unknown skill shows none.
+- **Remaining plan:** `(none)` when `remaining` is empty or `remaining_tag` is `None`.
+- **Previous task Message** is inserted verbatim (not cut or collapsed), like the task text.

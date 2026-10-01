@@ -1,0 +1,23 @@
+## Previous task
+(none)
+
+## Robot
+Posture: standing
+
+## Task
+Walk forward, then  find the chair
+
+## Budget
+Travel: 0 of 10 m used
+Rotation: 0 of 720 deg used
+Failures: 0 of 3
+Model calls: 0 of 20
+
+## Executed so far
+(nothing yet)
+
+## Remaining plan
+(none)
+
+## Notice
+(none)

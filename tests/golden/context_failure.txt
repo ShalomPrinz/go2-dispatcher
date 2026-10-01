@@ -1,0 +1,24 @@
+## Previous task
+(none)
+
+## Robot
+Posture: standing
+
+## Task
+Walk forward, then  find the chair
+
+## Budget
+Travel: 2 of 10 m used
+Rotation: 90 of 720 deg used
+Failures: 1 of 3
+Model calls: 1 of 20
+
+## Executed so far
+1. turn(direction=left, angle_deg=90) -> ok
+2. walk(direction=forward, distance_m=2) -> error: Move returned 3104
+
+## Remaining plan
+3. sit() [abandoned]
+
+## Notice
+Your previous plan failed at step 2 (walk): error. This is failure 1 of 3. Revise the plan to avoid that failure, or return ABORT with a message if the task cannot be done.

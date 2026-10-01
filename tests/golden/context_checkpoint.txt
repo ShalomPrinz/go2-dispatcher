@@ -1,0 +1,24 @@
+## Previous task
+(none)
+
+## Robot
+Posture: standing
+
+## Task
+Walk forward, then  find the chair
+
+## Budget
+Travel: 1.5 of 10 m used
+Rotation: 0 of 720 deg used
+Failures: 0 of 3
+Model calls: 1 of 20
+
+## Executed so far
+1. walk(direction=forward, distance_m=1.5) -> ok
+
+## Remaining plan
+2. detect_object(target=chair) [pending]
+3. turn(direction=left) [pending]
+
+## Notice
+You asked to review results after step 1 of your previous plan. Its remaining steps are listed under "Remaining plan"; include them again if you still want them.

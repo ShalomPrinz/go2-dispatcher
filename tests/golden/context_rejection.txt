@@ -1,0 +1,25 @@
+## Previous task
+(none)
+
+## Robot
+Posture: standing
+
+## Task
+Walk forward, then  find the chair
+
+## Budget
+Travel: 0 of 10 m used
+Rotation: 0 of 720 deg used
+Failures: 1 of 3
+Model calls: 2 of 20
+
+## Executed so far
+1. sit() -> ok
+- rejected before running: walk(direction=up, distance_m=9) -> rejected: parameter 'direction' for skill walk must be one of forward, backward, left, right, got 'up'
+
+## Remaining plan
+1. turn(direction=right) [abandoned]
+2. walk(direction=up, distance_m=9) [abandoned]
+
+## Notice
+Your previous plan failed at step 2 (walk): rejected. This is failure 1 of 3. Revise the plan to avoid that failure, or return ABORT with a message if the task cannot be done.
