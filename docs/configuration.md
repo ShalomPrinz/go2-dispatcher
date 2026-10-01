@@ -1,0 +1,195 @@
+# Configuration
+
+Configuration is defined in `src/go2_dispatcher/config.py` (pydantic models). This page lists every key it accepts. Spec: §5.
+
+## Sources and precedence
+
+1. Defaults in `config.py`.
+2. A TOML file, `config.toml` by default or the path given with `--config PATH`.
+   - If you do not pass `--config` and `./config.toml` is missing, the defaults are used and this warning is printed to stderr: `Warning: config.toml not found; using default configuration.`
+   - If you pass `--config` and the file is missing, that is a config error.
+3. CLI flags that override specific keys (see [CLI overrides](#cli-overrides)).
+
+Start from the committed example: `cp config.example.toml config.toml`.
+
+Secrets are never config keys. They come only from environment variables (see [`.env`](#env-file)).
+
+## Base dir and paths
+
+- **Base dir** is the folder that holds the loaded config file. If no config file was loaded, it is the current working directory.
+- The four path keys (`skills.dir`, `log.dir`, `stub.state_file`, `robot.yolo_weights`) are resolved against the base dir when the config is loaded. A leading `~` is expanded. Absolute paths are kept as they are. The loaded `Config` holds absolute paths.
+- `.env` is read from the base dir.
+- Every skill and utility subprocess runs with the base dir as its working directory.
+- `log.dir` is created if it is missing. If it cannot be created, that is a config error.
+
+So `go2-dispatch --config /lab/exp1/config.toml run ...` writes logs to `/lab/exp1/runs/` and reads `/lab/exp1/.env`, whatever the current directory is.
+
+## Keys
+
+Every section and every model rejects unknown keys (`extra="forbid"`). (sketch) marks a starting value that is expected to be tuned (OD-7).
+
+Types:
+- **int** keys reject floats, strings and booleans (`3`, not `3.0`).
+- **float** keys also accept TOML integers (`300` is fine).
+- **str** keys must be strings.
+
+### `[run]`
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `condition` | str | `""` | Free-text experiment label. Copied into `task_start` and `index.jsonl`. |
+
+### `[llm]`
+
+| Key | Type | Default | Rule | Meaning |
+|---|---|---|---|---|
+| `model` | str | `"claude-sonnet-5-5"` (sketch) | | Anthropic model id. |
+| `max_tokens` | int | `1024` | ≥ 1 | `max_tokens` for each request. |
+| `temperature` | float | `0.0` | ≥ 0 | Sampling temperature. Sent in the request body. |
+| `request_timeout_s` | float | `60.0` (sketch) | > 0 | Upper limit for one HTTP attempt. Each attempt uses `min(request_timeout_s, remaining task time)`. |
+| `infra_max_retries` | int | `2` | ≥ 0 | Retries after transport or overload errors. Infra retries are not LLM calls. |
+| `infra_backoff_s` | list of float | `[1.0, 4.0]` | each ≥ 0; length ≥ `infra_max_retries` | Seconds to sleep before retry 1, retry 2, and so on. A `retry-after` header can raise a sleep, capped at 30 s. |
+
+**Known issue with the default model.** §12.3 requires a forced `tool_choice` (`{"type": "tool", "name": "submit_plan"}`) and sends `temperature`. The Anthropic docs say that `claude-sonnet-5-5` rejects both a forced `tool_choice` and a non-default `temperature` with HTTP 400. This has not been checked against the live API yet. If a live run fails with `LLM_ERROR` (`BadRequestError 400`), set `llm.model` to a model that accepts both, for example a Sonnet 4.6 or Haiku 4.5 id, or change the spec. See `docs/decisions.md` (T7).
+
+The Anthropic SDK in use (1.x) has no `temperature` keyword argument, so the value is sent through `extra_body`. The JSON request body is the same.
+
+### `[loop]`
+
+| Key | Type | Default | Rule | Meaning |
+|---|---|---|---|---|
+| `planning_horizon` | int | `5` (sketch) | ≥ 1 | Maximum steps in one plan. A plan with more steps is rejected, not truncated. Also the tool schema's `maxItems`. |
+| `max_failures` | int | `3` (sketch) | ≥ 1 | The task ends `FAILURE_BUDGET_EXHAUSTED` when the failure count reaches this. |
+| `max_llm_calls` | int | `20` (sketch) | ≥ 1 | LLM calls per task, schema retries included. When it is reached, the task ends `CALL_BUDGET_EXHAUSTED`. See OD-13. |
+| `task_time_limit_s` | float | `300.0` (sketch) | > 0 | Wall-clock limit per task. When it is reached, the task ends `TIME_LIMIT_EXCEEDED`. |
+| `context_history_k` | int | `10` (sketch) | ≥ 1 | How many of the latest executed entries are shown in the context. Older entries are counted, not shown. |
+
+### `[motion_budget]`
+
+| Key | Type | Default | Rule | Meaning |
+|---|---|---|---|---|
+| `max_distance_m` | float | `10.0` (sketch) | ≥ 0 | Commanded travel allowed per task, in metres. |
+| `max_rotation_deg` | float | `720.0` (sketch) | ≥ 0 | Commanded rotation allowed per task, in degrees. |
+
+### `[skills]`
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `dir` | path | `"skills"` | Skill set folder loaded by the registry. Each subfolder with a `SKILL.md` is one skill. |
+
+### `[robot]`
+
+| Key | Type | Default | Rule | Meaning |
+|---|---|---|---|---|
+| `backend` | `"stub"` \| `"real"` | `"stub"` | | Which backend the skill processes use. |
+| `network_interface` | str | `""` | required (non-blank) when `backend = "real"` | NIC connected to the robot, for example `"enp0s31f6"`. Passed to skills as `GO2_IFACE`. |
+| `yolo_weights` | path | `"models/yolov8n.pt"` | | YOLO weights for `detect_object` on the real backend. Never downloaded automatically. |
+| `stop_move_timeout_s` | float | `10.0` | > 0 | Time limit for the `stop_move` utility process. |
+| `read_state_timeout_s` | float | `10.0` | > 0 | Time limit for the `read_state` utility process. |
+
+### `[stub]`
+
+| Key | Type | Default | Rule | Meaning |
+|---|---|---|---|---|
+| `time_scale` | float | `0.1` | > 0 | Multiplies every simulated duration (motion loops, settle waits, detection delay). |
+| `initial_posture` | `"standing"` \| `"sitting"` | `"standing"` | | Posture written to the state file at startup by `run`, `batch`, `go2-bot` and `--reset-stub`. |
+| `state_file` | path | `"runs/.stub_state.json"` | | JSON file that holds the stub posture. Shared by all skill processes. |
+| `detections` | table str → str | `{}` | keys are COCO class names; values match `^(left\|center\|right):(near\|medium\|far)$` | What the stub detector "sees". |
+| `faults` | list of `{step, kind}` | `[]` | `step` int ≥ 1, unique; `kind` ∈ `error`, `hang`, `crash`, `garbage`; must be empty when `backend = "real"` | Faults injected by dispatched step number (counted across the task). See `docs/running.md`. |
+
+COCO class names that contain a space must be quoted as TOML keys:
+
+```toml
+[stub]
+detections = { chair = "center:near", "cell phone" = "left:far" }
+faults = [ { step = 2, kind = "hang" } ]
+```
+
+The 80 class names are in `src/go2_skills/coco.py` (`COCO_CLASSES`).
+
+### `[log]`
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `dir` | path | `"runs"` | Run logs, `index.jsonl`, and the single-instance lock file `.dispatcher.lock`. |
+
+### `[telegram]`
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `allowed_user_ids` | list of int | `[]` | Numeric Telegram user ids the bot answers. Empty means the bot answers nobody (it prints a warning at startup). |
+
+## Validation rules
+
+Each failure below is a config error:
+
+- An unknown key in any section (reported as `<section>.<key>: unknown key`).
+- A value of the wrong type (see the type notes above).
+- `robot.backend = "real"` with a blank `robot.network_interface`.
+- `robot.backend = "real"` with a non-empty `stub.faults`.
+- `stub.faults[].kind` not one of `error | hang | crash | garbage`; `stub.faults[].step` not an integer ≥ 1; the same step listed twice.
+- `stub.detections` key not in `COCO_CLASSES`, or a value that does not match `position:closeness`.
+- Integers ≥ 1: `planning_horizon`, `max_failures`, `max_llm_calls`, `context_history_k`, `max_tokens`.
+- Floats > 0: `task_time_limit_s`, `request_timeout_s`, `stop_move_timeout_s`, `read_state_timeout_s`, `stub.time_scale`.
+- Floats ≥ 0: `max_distance_m`, `max_rotation_deg`, `temperature`, every value in `infra_backoff_s`.
+- `infra_max_retries` ≥ 0 and `len(infra_backoff_s) >= infra_max_retries`.
+- Invalid TOML, an unreadable file, an explicit `--config` path that does not exist, or a `log.dir` that cannot be created.
+
+## Exit codes
+
+Any config error prints `Config error: <message>` to stderr and exits with code **2**. Several errors in one file are joined with `; `. Example:
+
+```
+$ go2-dispatch --config bad.toml catalog
+Config error: loop.planning_horizon: Input should be greater than or equal to 1; loop.colour: unknown key
+```
+
+Other startup errors also exit with code 2 (registry error, missing API key or bot token, lock held). See `docs/running.md`.
+
+## CLI overrides
+
+`go2-dispatch` overrides these keys. They are applied before validation, so the same rules apply:
+
+| Flag | Key |
+|---|---|
+| `--backend stub\|real` | `robot.backend` |
+| `--horizon N` | `loop.planning_horizon` |
+| `--fault STEP:KIND` (repeatable) | replaces `stub.faults` |
+
+A malformed `--fault` value is a config error, and so is `--fault` together with the real backend. `go2-bot` takes only `--config`.
+
+## `.env` file
+
+Secrets come only from environment variables:
+
+| Variable | Needed by |
+|---|---|
+| `ANTHROPIC_API_KEY` | `run`, `batch`, `go2-bot` (only when a real LLM client is built) |
+| `TELEGRAM_BOT_TOKEN` | `go2-bot` |
+
+A `.env` file in the base dir is read by a small built-in parser (no `python-dotenv`):
+
+```
+# comment
+ANTHROPIC_API_KEY=sk-ant-...
+export TELEGRAM_BOT_TOKEN="123456:ABC..."
+```
+
+- One `KEY=VALUE` per line. A leading `export ` is allowed.
+- Blank lines and lines that start with `#` are ignored. Lines without `=` are also ignored.
+- Keys and values are trimmed. One pair of matching single or double quotes around the value is removed. There is no interpolation.
+- **Real environment variables win** over `.env` values.
+- A missing `.env` is not an error.
+
+Secrets are never written to the run log, never printed, and never passed to skill subprocesses: the executor removes `ANTHROPIC_API_KEY` and `TELEGRAM_BOT_TOKEN` from the child environment.
+
+## Where the other tunables live
+
+Some (sketch) values are named constants in code, not config keys (§7.2):
+
+| Value | Where |
+|---|---|
+| Per-skill timeouts and settle waits (`BASE_S`, `FACTOR`, `TIMEOUT_S`, `SETTLE_S`) | Policy class attributes in `src/go2_skills/<skill>.py` (see `docs/skills.md`) |
+| Walking speed, yaw rate, command period | `VELOCITY_MPS`, `YAW_RATE_RPS`, `CMD_PERIOD_S` in `walk.py` / `turn.py` |
+| Posture thresholds (0.15 / 0.22 m) | `POSTURE_SITTING_MAX_M`, `POSTURE_STANDING_MIN_M` in `src/go2_skills/posture.py` |
+| Stub durations and body heights | Constants at the top of `src/go2_skills/stub.py` |

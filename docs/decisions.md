@@ -140,3 +140,54 @@ Implementation choices where the spec was silent, and outcomes of checks the spe
 - **Authorisation and error handling** are one wrapper shared by all three handlers: missing user/message → ignore; unauthorised → stderr line `Warning: ignoring Telegram message from unauthorised user {id}.`, no reply; any exception → traceback on stderr, reply `Error: {ExceptionType}`.
 - **Constants:** `SHUTDOWN_EXTRA_S = 5.0` (the `+ 5` in `post_stop`), `STOP_WORD = "stop"`, `TOKEN_ENV`, `SOURCE = "telegram"`.
 - **Fake Telegram objects** live in `tests/helpers/fake_telegram.py` (`fake_update`, `fake_context`, `replies`); the module is not named `telegram.py` because `tests/helpers` is put on `PYTHONPATH` for CLI subprocesses and would shadow the library. Handler tests are in `tests/unit/test_telegram_bot.py` (no network; `build_application` uses a dummy token and is never initialised).
+
+## Spec decisions (recorded in T12)
+
+One entry per design decision taken in the spec (date = spec adoption, 2026-10-01). Format: **decision**: reason (§).
+
+### Adopted
+
+- **Plan as a first-class object through one forced tool, `submit_plan`**: plans can be logged, counted and inspected; one output contract for every call. (§1.2, §12)
+- **Context rebuilt from fixed slots, no conversation carried**: token and latency measurements stay comparable across conditions; context size depends only on the current task. (§1.2, §11)
+- **Static slots first (tools, system, catalog)**: prompt caching can be added later without reordering. (§11.1)
+- **One subprocess per skill call, never reused**: the SDK's DDS channel is a process-wide singleton; a fresh process gets a clean channel and can be killed if it hangs. (§1.2, §14.2)
+- **Non-strict tool use**: strict mode does not support `maxItems` or numeric bounds and injects an extra system prompt that would distort token measurements; the dispatcher's validation enforces the rules. (§12.3)
+- **No prompt caching, streaming or extended thinking in v1**: caching changes token accounting; forced `tool_choice` is incompatible with extended thinking. (§12.3)
+- **Exactly one schema retry; a second invalid reply ends the task `LLM_INVALID`**: bounded cost; invalid replies are LLM calls but never failures. (§12.5)
+- **Infra retries inside the LLM client, logged separately, not counted as calls or failures**: transport problems must not distort the planning metrics. (§12.6)
+- **Whole-plan precheck (bounds on every step, motion budget up to `stop_at`) before any step runs**: a plan either runs within limits or does not start; no partial motion because of a later bad step. (§13.3)
+- **Motion budget bounds commanded motion, charged at dispatch**: there is no reliable measured position in v1; commanded motion may have happened even if a step fails or is killed. (§13.4)
+- **One stop path (kill the process group, then `StopMove` from a fresh, unkillable process) for stop, timeouts, time limit, shutdown and internal errors**: a single tested mechanism; a killed process cannot clean up itself. (§14.4)
+- **Orphan watchdog in skill processes**: skills stop the robot and exit if the dispatcher dies. (§7.4, §14.5)
+- **Robot state sampled at start and end of every skill, logged only; the model sees only a derived posture**: v2 verification needs the state; v1 keeps the context small and stable. (§9, §11.5)
+- **Settle waits after `StandDown` (3 s) and `Stretch` (6 s)**: SDK action calls return when the command is accepted, so `state_after` would otherwise be sampled mid-motion. (§8.3, §8.4, OD-10)
+- **`walk` split into `walk` (straight line) and `turn` (in place), with degrees in the interface**: clearer parameters for the model; separate travel and rotation budgets. (§1.3, §8.2)
+- **Unsupported `detect_object` target is a skill error with suggestions**: the class list stays out of the catalog (fewer tokens). (§8.5, OD-8)
+- **Stub remembers posture only and supports four fault kinds**: enough to run every failure path with real processes; motion simulation is a v2 prerequisite. (§9.2)
+- **Bounds and motion-budget rejections count as failures**: follows the professor's definition of failure (skill error, bounds rejection, timeout). (§13.3, OD-11)
+- **Machine-wide `flock` single-instance lock on `{log.dir}/.dispatcher.lock`**: prevents two processes driving one robot, clobbering the stub state, or interleaving `index.jsonl`. (§5.4)
+- **Secrets only from environment / `.env` (real env wins), stripped from child processes, never logged**: secrets must not leak into logs or skills. (§5.1, §14.2)
+- **Relative paths resolve against the config file's folder (base dir), which is also the subprocess cwd**: runs are reproducible regardless of the current directory. (§5.3)
+- **Telegram with `concurrent_updates(True)`**: otherwise `stop` cannot arrive while a task runs. (§16.3)
+- **`batch` carries previous task and posture across lines**: matches how the robot behaves; an `--independent` flag can come later. (§16.2, OD-6)
+- **No `stand` skill in v1**: the agreed skill set is the five skills; recommended before experiments. (OD-1)
+- **Complete JSONL run log per task plus an index**: the log is the study dataset (tokens, latency, replanning, conditions). (§17)
+
+### Rejected alternatives
+
+- **OpenClaw runtime**: rejected as the v1 runtime. v1 needs full control over context shape, logging and limits for the study; an OpenClaw baseline is a later, separate experiment, and nothing in v1 depends on it. (§1.4)
+- **Strict tool mode**: rejected; it does not support `maxItems` or numeric bounds and adds an injected system prompt that distorts token measurements. (§12.3)
+- **Truncating long plans to the horizon**: rejected; plans longer than the horizon are rejected and retried, so the model's actual output is measured. The `horizon_rejection` rate is monitored, and the decision can be revisited (§23.3). (§13.1)
+- **Dead reckoning (estimating position from commanded motion)**: rejected; walk and turn are open-loop, so errors accumulate. The budget bounds commanded motion, and the robot's own position estimate is only logged. A geofence waits for a real position source. (§13.4, §23.3)
+- **Forwarding mid-run messages to the LLM**: rejected for v1; only `stop` is recognised during a task, and other messages are answered `Busy`. Kept as a future idea. (§1.4, §23.3)
+- **`ASK` plan status**: deferred to v2; in v1 the model returns `ABORT` with a clarifying question. (§1.4)
+- **Fallback parsing of earlier stdout lines and a `vision` test marker**: dropped as over-engineering. (Appendix A #54)
+
+## T12 — Documentation
+
+- **README quick start** keeps exactly five commands by joining the two `cp` commands with `&&` (§21 asks for a five-command quick start).
+- **`docs/open-decisions.md`** adds a `Status` column to the §20 table. OD-14 is marked resolved for the dev machine (T1).
+- **Robot checklist** (`docs/testing.md`) includes an empty worksheet table. The results themselves are recorded in this file, as §19.5 requires.
+- **Examples** in `docs/run-log.md`, `docs/skills.md` and `docs/loop-and-context.md` come from real stub runs (scripted planner, `--fault 2:error`). Long fields are shortened with `…`. The `llm_retry`, `stop_move` and `llm_error` examples are illustrative.
+- **Telegram user id**: `docs/running.md` suggests @userinfobot, or reading the bot's own "unauthorised user <id>" stderr warning.
+- **Known issue documented**: the default `llm.model` (`claude-sonnet-5-5`) may reject forced `tool_choice` and non-default `temperature` (HTTP 400). This is noted in `docs/configuration.md` and `docs/testing.md`. It has not been verified live.
