@@ -31,7 +31,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["dispatcher", "skills"]
-exclude = ["dispatcher/docs", "dispatcher/tests", "skills/docs", "skills/tests"]
+exclude = ["dispatcher/docs", "dispatcher/tests", "skills/docs", "skills/tests", "skills/catalog"]
 
 [tool.pytest.ini_options]
 testpaths = ["dispatcher/tests", "skills/tests"]
