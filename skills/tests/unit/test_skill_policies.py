@@ -1,4 +1,4 @@
-"""Skill policies: timeouts cover the commanded motion, motion costs (docs/skills.md)."""
+"""Skill policies: timeouts cover the commanded motion, motion costs (skills/docs/skills.md)."""
 
 from __future__ import annotations
 

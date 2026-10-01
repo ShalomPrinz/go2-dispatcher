@@ -42,7 +42,7 @@ class _Model(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-# --- Plan (docs/loop-and-context.md) -------------------------------------------------------------
+# --- Plan (dispatcher/docs/loop-and-context.md) -------------------------------------------------------------
 
 
 class PlanStep(_Model):
@@ -65,7 +65,7 @@ class Plan(_Model):
         return data
 
 
-# --- SkillResponse (docs/skills.md) -----------------------------------------------------
+# --- SkillResponse (skills/docs/skills.md) -----------------------------------------------------
 
 
 class SkillError(BaseModel):
@@ -112,7 +112,7 @@ class SkillResponse(BaseModel):
         return self
 
 
-# --- StepResult (docs/run-log.md) --------------------------------------------------------
+# --- StepResult (dispatcher/docs/run-log.md) --------------------------------------------------------
 
 StepOutcome = Literal["ok", "error", "timeout", "malformed",
                       "rejected", "motion_budget_exceeded", "interrupted"]
@@ -154,7 +154,7 @@ class StepResult(_Model):
     verification: Literal["unverified"] = "unverified"
 
 
-# --- Task outcome and summary (docs/loop-and-context.md) -------------------------------------
+# --- Task outcome and summary (dispatcher/docs/loop-and-context.md) -------------------------------------
 
 TaskOutcomeCode = Literal[
     "DONE", "ABORTED", "STOPPED", "TIME_LIMIT_EXCEEDED",
@@ -167,7 +167,7 @@ class TaskOutcome(_Model):
     run_id: str
     task: str
     outcome: TaskOutcomeCode
-    message: str                        # operator-facing (docs/loop-and-context.md)
+    message: str                        # operator-facing (dispatcher/docs/loop-and-context.md)
     steps: list[StepResult]             # every recorded step, in order
     llm_calls: int
     failures: int

@@ -1,5 +1,5 @@
 """The five skills on the stub backend: contract, stub behaviour, faults, orphan
-watchdog (docs/skills.md, testing.md)."""
+watchdog (skills/docs/skills.md, docs/testing.md)."""
 
 from __future__ import annotations
 
@@ -84,7 +84,7 @@ def test_noise_stays_off_stdout(tmp_path):
 
 
 def test_fresh_interpreter_import_is_side_effect_free():
-    """Every skills module imports without heavy modules or output (docs/skills.md)."""
+    """Every skills module imports without heavy modules or output (skills/docs/skills.md)."""
     code = r"""
 import contextlib, importlib, io, json, pkgutil, sys
 import skills

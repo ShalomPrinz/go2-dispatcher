@@ -1,5 +1,5 @@
 """build_response dicts validate against SkillResponse, and the executor parses the
-response line from skill stdout (docs/skills.md)."""
+response line from skill stdout (skills/docs/skills.md)."""
 
 from __future__ import annotations
 

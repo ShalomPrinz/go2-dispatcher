@@ -1,4 +1,4 @@
-"""COCO class names detectable by detect_object (docs/skills.md), in YOLO order."""
+"""COCO class names detectable by detect_object (skills/docs/skills.md), in YOLO order."""
 
 COCO_CLASSES: tuple[str, ...] = (
     "person",

@@ -1,4 +1,4 @@
-"""LLM client and plan contract (docs/llm.md): tool schema, AnthropicPlanner, infra retries."""
+"""LLM client and plan contract (dispatcher/docs/llm.md): tool schema, AnthropicPlanner, infra retries."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 # `anthropic` is imported only inside AnthropicPlanner and the retry helper: it costs about 0.8 s
 # at start-up, and stub runs with the test planner, `catalog`, `state` and `--reset-stub` never
-# call the API (docs/llm.md).
+# call the API (dispatcher/docs/llm.md).
 
 __all__ = [
     "TOOL_NAME", "TOOL_REQUIRED", "STEP_REQUIRED", "plan_tool_schema",
@@ -41,7 +41,7 @@ ERR_NO_TOOL_CALL = "no submit_plan call in reply"
 RejectionKind = Literal["none", "schema", "horizon", "semantic", "no_tool_call", "max_tokens"]
 
 
-# --- Tool schema (docs/loop-and-context.md) ----------------------------------------------------------------
+# --- Tool schema (dispatcher/docs/loop-and-context.md) ----------------------------------------------------------------
 
 
 def plan_tool_schema(horizon: int) -> dict:
@@ -92,7 +92,7 @@ def plan_tool_schema(horizon: int) -> dict:
     }
 
 
-# --- Interfaces (docs/llm.md) -----------------------------------------------------------------
+# --- Interfaces (dispatcher/docs/llm.md) -----------------------------------------------------------------
 
 
 class LLMResult(BaseModel):
@@ -147,7 +147,7 @@ def _is_retryable(e: anthropic.APIError) -> bool:
 
 
 class AnthropicPlanner:
-    """PlannerClient over the Anthropic Messages API, with its own infra retries (docs/llm.md)."""
+    """PlannerClient over the Anthropic Messages API, with its own infra retries (dispatcher/docs/llm.md)."""
 
     def __init__(self, api_key: str, llm_cfg: LLMConfig, horizon: int, *,
                  http_client: httpx2.Client | None = None,
@@ -220,7 +220,7 @@ class AnthropicPlanner:
 
     def _result(self, resp: Any, *, latency_ms: float, total_ms: float,
                 attempts: int) -> LLMResult:
-        """Response handling (docs/llm.md). Thinking and text blocks are skipped when choosing the
+        """Response handling (dispatcher/docs/llm.md). Thinking and text blocks are skipped when choosing the
         tool_use block; all blocks are kept in ``content``."""
         block = next((b for b in resp.content
                       if b.type == "tool_use" and b.name == TOOL_NAME), None)

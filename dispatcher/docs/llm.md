@@ -1,6 +1,6 @@
 # The LLM layer
 
-How the dispatcher calls the planner model: provider and model, the exact request, how a reply is turned into a plan or rejected, schema retry, horizon rejection, and infrastructure retries. What the model must return and what it sees are in [loop-and-context.md](loop-and-context.md). Code: `dispatcher/llm.py`; config keys under `[llm]` in [configuration.md](configuration.md).
+How the dispatcher calls the planner model: provider and model, the exact request, how a reply is turned into a plan or rejected, schema retry, horizon rejection, and infrastructure retries. What the model must return and what it sees are in [loop-and-context.md](loop-and-context.md). Code: `dispatcher/llm.py`; config keys under `[llm]` in [configuration.md](../../docs/configuration.md).
 
 ## Provider and model
 
@@ -8,7 +8,7 @@ How the dispatcher calls the planner model: provider and model, the exact reques
 - **Model:** `llm.model`, default `claude-sonnet-5-5` (Claude Sonnet 5.5). The default is a starting value; the model id is logged in `task_start.config` and in every `index.jsonl` row.
 - **Thinking:** minimal, via `llm.thinking = "between_tools"`: no extended thinking, but not strictly zero thinking output (below). "Thinking off" in these docs means this setting.
 
-An alternative LLM layer (Jev, a "TypeSafe AI" decision model) is under consideration, not decided ([roadmap.md](roadmap.md#open-questions)).
+An alternative LLM layer (Jev, a "TypeSafe AI" decision model) is under consideration, not decided ([roadmap.md](../../docs/roadmap.md#open-questions)).
 
 ## The request
 
@@ -46,7 +46,7 @@ Sonnet 5.5 returns HTTP 400 for three things an earlier design relied on. A 400 
 
 ### Live-API verification status
 
-**Unverified.** No request has yet been sent to the live API with these parameters. In particular it has not been confirmed that Sonnet 5.5 accepts `between_tools` together with auto `tool_choice` and a tool definition. The parameter facts above come from Anthropic's documentation ([references.md](references.md#llm)). To verify, run the live test with an API key ([testing.md](testing.md)); it is tracked in [roadmap.md](roadmap.md#pending-human-work).
+**Unverified.** No request has yet been sent to the live API with these parameters. In particular it has not been confirmed that Sonnet 5.5 accepts `between_tools` together with auto `tool_choice` and a tool definition. The parameter facts above come from Anthropic's documentation ([references.md](../../docs/references.md#llm)). To verify, run the live test with an API key ([testing.md](../../docs/testing.md)); it is tracked in [roadmap.md](../../docs/roadmap.md#pending-human-work).
 
 ## Response handling
 
@@ -74,7 +74,7 @@ A plan with more steps than `loop.planning_horizon` is **rejected as a whole and
 
 Every such reply is logged as its own `horizon_rejection` record (with the raw tool input, the number of steps and the horizon), and `task_end.horizon_rejections` counts them, so the rate can be measured per condition.
 
-**Monitoring rule.** Watch the horizon-rejection rate in the run logs. Even 1 in 100 calls is a lot. If the rate is high, inspect those plans and either switch to truncation or fix it another way, for example by stating the horizon more prominently. This is an open question until there is data ([roadmap.md](roadmap.md#open-questions)).
+**Monitoring rule.** Watch the horizon-rejection rate in the run logs. Even 1 in 100 calls is a lot. If the rate is high, inspect those plans and either switch to truncation or fix it another way, for example by stating the horizon more prominently. This is an open question until there is data ([roadmap.md](../../docs/roadmap.md#open-questions)).
 
 ## Infrastructure retries
 
@@ -97,6 +97,6 @@ The SDK's own retries are disabled (`max_retries=0`); `AnthropicPlanner` retries
 - **`max_tokens` 2048** as headroom against cut-off replies; it does not affect cost or measurements unless a reply would be cut off.
 - **Reject, never truncate, over-long plans**, with the rate logged and a rule for revisiting the choice (above). Truncation would run a plan the model never made and corrupt the data.
 - **Exactly one schema retry**, then `LLM_INVALID`: bounded cost, and a second invalid reply is itself a measurable outcome. Invalid replies are LLM calls but never failures.
-- **Own infrastructure retries, logged separately, never counted as LLM calls or replans.** Transport problems must not distort the planning metrics. This replaces OpenClaw's provider retry; model failover is not covered, which is accepted ([architecture.md](architecture.md#why-a-purpose-built-dispatcher)).
+- **Own infrastructure retries, logged separately, never counted as LLM calls or replans.** Transport problems must not distort the planning metrics. This replaces OpenClaw's provider retry; model failover is not covered, which is accepted ([architecture.md](../../docs/architecture.md#why-a-purpose-built-dispatcher)).
 - **`anthropic` is imported lazily**, inside `AnthropicPlanner` and its retry helper. Importing it costs about 0.8 s, which every `go2 catalog`, `state` and `--reset-stub` and every stub run with the test planner would otherwise pay without calling the API. A fresh-interpreter test checks that the CLI transport does not import it.
 - **No prompt caching.** It would confound token comparisons between conditions ([loop-and-context.md](loop-and-context.md#design-decisions)).

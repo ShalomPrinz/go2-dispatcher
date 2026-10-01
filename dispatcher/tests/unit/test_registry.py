@@ -1,4 +1,4 @@
-"""Registry: loading, validation errors, catalog golden file, registry hash (docs/skills.md, testing.md)."""
+"""Registry: loading, validation errors, catalog golden file, registry hash (skills/docs/skills.md, docs/testing.md)."""
 
 from __future__ import annotations
 

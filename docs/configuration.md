@@ -45,12 +45,12 @@ Types:
 |---|---|---|---|---|
 | `model` | str | `"claude-sonnet-5-5"` *tunable* | | Anthropic model id. Logged in `task_start.config` and `index.jsonl`. |
 | `max_tokens` | int | `2048` | ≥ 1 | `max_tokens` for each request. |
-| `thinking` | `"between_tools"` \| `"adaptive"` | `"between_tools"` | | Sent as `thinking={"type": ...}`. `between_tools` is the lowest setting (no extended thinking; [llm.md](llm.md#sonnet-55-parameter-constraints)); `adaptive` lets the model think (use it only as a deliberate experimental condition). Logged in `index.jsonl`. |
+| `thinking` | `"between_tools"` \| `"adaptive"` | `"between_tools"` | | Sent as `thinking={"type": ...}`. `between_tools` is the lowest setting (no extended thinking; [llm.md](../dispatcher/docs/llm.md#sonnet-55-parameter-constraints)); `adaptive` lets the model think (use it only as a deliberate experimental condition). Logged in `index.jsonl`. |
 | `request_timeout_s` | float | `60.0` *tunable* | > 0 | Upper limit for one HTTP attempt. Each attempt uses `min(request_timeout_s, remaining task time)`. |
 | `infra_max_retries` | int | `2` | ≥ 0 | Retries after transport or overload errors. Infra retries are not LLM calls. |
 | `infra_backoff_s` | list of float | `[1.0, 4.0]` | each ≥ 0; length ≥ `infra_max_retries` | Seconds to sleep before retry 1, retry 2, and so on. A `retry-after` header can raise a sleep, capped at 30 s. |
 
-There is no `temperature` key (adding one is an unknown-key error), and `tool_choice` is not configurable. The request these keys feed, and why it is shaped that way for Sonnet 5.5, is in [llm.md](llm.md#the-request). Read it before changing `llm.model`.
+There is no `temperature` key (adding one is an unknown-key error), and `tool_choice` is not configurable. The request these keys feed, and why it is shaped that way for Sonnet 5.5, is in [llm.md](../dispatcher/docs/llm.md#the-request). Read it before changing `llm.model`.
 
 ### `[loop]`
 
@@ -58,7 +58,7 @@ There is no `temperature` key (adding one is an unknown-key error), and `tool_ch
 |---|---|---|---|---|
 | `planning_horizon` | int | `5` *tunable* | ≥ 1 | Maximum steps in one plan. A plan with more steps is rejected, not truncated. Also the tool schema's `maxItems`. |
 | `max_failures` | int | `3` *tunable* | ≥ 1 | The task ends `FAILURE_BUDGET_EXHAUSTED` when the failure count reaches this. |
-| `max_llm_calls` | int | `20` *tunable* | ≥ 1 | LLM calls per task, schema retries included. When it is reached, the task ends `CALL_BUDGET_EXHAUSTED`. Its interaction with the horizon: [loop-and-context.md](loop-and-context.md#horizon-and-call-budget). |
+| `max_llm_calls` | int | `20` *tunable* | ≥ 1 | LLM calls per task, schema retries included. When it is reached, the task ends `CALL_BUDGET_EXHAUSTED`. Its interaction with the horizon: [loop-and-context.md](../dispatcher/docs/loop-and-context.md#horizon-and-call-budget). |
 | `task_time_limit_s` | float | `300.0` *tunable* | > 0 | Wall-clock limit per task. When it is reached, the task ends `TIME_LIMIT_EXCEEDED`. |
 | `context_history_k` | int | `10` *tunable* | ≥ 1 | How many of the latest executed entries are shown in the context. Older entries are counted, not shown. |
 
@@ -93,7 +93,7 @@ There is no `temperature` key (adding one is an unknown-key error), and `tool_ch
 | `initial_posture` | `"standing"` \| `"sitting"` | `"standing"` | | Posture written to the state file at startup by `run`, `batch`, `go2 bot` and `--reset-stub`. |
 | `state_file` | path | `"runs/.stub_state.json"` | | JSON file that holds the stub posture. Shared by all skill processes. |
 | `detections` | table str → str | `{}` | keys are COCO class names; values match `^(left\|center\|right):(near\|medium\|far)$` | What the stub detector "sees". |
-| `faults` | list of `{step, kind}` | `[]` | `step` int ≥ 1, unique; `kind` ∈ `error`, `hang`, `crash`, `garbage`; must be empty when `backend = "real"` | Faults injected by dispatched step number (counted across the task). See [skills.md](skills.md#fault-injection). |
+| `faults` | list of `{step, kind}` | `[]` | `step` int ≥ 1, unique; `kind` ∈ `error`, `hang`, `crash`, `garbage`; must be empty when `backend = "real"` | Faults injected by dispatched step number (counted across the task). See [skills.md](../skills/docs/skills.md#fault-injection). |
 
 COCO class names that contain a space must be quoted as TOML keys:
 
@@ -189,10 +189,10 @@ Some *tunable* values are named constants in code, not config keys:
 
 | Value | Where |
 |---|---|
-| Per-skill timeouts and settle waits (`BASE_S`, `FACTOR`, `TIMEOUT_S`, `SETTLE_S`) | Policy class attributes in `skills/<skill>.py` ([skills.md](skills.md#policies)) |
+| Per-skill timeouts and settle waits (`BASE_S`, `FACTOR`, `TIMEOUT_S`, `SETTLE_S`) | Policy class attributes in `skills/<skill>.py` ([skills.md](../skills/docs/skills.md#policies)) |
 | Walking speed, yaw rate, command period | `VELOCITY_MPS`, `YAW_RATE_RPS`, `CMD_PERIOD_S` in `walk.py` / `turn.py` |
-| Posture thresholds (0.15 / 0.22 m) | `POSTURE_SITTING_MAX_M`, `POSTURE_STANDING_MIN_M` in `skills/posture.py` ([robot.md](robot.md#posture-rule)) |
-| Detector thresholds | `RealDetector` constants in `skills/real.py` ([robot.md](robot.md#object-detection)) |
+| Posture thresholds (0.15 / 0.22 m) | `POSTURE_SITTING_MAX_M`, `POSTURE_STANDING_MIN_M` in `skills/posture.py` ([robot.md](../skills/docs/robot.md#posture-rule)) |
+| Detector thresholds | `RealDetector` constants in `skills/real.py` ([robot.md](../skills/docs/robot.md#object-detection)) |
 | `StopMove` settle wait (0.5 s) | `SETTLE_S` in `skills/stop_move.py` |
 | Stub durations and body heights | Constants at the top of `skills/stub.py` |
 

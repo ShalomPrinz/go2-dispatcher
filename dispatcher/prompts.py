@@ -1,4 +1,4 @@
-"""Every fixed text the dispatcher and transports show to the LLM or the operator (docs/loop-and-context.md).
+"""Every fixed text the dispatcher and transports show to the LLM or the operator (dispatcher/docs/loop-and-context.md).
 
 Wording is draft (docs/roadmap.md) and must stay identical across experimental conditions.
 """
@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .budget import MOTION_BUDGET_MESSAGE  # re-exported: defined once, in budget.py (docs/loop-and-context.md)
+from .budget import MOTION_BUDGET_MESSAGE  # re-exported: defined once, in budget.py (dispatcher/docs/loop-and-context.md)
 from .models import TaskOutcomeCode
 
 __all__ = [
@@ -23,7 +23,7 @@ __all__ = [
     "BUSY", "STOPPING", "NOTHING_RUNNING", "WORKING", "EMPTY_TASK", "HELP", "help_text",
 ]
 
-# --- System (S1, S2), docs/loop-and-context.md ---------------------------------------------------
+# --- System (S1, S2), dispatcher/docs/loop-and-context.md ---------------------------------------------------
 
 SYSTEM_TEMPLATE = """\
 You plan actions for a Unitree Go2 quadruped robot. An operator gives you a task in natural language. You answer by calling the submit_plan tool exactly once.
@@ -52,11 +52,11 @@ def system_text(horizon: int) -> str:
 
 
 def system_blocks(horizon: int, catalog_text: str) -> list[str]:
-    """``[system[0], system[1]]`` = [S1, ``"## Skills\\n" + catalog``] (docs/loop-and-context.md)."""
+    """``[system[0], system[1]]`` = [S1, ``"## Skills\\n" + catalog``] (dispatcher/docs/loop-and-context.md)."""
     return [system_text(horizon), SKILLS_HEADER + catalog_text]
 
 
-# --- User message (docs/loop-and-context.md) -----------------------------------------------------------
+# --- User message (dispatcher/docs/loop-and-context.md) -----------------------------------------------------------
 
 SECTION_PREVIOUS_TASK = "## Previous task"
 SECTION_ROBOT = "## Robot"
@@ -85,7 +85,7 @@ BUDGET_TEMPLATE = (
     "Model calls: {calls_made} of {max_llm_calls}"
 )
 
-# --- Notices (docs/loop-and-context.md) ------------------------------------------------------------------------
+# --- Notices (dispatcher/docs/loop-and-context.md) ------------------------------------------------------------------------
 
 NOTICES: dict[str, str] = {
     "initial": NONE,

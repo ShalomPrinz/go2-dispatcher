@@ -1,4 +1,4 @@
-"""Step bounds and the whole-plan pre-check (docs/loop-and-context.md)."""
+"""Step bounds and the whole-plan pre-check (dispatcher/docs/loop-and-context.md)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from .budget import MotionBudget
 from .models import Plan, PlanStep, StepResult
 from .registry import ParamSpec, Registry
 
-ERROR_MESSAGE_MAX = 200        # StepResult.error_message limit (docs/run-log.md, loop-and-context.md)
+ERROR_MESSAGE_MAX = 200        # StepResult.error_message limit (dispatcher/docs/run-log.md, dispatcher/docs/loop-and-context.md)
 ELLIPSIS = "…"
 BOUNDS_ERROR_CODE = "bounds"
 BUDGET_ERROR_CODE = "motion_budget_exceeded"
@@ -53,7 +53,7 @@ def _expected(spec: ParamSpec) -> str:
 
 
 def _coerce(spec: ParamSpec, value: Any) -> Any:
-    """Type check without other coercion (docs/loop-and-context.md); returns the normalised value or _MISSING."""
+    """Type check without other coercion (dispatcher/docs/loop-and-context.md); returns the normalised value or _MISSING."""
     if spec.type in ("number", "integer"):
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             return _MISSING
@@ -146,7 +146,7 @@ class PrecheckResult:
 def precheck(plan: Plan, stop_at: int, registry: Registry, budget: MotionBudget,
              call_index: int) -> PrecheckResult:
     """Bounds-check every step; then simulate the motion budget over steps 1..stop_at on a
-    copy of ``budget``. A plan either runs within limits or does not start (docs/loop-and-context.md)."""
+    copy of ``budget``. A plan either runs within limits or does not start (dispatcher/docs/loop-and-context.md)."""
     filled_all: list[dict] = []
     for i, step in enumerate(plan.steps, start=1):
         filled, violations = check_step(step, registry)

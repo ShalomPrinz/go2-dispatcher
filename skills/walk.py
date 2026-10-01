@@ -1,4 +1,4 @@
-"""Skill: walk in a straight line by a distance, then stop (docs/skills.md)."""
+"""Skill: walk in a straight line by a distance, then stop (skills/docs/skills.md)."""
 
 from __future__ import annotations
 

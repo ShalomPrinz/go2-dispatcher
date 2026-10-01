@@ -1,21 +1,21 @@
 # The robot
 
-The Go2 EDU side of the system: what the code assumes about the robot, how it talks to it through the Unitree SDK over DDS, how state is sampled and turned into a posture, and the supervised checklist that verifies all of this on the robot. The skill contract (invocation, response schema, error codes, policies, stub backend) is in [skills.md](skills.md); stopping the robot is in [safety.md](safety.md); installing the SDK is in [setup.md](setup.md).
+The Go2 EDU side of the system: what the code assumes about the robot, how it talks to it through the Unitree SDK over DDS, how state is sampled and turned into a posture, and the supervised checklist that verifies all of this on the robot. The skill contract (invocation, response schema, error codes, policies, stub backend) is in [skills.md](skills.md); stopping the robot is in [safety.md](../../docs/safety.md); installing the SDK is in [setup.md](../../docs/setup.md).
 
 **Status: the real backend has never been run on the robot.** Everything on this page that depends on the robot's behaviour is *unverified* until the [checklist](#supervised-robot-checklist) has been worked through.
 
 ## Robot facts
 
 - **Unitree Go2 EDU**, controlled directly through the Unitree SDK2 Python bindings (`unitree_sdk2py`) over CycloneDDS. No ROS.
-- Reached over a wired Ethernet interface, on the robot's subnet (usually `192.168.123.x`; the robot is `192.168.123.161`). The interface name is a config value (`robot.network_interface`), never hardcoded ([setup.md](setup.md#3-network-interface)).
+- Reached over a wired Ethernet interface, on the robot's subnet (usually `192.168.123.x`; the robot is `192.168.123.161`). The interface name is a config value (`robot.network_interface`), never hardcoded ([setup.md](../../docs/setup.md#3-network-interface)).
 - DDS domain 0.
 - The IMU and sport mode are assumed available through `SportModeState` on topic `rt/sportmodestate` (*unverified*).
 - **SDK action calls return when the command is accepted, not when the motion ends.** This is why `sit` and `stretch` wait after their call ([settle waits](#settle-waits)).
-- The robot's low-level contact person is Achiya ([project.md](project.md)); ask him about SDK topics, state fields and odometry.
+- The robot's low-level contact person is Achiya ([project.md](../../docs/project.md)); ask him about SDK topics, state fields and odometry.
 
 ## SDK and DDS usage
 
-All SDK use is in `skills/real.py`, selected in the skill process by `GO2_BACKEND=real` (`backend.py`). The dispatcher itself never imports the SDK ([architecture.md](architecture.md#process-model)); every SDK import is inside a function, so importing any `skills` module needs only the standard library ([skills.md](skills.md#no-side-effects-on-import)).
+All SDK use is in `skills/real.py`, selected in the skill process by `GO2_BACKEND=real` (`backend.py`). The dispatcher itself never imports the SDK ([architecture.md](../../docs/architecture.md#process-model)); every SDK import is inside a function, so importing any `skills` module needs only the standard library ([skills.md](skills.md#no-side-effects-on-import)).
 
 | What | How |
 |---|---|
@@ -25,11 +25,11 @@ All SDK use is in `skills/real.py`, selected in the skill process by `GO2_BACKEN
 | Camera | `VideoClient`, `SetTimeout(3.0)`, `Init()`, `GetImageSample()` → JPEG bytes, decoded with OpenCV. |
 | State | `ChannelSubscriber("rt/sportmodestate", SportModeState_)`, queue length 10 ([state sampling](#state-sampling)). |
 
-Each skill call and each utility (`stop_move`, `read_state`) is a fresh process, so DDS is initialised once per call and the SDK's process-wide channel singleton is always clean ([architecture.md](architecture.md#design-decisions)).
+Each skill call and each utility (`stop_move`, `read_state`) is a fresh process, so DDS is initialised once per call and the SDK's process-wide channel singleton is always clean ([architecture.md](../../docs/architecture.md#design-decisions)).
 
 ### Motion
 
-`walk` and `turn` are open-loop: they send `Move` every 0.1 s at 0.3 m/s (walk) or 1.0 rad/s (turn) for the time the motion should take, then `StopMove()`. Nothing measures the distance or angle covered. If `Move` returns non-zero, the loop sends `StopMove()` and reports `sdk_error`. If the dispatcher dies, the loop notices on its next iteration, stops the robot and exits ([safety.md](safety.md#if-the-dispatcher-dies)). Parameters and constants: [skills.md](skills.md#the-skills).
+`walk` and `turn` are open-loop: they send `Move` every 0.1 s at 0.3 m/s (walk) or 1.0 rad/s (turn) for the time the motion should take, then `StopMove()`. Nothing measures the distance or angle covered. If `Move` returns non-zero, the loop sends `StopMove()` and reports `sdk_error`. If the dispatcher dies, the loop notices on its next iteration, stops the robot and exits ([safety.md](../../docs/safety.md#if-the-dispatcher-dies)). Parameters and constants: [skills.md](skills.md#the-skills).
 
 `sit` is `StandDown()` and `stretch` is the robot's built-in `Stretch()` routine, each followed by a settle wait.
 
@@ -72,7 +72,7 @@ Robot state is sampled:
 
 numpy and ctypes values are converted to plain numbers. A missing attribute or a non-finite value becomes `null`; a list field becomes `null` as a whole if any element is bad or its length is wrong.
 
-State is **logged only** in v1. No step gets a verdict from it; the model sees only the derived posture. The samples are the data from which v2 verification thresholds will be set ([roadmap.md](roadmap.md#v2-plan)).
+State is **logged only** in v1. No step gets a verdict from it; the model sees only the derived posture. The samples are the data from which v2 verification thresholds will be set ([roadmap.md](../../docs/roadmap.md#v2-plan)).
 
 ## Posture rule
 
@@ -84,7 +84,7 @@ State is **logged only** in v1. No step gets a verdict from it; the model sees o
 | ≥ 0.22 m (`POSTURE_STANDING_MIN_M`) | `standing` |
 | in between, or `null` | `unknown` |
 
-`mode` is passed in but not used yet, so the rule can switch to `mode` after the checklist without touching any caller. Both thresholds are *tunable* and *unverified*; checklist items 1 and 7 decide them. How posture is carried through a task and shown to the model: [loop-and-context.md](loop-and-context.md#user-message).
+`mode` is passed in but not used yet, so the rule can switch to `mode` after the checklist without touching any caller. Both thresholds are *tunable* and *unverified*; checklist items 1 and 7 decide them. How posture is carried through a task and shown to the model: [loop-and-context.md](../../dispatcher/docs/loop-and-context.md#user-message).
 
 ## Settle waits
 
@@ -100,13 +100,13 @@ The waits are guesses, *tunable* and *unverified*; checklist items 3 and 7 measu
 
 ## Open robot-side questions
 
-The list of open questions with owners is in [roadmap.md](roadmap.md#open-questions) and [pending human work](roadmap.md#pending-human-work). What they mean on the robot side, and what v1 does meanwhile:
+The list of open questions with owners is in [roadmap.md](../../docs/roadmap.md#open-questions) and [pending human work](../../docs/roadmap.md#pending-human-work). What they mean on the robot side, and what v1 does meanwhile:
 
-- **Odometry.** `SportModeState` has `position` and `velocity`, and Go2 topic lists include `rt/utlidar/robot_odom` and `rt/utlidar/robot_pose`. Whether the robot's own estimate is available and usable is unknown (ask Achiya). v1 logs `position` and `velocity` in every sample and uses neither. The answer decides whether `walk` can be verified in v2 and whether a geofence is possible ([roadmap.md](roadmap.md#verifiability-per-skill)).
+- **Odometry.** `SportModeState` has `position` and `velocity`, and Go2 topic lists include `rt/utlidar/robot_odom` and `rt/utlidar/robot_pose`. Whether the robot's own estimate is available and usable is unknown (ask Achiya). v1 logs `position` and `velocity` in every sample and uses neither. The answer decides whether `walk` can be verified in v2 and whether a geofence is possible ([roadmap.md](../../docs/roadmap.md#verifiability-per-skill)).
 - **No skill can stand the robot up.** After `sit`, motion fails until a person stands the robot up with the remote; in a batch run one `sit` affects every later task. On the stub, `go2 --reset-stub` restores the posture. A `stand` skill (`StandUp()` then `BalanceStand()`, with a settle wait) is recommended before experiments; adding one is shown in [skills.md](skills.md#adding-a-new-skill).
 - **`Move` while lying down.** v1 treats a non-zero return code as `sdk_error` (the stub returns 1). If the real robot silently ignores `Move` and returns 0, `walk` and `turn` report `ok` while nothing moved. Checklist item 8 finds out.
-- **Kill-to-stop latency** and whether the sport service stops by itself when `Move` commands stop arriving: [safety.md](safety.md#between-kill-and-stopmove). Checklist item 5 measures the latency.
-- **Installing the `robot` extra on the lab machine** (CycloneDDS build) and the Python version to pin: [setup.md](setup.md#lab-machine-real-robot).
+- **Kill-to-stop latency** and whether the sport service stops by itself when `Move` commands stop arriving: [safety.md](../../docs/safety.md#between-kill-and-stopmove). Checklist item 5 measures the latency.
+- **Installing the `robot` extra on the lab machine** (CycloneDDS build) and the Python version to pin: [setup.md](../../docs/setup.md#lab-machine-real-robot).
 
 ## Design decisions
 
@@ -117,9 +117,9 @@ The list of open questions with owners is in [roadmap.md](roadmap.md#open-questi
 
 ## Supervised robot checklist
 
-Run this on the lab machine with `robot.backend = "real"`, **in this order**, with the robot **standing**, the area clear and the remote (e-stop) in hand. Read [safety.md](safety.md) first.
+Run this on the lab machine with `robot.backend = "real"`, **in this order**, with the robot **standing**, the area clear and the remote (e-stop) in hand. Read [safety.md](../../docs/safety.md) first.
 
-Commands use `go2` with a real-backend config. Run a step as a one-step task, or run the skill by hand ([skills.md](skills.md#running-a-skill-by-hand)), whichever is easier to observe. The run log has every state sample and timing ([run-log.md](run-log.md)).
+Commands use `go2` with a real-backend config. Run a step as a one-step task, or run the skill by hand ([skills.md](skills.md#running-a-skill-by-hand)), whichever is easier to observe. The run log has every state sample and timing ([run-log.md](../../dispatcher/docs/run-log.md)).
 
 1. `go2 state` returns within about 1 s. Record `mode`, `body_height` and `position` while standing.
 2. `walk` forward 0.5 m; `turn` left 90°. Check the distance and angle visually. Record `position` and `imu_rpy` from `state_before` / `state_after` in the run log (evidence for the odometry question).
@@ -133,7 +133,7 @@ Commands use `go2` with a real-backend config. Run a step as a one-step task, or
 
 ### Results
 
-Record each result here: date, measured value or observation, and what was changed because of it. Then move the resulting fact into the section of this page it belongs to (or the owning document), update the constant in code if a value changed, and remove the resolved item from [roadmap.md](roadmap.md).
+Record each result here: date, measured value or observation, and what was changed because of it. Then move the resulting fact into the section of this page it belongs to (or the owning document), update the constant in code if a value changed, and remove the resolved item from [roadmap.md](../../docs/roadmap.md).
 
 | # | Date | Result / value | Follow-up |
 |---|---|---|---|

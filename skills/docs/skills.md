@@ -7,7 +7,7 @@ A skill has two parts:
 1. `skills/catalog/<name>/SKILL.md`: YAML frontmatter that the registry reads, plus prose for humans. The prose is never sent to the LLM.
 2. `skills/<name>.py`: a module with a `main()` that runs as a subprocess, and a module-level `POLICY` object that the dispatcher reads.
 
-v1 skills: `walk`, `turn`, `sit`, `stretch`, `detect_object`. Two utilities, `stop_move` and `read_state`, run the same way but are not skills: they have no `SKILL.md` and the model never sees them. The registry loads every subfolder of `skills.dir` that has a `SKILL.md`, so a different skill set (for example another granularity tier) is a different folder ([running.md](running.md)).
+v1 skills: `walk`, `turn`, `sit`, `stretch`, `detect_object`. Two utilities, `stop_move` and `read_state`, run the same way but are not skills: they have no `SKILL.md` and the model never sees them. The registry loads every subfolder of `skills.dir` that has a `SKILL.md`, so a different skill set (for example another granularity tier) is a different folder ([running.md](../../docs/running.md)).
 
 ## SKILL.md frontmatter
 
@@ -56,7 +56,7 @@ params:
 ---
 ```
 
-The dispatcher checks every planned step against these declarations before anything runs ([loop-and-context.md](loop-and-context.md#step-bounds)).
+The dispatcher checks every planned step against these declarations before anything runs ([loop-and-context.md](../../dispatcher/docs/loop-and-context.md#step-bounds)).
 
 ## Catalog and registry hash
 
@@ -102,7 +102,7 @@ python -m skills.<name> '<params-json>'
 | `GO2_PARENT_PID` | Dispatcher PID, for the orphan watchdog. |
 | `PYTHONUNBUFFERED` | `1`. |
 
-- The process runs with the base dir as working directory, in its own session (`start_new_session=True`), so a kill reaches the whole process group ([safety.md](safety.md#the-stop-path)).
+- The process runs with the base dir as working directory, in its own session (`start_new_session=True`), so a kill reaches the whole process group ([safety.md](../../docs/safety.md#the-stop-path)).
 - **Output:** exactly one JSON line on the real stdout, written by `result.emit()`. Everything else goes to stderr: `capture_stdout()` points fd 1 at stderr first, so output from the SDK, CycloneDDS, ultralytics or C code cannot corrupt the response line. The executor reads the last non-empty stdout line and requires its `skill` to match.
 - **Exit code:** 0 for `status = "ok"`, 1 for `status = "error"` (`emit` uses `os._exit`, because DDS threads can hang normal interpreter shutdown). No valid response line means step outcome `malformed`.
 - Skills check only presence, type and enum membership (`invalid_params`) and apply no defaults, so a skill run by hand is not range-limited and needs all params. Only `detect_object.target` is trimmed and lower-cased by the skill.
@@ -122,7 +122,7 @@ Every skill and utility prints one `SkillResponse` (`schema_version` 1):
 | `state_error` | Why a state sample failed (`before: ...` / `after: ...`, joined with `; `), else `null`. |
 | `timing` | `init_ms`, `exec_ms`, `state_ms`, `total_ms`; `stop_move` adds `stop_call_ms`. |
 
-Robot state fields: `t` (unix time), `backend`, `posture` (`standing` / `sitting` / `unknown`), `mode`, `gait_type`, `body_height`, `position` [x, y, z], `velocity`, `yaw_speed`, `imu_rpy`, `foot_force`, `error_code`. Missing or non-finite values are `null`. State is **logged only**; the model sees only the derived posture ([loop-and-context.md](loop-and-context.md#user-message)). Field sources and the posture rule: [robot.md](robot.md).
+Robot state fields: `t` (unix time), `backend`, `posture` (`standing` / `sitting` / `unknown`), `mode`, `gait_type`, `body_height`, `position` [x, y, z], `velocity`, `yaw_speed`, `imu_rpy`, `foot_force`, `error_code`. Missing or non-finite values are `null`. State is **logged only**; the model sees only the derived posture ([loop-and-context.md](../../dispatcher/docs/loop-and-context.md#user-message)). Field sources and the posture rule: [robot.md](robot.md).
 
 `ok` example (stub, `turn`):
 
@@ -162,7 +162,7 @@ Walk and turn are open-loop: they command a velocity for the time the motion sho
 | `weights_missing` | detect_object | The YOLO weights file does not exist. |
 | `state_unavailable` | read_state | No state could be sampled. |
 
-Detector errors have the message `<ExceptionType>: <message>`. Outcomes the dispatcher adds on its own (`timeout`, `malformed`, `rejected`, `motion_budget_exceeded`, `interrupted`) are listed in [loop-and-context.md](loop-and-context.md#step-outcomes).
+Detector errors have the message `<ExceptionType>: <message>`. Outcomes the dispatcher adds on its own (`timeout`, `malformed`, `rejected`, `motion_budget_exceeded`, `interrupted`) are listed in [loop-and-context.md](../../dispatcher/docs/loop-and-context.md#step-outcomes).
 
 ## Policies
 
@@ -187,7 +187,7 @@ class SkillPolicy:
 | `StretchPolicy` | `TIMEOUT_S` | zero | `TIMEOUT_S = 20.0`, `SETTLE_S = 6.0` (*tunable*) |
 | `DetectObjectPolicy` | `TIMEOUT_S` | zero | `TIMEOUT_S = 45.0` (*tunable*; covers YOLO load on CPU) |
 
-`BASE_S` covers process start, SDK init and the two state samples; `FACTOR` is a margin on the commanded motion time. The timeout covers the whole process from start to exit. Settle waits are explained in [robot.md](robot.md). The motion cost feeds the motion budget ([safety.md](safety.md#motion-budget)).
+`BASE_S` covers process start, SDK init and the two state samples; `FACTOR` is a margin on the commanded motion time. The timeout covers the whole process from start to exit. Settle waits are explained in [robot.md](robot.md). The motion cost feeds the motion budget ([safety.md](../../docs/safety.md#motion-budget)).
 
 ## No side effects on import
 
@@ -207,7 +207,7 @@ The stub (`skills/stub.py`) replaces only the SDK layer inside the skill process
 - `detect(target)` waits 0.5 s and returns found (`confidence` 0.9, position and closeness from the entry) if the target is listed in `stub.detections`, else not found.
 - `sample_state()` returns `body_height` 0.32 (standing) or 0.08 (sitting); other fields are `null`.
 - All stub waits go through `backend.sleep()` and are multiplied by `stub.time_scale`. Skills never call `time.sleep` themselves.
-- The stub is reset to `stub.initial_posture` at startup and by `go2 --reset-stub`, not between tasks ([running.md](running.md)).
+- The stub is reset to `stub.initial_posture` at startup and by `go2 --reset-stub`, not between tasks ([running.md](../../docs/running.md)).
 
 ### Fault injection
 
@@ -242,7 +242,7 @@ For one process run by hand, set `GO2_STUB_FAULT=<kind>` directly. `GO2_STUB_NOI
 
 ## Adding a new skill
 
-Example: a `stand` skill (recommended before experiments, see [roadmap.md](roadmap.md#open-questions)).
+Example: a `stand` skill (recommended before experiments, see [roadmap.md](../../docs/roadmap.md#open-questions)).
 
 1. Create `skills/stand.py`:
    ```python
@@ -274,7 +274,7 @@ Example: a `stand` skill (recommended before experiments, see [roadmap.md](roadm
 2. Create `skills/catalog/stand/SKILL.md` with frontmatter (`name: stand`, `entrypoint: skills.stand`, a one-line `description`, `params` if any) and a short prose section.
 3. If the skill moves the robot, return a `MotionCost` from `motion_cost()`. If some observations should reach the model, list them in `context_observations`.
 4. Use `backend.sleep()`, never `time.sleep`. In motion loops, check `result.orphaned()` and always end with `StopMove()`.
-5. Run `uv run go2 catalog`, run the skill by hand (below), and add tests (contract test in `skills/tests/integration/test_skills.py`, policy test in `skills/tests/unit/test_skill_policies.py`). The catalog golden file and the registry hash change: rewrite the golden file with `uv run pytest --update-golden` and review the diff ([testing.md](testing.md)).
+5. Run `uv run go2 catalog`, run the skill by hand (below), and add tests (contract test in `skills/tests/integration/test_skills.py`, policy test in `skills/tests/unit/test_skill_policies.py`). The catalog golden file and the registry hash change: rewrite the golden file with `uv run pytest --update-golden` and review the diff ([testing.md](../../docs/testing.md)).
 6. Update this page (and [robot.md](robot.md) if the skill adds robot-side facts).
 
 ## Running a skill by hand
@@ -291,7 +291,7 @@ uv run python -m skills.read_state '{}'
 uv run python -m skills.stop_move '{}'
 ```
 
-Without `GO2_STUB_STATE_FILE` and `GO2_STUB_TIME_SCALE` the stub uses `runs/.stub_state.json` (relative to the working directory) and 0.1. On the real robot set `GO2_BACKEND=real GO2_IFACE=<nic>` (and `GO2_YOLO_WEIGHTS` for detection), with the robot supervised ([safety.md](safety.md#supervised-operation-rules)). Pass all params: skills do not fill defaults.
+Without `GO2_STUB_STATE_FILE` and `GO2_STUB_TIME_SCALE` the stub uses `runs/.stub_state.json` (relative to the working directory) and 0.1. On the real robot set `GO2_BACKEND=real GO2_IFACE=<nic>` (and `GO2_YOLO_WEIGHTS` for detection), with the robot supervised ([safety.md](../../docs/safety.md#supervised-operation-rules)). Pass all params: skills do not fill defaults.
 
 ## Design decisions
 
@@ -301,6 +301,6 @@ Without `GO2_STUB_STATE_FILE` and `GO2_STUB_TIME_SCALE` the stub uses `runs/.stu
 - **Each skill owns its policy** (timeout formula, motion cost, observations shown to the model) as class constants next to the code that shares them, so a number like walking speed is defined once and tuned in one place.
 - **The catalog is generated from the registry, never hand-written**, so skill sets of different granularity are presented to the model in the same form and stay comparable. The `SKILL.md` prose never reaches the model.
 - **An unsupported `detect_object` target is a skill error with suggestions; the 80-class COCO list stays out of the catalog.** Listing every class would add tokens to every call; the skill validates the target and suggests close matches, so the model can correct itself on the next call.
-- **State is sampled at the start and end of every step, for logging only.** v1 gives no verdicts. The samples provide data to set v2 verification thresholds before seeing any verification results, and supply the posture shown to the model ([roadmap.md](roadmap.md#v2-plan)).
-- **The stub replaces only the SDK layer inside the subprocess**, so process start, timeouts and kills are exercised for real offline. It remembers sitting or standing only: enough to run every failure path. Simulating motion is a v2 prerequisite ([roadmap.md](roadmap.md#stub-upgrade-prerequisite)).
+- **State is sampled at the start and end of every step, for logging only.** v1 gives no verdicts. The samples provide data to set v2 verification thresholds before seeing any verification results, and supply the posture shown to the model ([roadmap.md](../../docs/roadmap.md#v2-plan)).
+- **The stub replaces only the SDK layer inside the subprocess**, so process start, timeouts and kills are exercised for real offline. It remembers sitting or standing only: enough to run every failure path. Simulating motion is a v2 prerequisite ([roadmap.md](../../docs/roadmap.md#stub-upgrade-prerequisite)).
 - **Fault injection by dispatched step number** (error, hang, crash, garbage) covers each step outcome the executor can produce, with real processes.

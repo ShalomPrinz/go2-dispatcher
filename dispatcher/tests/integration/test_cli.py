@@ -77,7 +77,7 @@ def test_reset_stub(cfg_path):
 
 
 def test_cli_does_not_import_anthropic():
-    """`anthropic` is imported lazily (docs/llm.md); the CLI starts fast without it."""
+    """`anthropic` is imported lazily (dispatcher/docs/llm.md); the CLI starts fast without it."""
     code = "import sys, dispatcher.transports.cli; print('anthropic' in sys.modules)"
     proc = subprocess.run([sys.executable, "-c", code], cwd=REPO_ROOT, capture_output=True,
                           text=True, timeout=30)

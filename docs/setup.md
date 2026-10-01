@@ -111,7 +111,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 TELEGRAM_BOT_TOKEN=123456789:AA...
 ```
 
-`config.toml` and `.env` are gitignored. Every key, the `.env` rules and path resolution are in [configuration.md](configuration.md). Before changing `llm.model`, read [llm.md](llm.md): the request is shaped for Sonnet 5.5's parameter restrictions.
+`config.toml` and `.env` are gitignored. Every key, the `.env` rules and path resolution are in [configuration.md](configuration.md). Before changing `llm.model`, read [llm.md](../dispatcher/docs/llm.md): the request is shaped for Sonnet 5.5's parameter restrictions.
 
 ## Verify
 
@@ -122,7 +122,7 @@ uv run go2 run "turn left 90 degrees, then tell me if you see a chair"
 uv run pytest                        # all default tests pass with no key, robot or network
 ```
 
-The `run` command needs `ANTHROPIC_API_KEY`. Its run log is written to `runs/` ([run-log.md](run-log.md)).
+The `run` command needs `ANTHROPIC_API_KEY`. Its run log is written to `runs/` ([run-log.md](../dispatcher/docs/run-log.md)).
 
 On the lab machine, with the robot on and standing, check the real backend:
 
@@ -130,7 +130,7 @@ On the lab machine, with the robot on and standing, check the real backend:
 uv run go2 --backend real state     # should return within about 1 s
 ```
 
-(or set `backend = "real"` in `config.toml`). Read [safety.md](safety.md), then work through the supervised robot checklist in [robot.md](robot.md#supervised-robot-checklist) before running real tasks.
+(or set `backend = "real"` in `config.toml`). Read [safety.md](safety.md), then work through the supervised robot checklist in [robot.md](../skills/docs/robot.md#supervised-robot-checklist) before running real tasks.
 
 ## Design decisions
 

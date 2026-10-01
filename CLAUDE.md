@@ -11,22 +11,22 @@ uv sync                                        # core + dev deps (stub mode); la
 uv run pytest -q                               # default suite: no API key, robot or network needed
 uv run pytest -m integration                   # real subprocesses on the stub backend
 uv run pytest --update-golden                  # regenerate golden files; review the diff
-uv run go2 catalog                    # system text, catalog, tool schema, registry hash; no key needed
-uv run go2 state                      # stub state as JSON
-uv run go2 run "turn left 90 degrees" # one task on the stub (needs ANTHROPIC_API_KEY in .env)
-uv run go2 --fault 1:hang run "…"     # stub fault injection (docs/skills.md)
-uv run go2 --reset-stub               # reset the stub posture and exit
+uv run go2 catalog                             # system text, catalog, tool schema, registry hash; no key needed
+uv run go2 state                               # stub state as JSON
+uv run go2 run "turn left 90 degrees"          # one task on the stub (needs ANTHROPIC_API_KEY in .env)
+uv run go2 --fault 1:hang run "…"              # stub fault injection (skills/docs/skills.md)
+uv run go2 --reset-stub                        # reset the stub posture and exit
 ```
 
 Opt-in tests (`--run-live`, `--run-robot`) are described in [docs/testing.md](docs/testing.md).
 
 ## Documentation rules
 
-- `docs/` is the source of truth for why the system is built as it is and for its contracts (plan schema, skill response, config keys, outcome codes, log records, fixed texts).
+- The docs (`docs/`, `dispatcher/docs/`, `skills/docs/`) are the source of truth for why the system is built as it is and for its contracts (plan schema, skill response, config keys, outcome codes, log records, fixed texts).
 - A change that affects behaviour updates the owning doc **in the same commit**. Never leave docs and code disagreeing.
 - Decisions go into the owning doc's "Design decisions" section, with the reason and any rejected alternative. There is no separate decisions log.
 - Open questions and pending work go into [docs/roadmap.md](docs/roadmap.md), each with an owner or a way to resolve it. When one is resolved, move the result into the owning doc and remove it from the roadmap.
-- Cite docs, not section numbers, in code comments (e.g. `(docs/loop-and-context.md)`). Mark starting values that will be tuned as `(tunable)`.
+- Cite docs, not section numbers, in code comments (e.g. `(dispatcher/docs/loop-and-context.md)`). Mark starting values that will be tuned as `(tunable)`.
 - No process history and no personal contact details in docs.
 
 ## Safety rules
@@ -35,7 +35,7 @@ Opt-in tests (`--run-live`, `--run-robot`) are described in [docs/testing.md](do
 - The stub is the default backend. Development, tests and demos use the stub.
 - Opt-in robot tests (`--run-robot`) need a supervised session; never run them from an agent.
 - No secrets in code, config files under version control, or logs. The API key and Telegram token live only in `.env` ([docs/configuration.md](docs/configuration.md)).
-- Fixed texts in `prompts.py` and `SKILL.md` files change the registry hash and the golden files; changing them makes runs incomparable ([docs/skills.md](docs/skills.md)).
+- Fixed texts in `prompts.py` and `SKILL.md` files change the registry hash and the golden files; changing them makes runs incomparable ([skills/docs/skills.md](skills/docs/skills.md)).
 
 ## Working pattern for large tasks
 

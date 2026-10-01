@@ -4,7 +4,7 @@
 
 A final-year, full-year capstone project at Bar-Ilan University. The lab's Unitree **Go2 EDU** quadruped is controlled in natural language: an operator writes a task in Telegram (or on the CLI), an LLM turns it into a plan of skill calls, and each skill drives the robot through the Unitree SDK over DDS. There is no ROS.
 
-The dispatcher is also a measurement instrument. Every task writes a complete run log ([run-log.md](run-log.md)) from which tokens, latency and replanning can be computed. That log is the dataset for the study below, so many design choices favour comparable measurements over convenience (see [architecture.md](architecture.md#design-decisions)).
+The dispatcher is also a measurement instrument. Every task writes a complete run log ([run-log.md](../dispatcher/docs/run-log.md)) from which tokens, latency and replanning can be computed. That log is the dataset for the study below, so many design choices favour comparable measurements over convenience (see [architecture.md](architecture.md#design-decisions)).
 
 Scope: simulation (a stub backend) for development and phase-one characterisation; the participant study (below) runs on the real robot. The student has computer-science coursework but no hands-on control or RL background, so the design favours simple, inspectable mechanisms over clever ones.
 
@@ -12,15 +12,15 @@ Scope: simulation (a stub backend) for development and phase-one characterisatio
 
 A previous student, Tamir Ashwal, built a first version (repository `TamirAshwal/Go2`, see [references.md](references.md)). That repository held only four skill scripts (`walk`, `sit`, `stretch`, `detect_object`, about 164 lines in total), a static docs site and a Word file. It had no dispatcher code and no OpenClaw configuration: runtime behaviour came entirely from OpenClaw plus the prose in each `SKILL.md`. His research question (enforcing restrictions at prompt level versus through tool profiles) is retired.
 
-This repository is new, not a fork. Only the skill logic was ported; `walk` was split into `walk` and `turn` (see [skills.md](skills.md)).
+This repository is new, not a fork. Only the skill logic was ported; `walk` was split into `walk` and `turn` (see [skills.md](../skills/docs/skills.md)).
 
 ## Research direction
 
 ### The advisor's requirements
 
-The advisor's original complaint about the inherited system was that the LLM guided the robot step by step, which made it slow. He asked for the LLM to produce an **up-front plan with explicit stop-and-report points** at which it can replan. The plan contract (`PLAN` / `DONE` / `ABORT`, `replan_after`, the planning horizon) exists because of this; it is specified in [loop-and-context.md](loop-and-context.md).
+The advisor's original complaint about the inherited system was that the LLM guided the robot step by step, which made it slow. He asked for the LLM to produce an **up-front plan with explicit stop-and-report points** at which it can replan. The plan contract (`PLAN` / `DONE` / `ABORT`, `replan_after`, the planning horizon) exists because of this; it is specified in [loop-and-context.md](../dispatcher/docs/loop-and-context.md).
 
-He also defined what counts as a failure (skill error, bounds rejection, timeout); the dispatcher's failure budget follows that definition ([loop-and-context.md](loop-and-context.md)).
+He also defined what counts as a failure (skill error, bounds rejection, timeout); the dispatcher's failure budget follows that definition ([loop-and-context.md](../dispatcher/docs/loop-and-context.md)).
 
 ### Main study
 
@@ -65,7 +65,7 @@ OpenClaw (the runtime the predecessor used) is included as a **system-level** ba
 ## Current status
 
 - **v1 is implemented** and tested against the stub backend: the dispatcher loop, five skills, the stop path and limits, CLI and Telegram transports, and the run log.
-- **The real backend has never been run on the robot.** Robot-side values (posture thresholds, settle waits, stop latency, `Move` while lying down) are unverified; the supervised checklist in [robot.md](robot.md) resolves them.
-- **The LLM request has not been verified against the live API** (Sonnet 5.5 with `thinking: between_tools` and auto tool choice). See [llm.md](llm.md).
+- **The real backend has never been run on the robot.** Robot-side values (posture thresholds, settle waits, stop latency, `Move` while lying down) are unverified; the supervised checklist in [robot.md](../skills/docs/robot.md) resolves them.
+- **The LLM request has not been verified against the live API** (Sonnet 5.5 with `thinking: between_tools` and auto tool choice). See [llm.md](../dispatcher/docs/llm.md).
 - All numeric limits are starting values to be tuned from logs and robot runs.
 - Next: the v2 verification layer, then experiment design. See [roadmap.md](roadmap.md).

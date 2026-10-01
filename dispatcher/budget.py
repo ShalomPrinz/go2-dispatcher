@@ -7,9 +7,9 @@ from typing import Literal
 from .policies import MotionCost
 
 BUDGET_EPSILON = 1e-9          # tolerance on the limit: exceeds when used + cost > max + epsilon
-MESSAGE_DECIMALS = 2           # numbers in the motion-budget message are rounded to this (docs/loop-and-context.md)
+MESSAGE_DECIMALS = 2           # numbers in the motion-budget message are rounded to this (dispatcher/docs/loop-and-context.md)
 
-# Motion-budget message (docs/loop-and-context.md); kind -> unit
+# Motion-budget message (dispatcher/docs/loop-and-context.md); kind -> unit
 MOTION_BUDGET_MESSAGE = ("this step needs {need:g} {unit} of {kind} "
                          "but only {left:g} {unit} remain for this task")
 KIND_UNITS = {"travel": "m", "rotation": "deg"}
@@ -50,7 +50,7 @@ class MotionBudget:
         return max(0.0, self.max_rotation_deg - self.used_rotation_deg)
 
     def exceeded_message(self, kind: BudgetKind, cost: MotionCost) -> str:
-        """The ``error_message`` (docs/loop-and-context.md) for a step of ``cost`` that would exceed ``kind``."""
+        """The ``error_message`` (dispatcher/docs/loop-and-context.md) for a step of ``cost`` that would exceed ``kind``."""
         need = cost.distance_m if kind == "travel" else cost.rotation_deg
         return MOTION_BUDGET_MESSAGE.format(
             need=round(need, MESSAGE_DECIMALS), left=round(self.remaining(kind), MESSAGE_DECIMALS),

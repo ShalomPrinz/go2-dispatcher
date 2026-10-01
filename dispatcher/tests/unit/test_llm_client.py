@@ -1,4 +1,4 @@
-"""AnthropicPlanner over httpx.MockTransport — no network (docs/llm.md, testing.md)."""
+"""AnthropicPlanner over httpx.MockTransport — no network (dispatcher/docs/llm.md, docs/testing.md)."""
 
 from __future__ import annotations
 
@@ -91,7 +91,7 @@ def test_request_body(tmp_path):
     assert "strict" not in json.dumps(body)
     assert not body.get("stream")
     assert "temperature" not in json.dumps(body) and "extra_body" not in body
-    cfg = make_config(tmp_path).llm  # the defaults (docs/llm.md)
+    cfg = make_config(tmp_path).llm  # the defaults (dispatcher/docs/llm.md)
     assert body["model"] == cfg.model == "claude-sonnet-5-5"
     assert body["max_tokens"] == cfg.max_tokens == 2048
 

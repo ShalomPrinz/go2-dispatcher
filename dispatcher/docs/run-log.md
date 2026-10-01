@@ -1,6 +1,6 @@
 # Run log
 
-Every task writes a complete JSONL log. It is the dataset for the study ([project.md](project.md)): tokens, latency and replanning are all computed from it, and it holds the exact prompts and every robot state sample. The record types and their fields are a contract: analysis scripts depend on them, so a change here is a change to the dataset.
+Every task writes a complete JSONL log. It is the dataset for the study ([project.md](../../docs/project.md)): tokens, latency and replanning are all computed from it, and it holds the exact prompts and every robot state sample. The record types and their fields are a contract: analysis scripts depend on them, so a change here is a change to the dataset.
 
 What counts as a failure, an LLM call or a rejection is defined in [loop-and-context.md](loop-and-context.md#what-counts); this page says where each is recorded.
 
@@ -40,10 +40,10 @@ Examples below are from a stub run with a scripted planner (long fields shortene
 
 ### `task_start`
 
-`task`, `source` (`cli` / `telegram` / `test`), `sender_id` (Telegram user id or null), `condition`, `config` (full config dump; it holds no secrets), `registry_hash`, `system_text`, `catalog_text`, `tool_schema`, `skills` (names), `previous_task` (`TaskSummary` or null), `posture`, `versions` (`python`, `anthropic`, `pydantic`, `go2_dispatcher`), `git_commit` (`git rev-parse HEAD` in the base dir, or null).
+`task`, `source` (`cli` / `telegram` / `test`), `sender_id` (Telegram user id or null), `condition`, `config` (full config dump; it holds no secrets), `registry_hash`, `system_text`, `catalog_text`, `tool_schema`, `skills` (names), `previous_task` (`TaskSummary` or null), `posture`, `versions` (`python`, `anthropic`, `pydantic`, `go2-dispatcher`), `git_commit` (`git rev-parse HEAD` in the base dir, or null).
 
 ```json
-{"ts":"2026-10-01T11:36:03.637094+03:00","t_mono_ms":0.44,"session_id":"8877711a…","run_id":"b6bb52fe…","seq":0,"type":"task_start","task":"turn left 90 degrees, then tell me if you see a chair","source":"cli","sender_id":null,"condition":"","config":{"run":{"condition":""},"llm":{"model":"claude-sonnet-5-5","max_tokens":2048,"thinking":"between_tools",…},…},"registry_hash":"bf06b5af6abd480b","system_text":"You plan actions for a Unitree Go2 …","catalog_text":"detect_object: …","tool_schema":{"name":"submit_plan",…},"skills":["detect_object","sit","stretch","turn","walk"],"previous_task":null,"posture":"standing","versions":{"python":"3.10.12","anthropic":"1.11.0","pydantic":"2.13.5","go2_dispatcher":"0.1.0"},"git_commit":null}
+{"ts":"2026-10-01T11:36:03.637094+03:00","t_mono_ms":0.44,"session_id":"8877711a…","run_id":"b6bb52fe…","seq":0,"type":"task_start","task":"turn left 90 degrees, then tell me if you see a chair","source":"cli","sender_id":null,"condition":"","config":{"run":{"condition":""},"llm":{"model":"claude-sonnet-5-5","max_tokens":2048,"thinking":"between_tools",…},…},"registry_hash":"bf06b5af6abd480b","system_text":"You plan actions for a Unitree Go2 …","catalog_text":"detect_object: …","tool_schema":{"name":"submit_plan",…},"skills":["detect_object","sit","stretch","turn","walk"],"previous_task":null,"posture":"standing","versions":{"python":"3.10.12","anthropic":"1.11.0","pydantic":"2.13.5","go2-dispatcher":"0.1.0"},"git_commit":null}
 ```
 
 ### `llm_request`
@@ -169,7 +169,7 @@ Group tasks by condition first: `condition`, `registry_hash` (the skill set and 
 | Process overhead per step | `step_result.duration_ms − response.timing.total_ms` (interpreter start and teardown outside the skill's own timing) |
 | Stop latency | `stop_move.response.timing.stop_call_ms` (utility start to `StopMove()` return) and `stop_move.duration_ms` (whole utility process) |
 | Motion commanded | `step_start.motion_cost`, `task_end.budget_used` |
-| Robot state | `step_result.response.state_before` / `state_after`; `stop_move.response.state_after` ([robot.md](robot.md#state-sampling)) |
+| Robot state | `step_result.response.state_before` / `state_after`; `stop_move.response.state_after` ([robot.md](../../skills/docs/robot.md#state-sampling)) |
 | Exact prompts | `task_start.system_text` / `catalog_text` / `tool_schema` + `llm_request.user_text` |
 | Session continuity | `session_id` links tasks of one process; `task_start.previous_task` and `posture` show what carried over |
 
@@ -219,4 +219,4 @@ for cond, rows in sorted(by_cond.items()):
 - **The return reason is logged on every call.** Without it, horizon 1 would look like constant replanning; with it, `plan_complete` calls can be separated from replans after a failure ([loop-and-context.md](loop-and-context.md#return-reasons)).
 - **Horizon rejections are their own record type**, so their rate can be measured per condition rather than hidden among other invalid replies ([llm.md](llm.md#horizon-rejection)).
 - **Infrastructure retries are logged separately and never counted as LLM calls or replans**, so provider trouble does not contaminate the replanning metric.
-- **Full robot state is logged, not just posture**, as the data for setting v2 verification thresholds ([roadmap.md](roadmap.md#v2-plan)).
+- **Full robot state is logged, not just posture**, as the data for setting v2 verification thresholds ([roadmap.md](../../docs/roadmap.md#v2-plan)).

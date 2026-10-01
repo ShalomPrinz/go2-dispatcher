@@ -5,9 +5,9 @@ Everything that limits or stops the robot. The dispatcher bounds what the LLM ca
 ## Supervised-operation rules
 
 - Run the real robot only under supervision, with the remote (e-stop) in hand and a clear area around the robot.
-- Before the first real run on a machine, work through the robot checklist in [robot.md](robot.md), in order. The real backend has never been run.
+- Before the first real run on a machine, work through the robot checklist in [robot.md](../skills/docs/robot.md), in order. The real backend has never been run.
 - Keep one dispatcher per robot. The lock ([below](#single-instance-lock)) prevents a second process on the same `log.dir`, not one on another machine or with another `log.dir`.
-- After a `sit`, stand the robot up with the remote: no skill can stand it up ([robot.md](robot.md)).
+- After a `sit`, stand the robot up with the remote: no skill can stand it up ([robot.md](../skills/docs/robot.md)).
 - If an outcome ends with `WARNING: the stop command to the robot failed. Stop the robot manually.`, use the remote at once.
 - Do not raise `motion_budget.*`, the walk/turn ranges in `SKILL.md`, or the policy timeouts without recording the reason in the owning document.
 
@@ -18,7 +18,7 @@ All stops use one path: **kill the running skill process group, then send `StopM
 | Trigger | How |
 |---|---|
 | Operator stop | Telegram: the stop word or `/stop`. CLI: the first Ctrl+C. `request_stop()` sets the stop event and kills the current skill; it returns at once and is safe from any thread. While idle the bot replies `Nothing is running.` |
-| Step timeout | The executor kills a step that runs longer than `POLICY.timeout_s(params)` ([skills.md](skills.md#policies)). Outcome `timeout`, a failure; the task continues with a replan. |
+| Step timeout | The executor kills a step that runs longer than `POLICY.timeout_s(params)` ([skills.md](../skills/docs/skills.md#policies)). Outcome `timeout`, a failure; the task continues with a replan. |
 | Task time limit | `loop.task_time_limit_s` (300 s, *tunable*) from task start. Checked before every LLM call and step, during LLM retry backoff, and by the executor while a step runs. Outcome `TIME_LIMIT_EXCEEDED`. |
 | Shutdown | A second Ctrl+C, SIGTERM, Telegram bot shutdown, or `atexit`: `Dispatcher.shutdown()`. In `go2 bot`, SIGINT/SIGTERM first calls `request_stop("shutdown")`, so a running task is stopped at once (outcome `STOPPED`) before the Telegram library shuts down; `shutdown()` remains the backstop and, if the task is still running after its wait, kills it and sends `StopMove` itself. |
 | Internal error | An unhandled exception in the dispatcher: kill + `StopMove`, outcome `INTERNAL_ERROR`. Logging, kill and `StopMove` are each guarded, so `task_end` and the index line are always written. |
@@ -29,10 +29,10 @@ Details:
 
 - Each skill runs in its own session; the kill is `SIGKILL` to the whole process group. The executor checks for process exit and sends the kill under one lock, so a reused PID is never signalled. The first kill cause wins.
 - `StopMove` runs as `python -m skills.stop_move '{}'` in a new process. A fresh process gets a clean DDS channel (the SDK uses a process-wide singleton). It is never registered as the current process, so a stop can never kill it. It waits up to `robot.stop_move_timeout_s` (10 s) and is not retried. It sends `StopMove` even if its params are invalid, waits 0.5 s and samples the state. `Executor.stop_move()` never raises: if the process cannot even be started, it returns a failed result, so the operator still gets the warning.
-- If a stop, the time limit or shutdown kills a running step, the executor sends `StopMove` right after the kill, and that is the only one: the task then ends without a second, end-of-task `StopMove`. How the posture is updated: [loop-and-context.md](loop-and-context.md#user-message).
+- If a stop, the time limit or shutdown kills a running step, the executor sends `StopMove` right after the kill, and that is the only one: the task then ends without a second, end-of-task `StopMove`. How the posture is updated: [loop-and-context.md](../dispatcher/docs/loop-and-context.md#user-message).
 - If a stop or the time limit arrives while **no** step runs (during an LLM call or between steps), the dispatcher still sends `StopMove` when the task ends. This is idempotent.
 - `StopMove` is not sent after a step that ends normally: walk and turn already end with `StopMove()`.
-- An LLM request already in flight is not cancelled; the stop takes effect when it returns ([llm.md](llm.md#infrastructure-retries)).
+- An LLM request already in flight is not cancelled; the stop takes effect when it returns ([llm.md](../dispatcher/docs/llm.md#infrastructure-retries)).
 
 ### StopMove failure
 
@@ -44,7 +44,7 @@ A SIGKILL runs no cleanup, so the killed skill cannot send `StopMove()` itself. 
 
 ### Measured latency
 
-`stop_move` records `timing.stop_call_ms`: from the start of the utility process to the return of `StopMove()` (interpreter start, DDS init and the call). Kill-to-stop latency = executor kill + process start + `stop_call_ms`. There is no required number; the real value is **unverified on the robot** and is measured by the robot checklist ([robot.md](robot.md)). Every `StopMove` is logged as a `stop_move` record with `duration_ms` and the state 0.5 s after the call ([run-log.md](run-log.md)).
+`stop_move` records `timing.stop_call_ms`: from the start of the utility process to the return of `StopMove()` (interpreter start, DDS init and the call). Kill-to-stop latency = executor kill + process start + `stop_call_ms`. There is no required number; the real value is **unverified on the robot** and is measured by the robot checklist ([robot.md](../skills/docs/robot.md)). Every `StopMove` is logged as a `stop_move` record with `duration_ms` and the state 0.5 s after the call ([run-log.md](../dispatcher/docs/run-log.md)).
 
 ## Busy-reject
 
@@ -56,16 +56,16 @@ Steps run only between LLM calls, never during one. When the dispatcher calls th
 
 ## Motion budget
 
-Each task may command at most `motion_budget.max_distance_m` (10 m) of travel and `motion_budget.max_rotation_deg` (720°) of rotation (both *tunable*). Walk costs its distance, turn its angle, other skills nothing ([skills.md](skills.md#policies)).
+Each task may command at most `motion_budget.max_distance_m` (10 m) of travel and `motion_budget.max_rotation_deg` (720°) of rotation (both *tunable*). Walk costs its distance, turn its angle, other skills nothing ([skills.md](../skills/docs/skills.md#policies)).
 
 - The budget bounds **commanded** motion, not measured motion. Walk and turn are open-loop (velocity × time), so the real distance can differ.
 - It is charged when a step is **dispatched**, even if the step then fails or is killed, because commanded motion may already have happened. Steps rejected before running are not charged.
-- A plan whose steps up to its checkpoint would go over the limit is rejected **before any step runs**, as one failure. The mechanics are in [loop-and-context.md](loop-and-context.md#whole-plan-pre-check).
+- A plan whose steps up to its checkpoint would go over the limit is rejected **before any step runs**, as one failure. The mechanics are in [loop-and-context.md](../dispatcher/docs/loop-and-context.md#whole-plan-pre-check).
 - Usage is shown to the model on every call (`Travel: 2 of 10 m used`).
 
 ## Bounds
 
-Every step of a plan is checked against its `SKILL.md` declaration before anything runs: walk 0.1–3.0 m, turn 5–180°, enum values, required params, no unknown skills or params. A violation rejects the whole plan (one failure, then a replan). Details in [loop-and-context.md](loop-and-context.md#step-bounds). Skills check only presence and types, so a skill run by hand is not range-limited.
+Every step of a plan is checked against its `SKILL.md` declaration before anything runs: walk 0.1–3.0 m, turn 5–180°, enum values, required params, no unknown skills or params. A violation rejects the whole plan (one failure, then a replan). Details in [loop-and-context.md](../dispatcher/docs/loop-and-context.md#step-bounds). Skills check only presence and types, so a skill run by hand is not range-limited.
 
 ## If the dispatcher dies
 

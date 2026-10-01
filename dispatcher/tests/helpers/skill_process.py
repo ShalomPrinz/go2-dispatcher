@@ -17,7 +17,7 @@ SKILL_RUN_TIMEOUT_S = 20.0
 
 def stub_env(tmp_path: Path, *, detections: dict[str, str] | None = None,
              fault: str | None = None, **extra: str) -> dict[str, str]:
-    """Environment like the executor's (docs/skills.md) for the stub backend, rooted at tmp_path."""
+    """Environment like the executor's (skills/docs/skills.md) for the stub backend, rooted at tmp_path."""
     env = {k: v for k, v in os.environ.items()
            if k not in SECRET_ENV and not k.startswith("GO2_")}
     env.update({

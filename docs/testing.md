@@ -1,6 +1,6 @@
 # Testing
 
-Running the test suite: layout, markers and opt-in flags, helpers and fakes, golden files. The manual robot checks are in [robot.md](robot.md#supervised-robot-checklist).
+Running the test suite: layout, markers and opt-in flags, helpers and fakes, golden files. The manual robot checks are in [robot.md](../skills/docs/robot.md#supervised-robot-checklist).
 
 ## Running the tests
 
@@ -46,7 +46,7 @@ Each test lives in the service whose code it exercises. `test_skill_response.py`
 Options (defined in the root `conftest.py`):
 
 - `--run-live`: run `live_llm` tests. They are skipped without it, and also skipped if `ANTHROPIC_API_KEY` is not set.
-- `--run-robot`: run `robot` tests. There are none in v1; the robot checks are the supervised checklist in [robot.md](robot.md#supervised-robot-checklist).
+- `--run-robot`: run `robot` tests. There are none in v1; the robot checks are the supervised checklist in [robot.md](../skills/docs/robot.md#supervised-robot-checklist).
 - `--update-golden`: rewrite the golden files instead of comparing against them. Review the diff with `git diff dispatcher/tests/golden` before committing.
 
 ### Live LLM test
@@ -57,7 +57,7 @@ ANTHROPIC_API_KEY=sk-ant-... uv run pytest --run-live -s dispatcher/tests/integr
 
 It runs the task "turn left 90 degrees, then tell me if you see a chair" on the stub with `stub.detections = {chair = "center:near"}`. It passes if the task ends `DONE`, the message mentions the chair, and the run log has no `plan_invalid` or `horizon_rejection` record. With `-s`, it prints the run log path.
 
-It uses the default LLM settings (`claude-sonnet-5-5`, `thinking = "between_tools"`, `tool_choice` auto, no `temperature`; see [llm.md](llm.md#the-request)). **It has not been run live yet**; running it is the pending check of the request parameters ([roadmap.md](roadmap.md#pending-human-work)).
+It uses the default LLM settings (`claude-sonnet-5-5`, `thinking = "between_tools"`, `tool_choice` auto, no `temperature`; see [llm.md](../dispatcher/docs/llm.md#the-request)). **It has not been run live yet**; running it is the pending check of the request parameters ([roadmap.md](roadmap.md#pending-human-work)).
 
 ## Helpers (`dispatcher/tests/helpers/`)
 
@@ -84,15 +84,15 @@ uv run go2 run "turn left"
 
 ## Fault injection in tests
 
-The stub fault kinds `error`, `hang`, `crash` and `garbage` ([skills.md](skills.md#fault-injection)) drive the executor and end-to-end tests through `stub.faults` (by dispatched step) or the `GO2_STUB_FAULT` env var (one process). `GO2_STUB_NOISE=1` makes the stub write junk to stdout, to check that the response line stays clean.
+The stub fault kinds `error`, `hang`, `crash` and `garbage` ([skills.md](../skills/docs/skills.md#fault-injection)) drive the executor and end-to-end tests through `stub.faults` (by dispatched step) or the `GO2_STUB_FAULT` env var (one process). `GO2_STUB_NOISE=1` makes the stub write junk to stdout, to check that the response line stays clean.
 
 ## Golden files
 
-`dispatcher/tests/golden/catalog.txt` is the exact catalog for the five skills (no trailing newline). The `context_*.txt` files are exact user messages: first call, after a checkpoint, after a failure, after a rejection, with a previous task, and a schema retry. `fixed_texts.txt` renders every fixed text in `prompts.py` with example arguments, one labelled section each: every operator message with and without the StopMove warning, every notice, the motion-budget message, the rejection section, the transport texts, `help_text("stub")` and both system blocks for horizon 5. Any change to the wording in `prompts.py`, the renderer, or a `SKILL.md` changes them. Run `uv run pytest --update-golden`, review the diff, and remember that changing the prompt surface changes the registry hash and makes runs incomparable across the change ([skills.md](skills.md#catalog-and-registry-hash)). The fixed texts must stay identical across experimental conditions ([loop-and-context.md](loop-and-context.md)).
+`dispatcher/tests/golden/catalog.txt` is the exact catalog for the five skills (no trailing newline). The `context_*.txt` files are exact user messages: first call, after a checkpoint, after a failure, after a rejection, with a previous task, and a schema retry. `fixed_texts.txt` renders every fixed text in `prompts.py` with example arguments, one labelled section each: every operator message with and without the StopMove warning, every notice, the motion-budget message, the rejection section, the transport texts, `help_text("stub")` and both system blocks for horizon 5. Any change to the wording in `prompts.py`, the renderer, or a `SKILL.md` changes them. Run `uv run pytest --update-golden`, review the diff, and remember that changing the prompt surface changes the registry hash and makes runs incomparable across the change ([skills.md](../skills/docs/skills.md#catalog-and-registry-hash)). The fixed texts must stay identical across experimental conditions ([loop-and-context.md](../dispatcher/docs/loop-and-context.md)).
 
 ## Robot checks
 
-There are no automated robot tests in v1. The real backend is checked by hand with the supervised checklist in [robot.md](robot.md#supervised-robot-checklist), where its results are also recorded.
+There are no automated robot tests in v1. The real backend is checked by hand with the supervised checklist in [robot.md](../skills/docs/robot.md#supervised-robot-checklist), where its results are also recorded.
 
 ## Writing tests
 

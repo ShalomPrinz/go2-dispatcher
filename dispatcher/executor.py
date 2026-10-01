@@ -26,7 +26,7 @@ UTILITY_SKILL_NAMES = {STOP_MOVE_MODULE: "stop_move", READ_STATE_MODULE: "read_s
 
 POLL_INTERVAL_S = 0.05          # wait-loop poll period (docs/safety.md)
 READER_JOIN_TIMEOUT_S = 2.0     # join timeout per reader thread (docs/safety.md)
-STDERR_TAIL_CHARS = 2000        # stderr kept for the log (docs/skills.md)
+STDERR_TAIL_CHARS = 2000        # stderr kept for the log (skills/docs/skills.md)
 
 InterruptCause = Literal["operator", "task_time_limit", "shutdown"]
 KillCause = Literal["operator", "task_time_limit", "shutdown", "step_timeout"]
@@ -124,7 +124,7 @@ class Executor:
         self._current: subprocess.Popen | None = None
         self._kill_cause: KillCause | None = None
 
-    # --- environment and process start (docs/skills.md) ----------------------------------
+    # --- environment and process start (skills/docs/skills.md) ----------------------------------
 
     def _env(self, fault: str | None) -> dict[str, str]:
         env = {k: v for k, v in os.environ.items() if k not in SECRET_ENV and k != FAULT_ENV}
@@ -169,7 +169,7 @@ class Executor:
             return False
         return self._kill_locked(proc, cause)
 
-    # --- run (docs/skills.md, safety.md) -----------------------------------------------------------
+    # --- run (skills/docs/skills.md, docs/safety.md) -----------------------------------------------------------
 
     def run(self, skill: SkillDescriptor, params: dict, *, fault: str | None,
             timeout_s: float, remaining_task_s: float,

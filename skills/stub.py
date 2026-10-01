@@ -1,4 +1,4 @@
-"""Stub backend (docs/skills.md): remembers posture in a shared JSON state file, supports fault
+"""Stub backend (skills/docs/skills.md): remembers posture in a shared JSON state file, supports fault
 injection, configured detections and a test-only stdout noise mode. Replaces only the
 SDK layer inside the skill subprocess."""
 

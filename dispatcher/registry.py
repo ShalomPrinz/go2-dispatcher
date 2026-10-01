@@ -1,4 +1,4 @@
-"""Skill registry: SKILL.md loading and validation, catalog rendering, registry hash (docs/skills.md)."""
+"""Skill registry: SKILL.md loading and validation, catalog rendering, registry hash (skills/docs/skills.md)."""
 
 from __future__ import annotations
 
@@ -292,7 +292,7 @@ class Registry:
         return sorted(self._skills)
 
     def catalog_text(self) -> str:
-        """Deterministic catalog (docs/skills.md): skills by name, one line per param, no trailing newline."""
+        """Deterministic catalog (skills/docs/skills.md): skills by name, one line per param, no trailing newline."""
         lines: list[str] = []
         for name in self.names():
             lines.extend(_render_skill(self._skills[name]))
@@ -300,6 +300,6 @@ class Registry:
 
 
 def registry_hash(system_text: str, catalog_text: str, tool_schema: dict) -> str:
-    """First 16 hex chars of sha256 over the prompt surface (docs/skills.md)."""
+    """First 16 hex chars of sha256 over the prompt surface (skills/docs/skills.md)."""
     blob = system_text + "\n" + catalog_text + "\n" + json.dumps(tool_schema, sort_keys=True)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:REGISTRY_HASH_LEN]

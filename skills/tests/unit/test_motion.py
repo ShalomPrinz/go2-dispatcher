@@ -1,5 +1,5 @@
 """SDK-calling skill code in process with a fake sport client: the motion loop, single
-actions and the stop_move utility (docs/skills.md, docs/safety.md). The stub's faults
+actions and the stop_move utility (skills/docs/skills.md, docs/safety.md). The stub's faults
 only fail the first SDK call, so the mid-loop and cleanup paths are covered here."""
 
 from __future__ import annotations

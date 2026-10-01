@@ -1,4 +1,4 @@
-"""Dispatcher loop: plan -> validate -> execute -> feed back (docs/loop-and-context.md)."""
+"""Dispatcher loop: plan -> validate -> execute -> feed back (dispatcher/docs/loop-and-context.md)."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ from .runlog import RunLog, RunLogFactory
 __all__ = ["Dispatcher", "GIT_TIMEOUT_S", "VERSION_PACKAGES"]
 
 GIT_TIMEOUT_S = 5.0                          # best-effort `git rev-parse HEAD` at startup
-VERSION_PACKAGES = ("anthropic", "pydantic", "go2_dispatcher")
+VERSION_PACKAGES = ("anthropic", "pydantic", "go2-dispatcher")
 KILLED_OUTCOMES = frozenset({"timeout", "interrupted"})
 STOP_CAUSES = frozenset({"operator", "shutdown"})   # interrupted -> STOPPED; else TIME_LIMIT
 EXCEPTION_WHERE = "run_task"
@@ -90,7 +90,7 @@ class _NullLog:
         pass
 
 
-# --- per-task state (docs/loop-and-context.md) --------------------------------------------------------------
+# --- per-task state (dispatcher/docs/loop-and-context.md) --------------------------------------------------------------
 
 
 @dataclass
@@ -146,7 +146,7 @@ class Dispatcher:
         self._versions = _versions()
         self._git_commit = _git_commit(cfg.base_dir)
 
-    # --- public interface (docs/loop-and-context.md) -------------------------------------------------------
+    # --- public interface (dispatcher/docs/loop-and-context.md) -------------------------------------------------------
 
     def is_busy(self) -> bool:
         return self._task_lock.locked()
@@ -186,7 +186,7 @@ class Dispatcher:
             try:
                 self._open_log(t)
                 return self._loop(t)
-            except Exception as e:  # noqa: BLE001 - every unhandled error ends the task (docs/loop-and-context.md)
+            except Exception as e:  # noqa: BLE001 - every unhandled error ends the task (dispatcher/docs/loop-and-context.md)
                 return self._internal_error(t, e)
         finally:
             with self._state_lock:
@@ -257,7 +257,7 @@ class Dispatcher:
             t.log.write("stop_move", **sr.stop_move.model_dump(mode="json"))
 
     def _update_posture_from_step(self, sr: StepResult) -> None:
-        """Last known posture from the step's state_after (docs/loop-and-context.md)."""
+        """Last known posture from the step's state_after (dispatcher/docs/loop-and-context.md)."""
         if sr.response is not None and sr.response.state_after is not None:
             self.posture = sr.response.state_after.posture
         elif (sr.stop_move is not None and sr.stop_move.response is not None
@@ -391,7 +391,7 @@ class Dispatcher:
                         horizon_rejections=t.horizon_rejections, usage_totals=t.usage_totals,
                         budget_used=self._budget_used(t), stop_move_failed=t.stop_move_failed,
                         final_posture=self.posture, duration_ms=duration_ms)
-        except Exception as e:  # noqa: BLE001 - the index row must still be written (docs/loop-and-context.md)
+        except Exception as e:  # noqa: BLE001 - the index row must still be written (dispatcher/docs/loop-and-context.md)
             print(f"go2-dispatcher: failed to write task_end for run {t.run_id}: "
                   f"{type(e).__name__}: {e}", file=sys.stderr)
         finally:
@@ -414,7 +414,7 @@ class Dispatcher:
         return result
 
     def _internal_error(self, t: _Task, e: Exception) -> TaskOutcome:
-        """Nothing may escape before task_end and the index row are written (docs/loop-and-context.md)."""
+        """Nothing may escape before task_end and the index row are written (dispatcher/docs/loop-and-context.md)."""
         smr: StopMoveResult | None = None
         try:
             try:
@@ -439,7 +439,7 @@ class Dispatcher:
                                 exception_type=type(e).__name__)
         return outcome
 
-    # --- the loop (docs/loop-and-context.md) ----------------------------------------------------------------------
+    # --- the loop (dispatcher/docs/loop-and-context.md) ----------------------------------------------------------------------
 
     def _loop(self, t: _Task) -> TaskOutcome:
         loop = self.cfg.loop

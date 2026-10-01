@@ -1,6 +1,6 @@
 # Running
 
-Operating the system. There are two entry points over the same dispatcher: `go2` (CLI) and `go2 bot` (Telegram). Run them with `uv run`, or activate `.venv` first. Installing is in [setup.md](setup.md); what the dispatcher does with a task is in [loop-and-context.md](loop-and-context.md); stopping and limits are in [safety.md](safety.md).
+Operating the system. There are two entry points over the same dispatcher: `go2` (CLI) and `go2 bot` (Telegram). Run them with `uv run`, or activate `.venv` first. Installing is in [setup.md](setup.md); what the dispatcher does with a task is in [loop-and-context.md](../dispatcher/docs/loop-and-context.md); stopping and limits are in [safety.md](safety.md).
 
 ## CLI: `go2`
 
@@ -11,7 +11,7 @@ go2 [-h] [--config CONFIG] [--backend {stub,real}] [--horizon HORIZON]
 COMMAND: run TASK | batch TASKS_FILE | catalog | state | bot
 ```
 
-`go2 bot` starts the Telegram transport ([below](#telegram-go2-bot)) and hands every argument after `bot` to it; it takes only its own `--config`, so a global option before `bot` is a usage error.
+`go2 bot` starts the Telegram transport ([below](#telegram-bot)) and hands every argument after `bot` to it; it takes only its own `--config`, so a global option before `bot` is a usage error.
 
 Global options go **before** the command (argparse), for example `go2 --backend real state`, not `go2 state --backend real`. Every command accepts every global option; the commands take no options of their own. Exactly one of a command or `--reset-stub` is required; `--reset-stub` with a command is a usage error. `-h` / `--help` works globally and after each command.
 
@@ -20,7 +20,7 @@ Global options go **before** the command (argparse), for example `go2 --backend 
 | `--config CONFIG` | Config file (default `./config.toml`; see [configuration.md](configuration.md)). |
 | `--backend {stub,real}` | Overrides `robot.backend`. |
 | `--horizon HORIZON` | Overrides `loop.planning_horizon` (an integer). |
-| `--fault STEP:KIND` | Injects a stub fault at dispatched step `STEP`. Repeatable. Replaces `stub.faults` ([skills.md](skills.md#fault-injection)). |
+| `--fault STEP:KIND` | Injects a stub fault at dispatched step `STEP`. Repeatable. Replaces `stub.faults` ([skills.md](../skills/docs/skills.md#fault-injection)). |
 | `--reset-stub` | Resets the stub state file to `stub.initial_posture` and exits. |
 
 | Command | Takes the lock | Resets the stub | Needs `ANTHROPIC_API_KEY` | What it does |
@@ -44,7 +44,7 @@ Steps: 2 run, 0 failed
 2. detect_object(target=chair) -> ok: object_found=true, position=center, closeness=near, confidence=0.9
 ```
 
-The first line is `{OUTCOME}: {message}`. `Steps:` counts dispatched steps and failures (rejections count as failures). Then each recorded step is shown, rendered as in the LLM context ([loop-and-context.md](loop-and-context.md#user-message)). If the whole text is longer than 4000 characters, the oldest step lines are replaced by `({n} earlier lines omitted)`.
+The first line is `{OUTCOME}: {message}`. `Steps:` counts dispatched steps and failures (rejections count as failures). Then each recorded step is shown, rendered as in the LLM context ([loop-and-context.md](../dispatcher/docs/loop-and-context.md#user-message)). If the whole text is longer than 4000 characters, the oldest step lines are replaced by `({n} earlier lines omitted)`.
 
 `batch` prints `Task {i}: {task}` before each outcome, with a blank line between tasks.
 
@@ -76,9 +76,9 @@ walk forward one metre, then tell me if you see a person
 sit down
 ```
 
-Tasks run one after another in one process. The previous task's summary and the robot posture **carry over** from line to line, as they do between Telegram messages. One `sit` affects every later task, because no skill can stand the robot up ([robot.md](robot.md#open-robot-side-questions)). A reset per task is a future idea ([roadmap.md](roadmap.md#future-ideas)).
+Tasks run one after another in one process. The previous task's summary and the robot posture **carry over** from line to line, as they do between Telegram messages. One `sit` affects every later task, because no skill can stand the robot up ([robot.md](../skills/docs/robot.md#open-robot-side-questions)). A reset per task is a future idea ([roadmap.md](roadmap.md#future-ideas)).
 
-## Telegram: `go2 bot`
+## Telegram bot
 
 ```
 go2 bot [--config PATH]
@@ -126,7 +126,7 @@ Only `stop` is recognised during a task. Other messages sent during a task are a
 | | Stub (`robot.backend = "stub"`, default) | Real (`robot.backend = "real"`) |
 |---|---|---|
 | Needs | core dependencies only | `uv sync --extra robot --extra vision`, CycloneDDS, `robot.network_interface`, YOLO weights ([setup.md](setup.md#lab-machine-real-robot)) |
-| Motion | none; the stub remembers only standing/sitting in `stub.state_file` | real SDK calls ([robot.md](robot.md)) |
+| Motion | none; the stub remembers only standing/sitting in `stub.state_file` | real SDK calls ([robot.md](../skills/docs/robot.md)) |
 | Durations | real durations × `stub.time_scale` | real time |
 | `detect_object` | reports what `stub.detections` lists (confidence 0.9) | front camera + YOLO |
 | Startup posture | reset to `stub.initial_posture` | read with `read_state` (`unknown` if that fails) |
@@ -138,7 +138,7 @@ The stub replaces only the SDK layer inside the skill process. Processes, timeou
 
 ## Fault injection
 
-Stub faults (`stub.faults`, `--fault STEP:KIND`) are described in [skills.md](skills.md#fault-injection).
+Stub faults (`stub.faults`, `--fault STEP:KIND`) are described in [skills.md](../skills/docs/skills.md#fault-injection).
 
 ## Switching skill sets
 
@@ -149,7 +149,7 @@ The registry loads every subfolder of `skills.dir` that contains a `SKILL.md`. T
 dir = "skill_sets/fine"
 ```
 
-The registry hash changes with the catalog, so runs with different skill sets can be told apart in `index.jsonl`. Check a skill set with `go2 --config ... catalog`. A bad skill set exits 2 with `Registry error: <message naming the file>`. The `SKILL.md` format is in [skills.md](skills.md).
+The registry hash changes with the catalog, so runs with different skill sets can be told apart in `index.jsonl`. Check a skill set with `go2 --config ... catalog`. A bad skill set exits 2 with `Registry error: <message naming the file>`. The `SKILL.md` format is in [skills.md](../skills/docs/skills.md).
 
 ## Single-instance lock
 

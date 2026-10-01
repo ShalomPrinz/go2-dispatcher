@@ -1,4 +1,4 @@
-"""render.py + context.py, with golden files (docs/loop-and-context.md, testing.md)."""
+"""render.py + context.py, with golden files (dispatcher/docs/loop-and-context.md, docs/testing.md)."""
 
 from __future__ import annotations
 

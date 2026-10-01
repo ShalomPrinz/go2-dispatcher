@@ -4,11 +4,11 @@ External sources the project depends on or builds on.
 
 ## Robot
 
-- **Unitree SDK2 Python** — https://github.com/unitreerobotics/unitree_sdk2_python — The SDK every skill uses to drive the Go2 over DDS (`SportClient`, `SportModeState`). Installed from git through the `robot` extra ([setup.md](setup.md), [robot.md](robot.md)).
+- **Unitree SDK2 Python** — https://github.com/unitreerobotics/unitree_sdk2_python — The SDK every skill uses to drive the Go2 over DDS (`SportClient`, `SportModeState`). Installed from git through the `robot` extra ([setup.md](setup.md), [robot.md](../skills/docs/robot.md)).
 
 ## LLM
 
-- **Anthropic: Sonnet 5.5 migration guide** — https://platform.claude.com/docs/en/models/sonnet-5-5/migration-guide — Source of the parameter restrictions (no non-default `temperature`, no forced `tool_choice`, no `thinking: disabled`) that shape the request ([llm.md](llm.md)).
+- **Anthropic: Sonnet 5.5 migration guide** — https://platform.claude.com/docs/en/models/sonnet-5-5/migration-guide — Source of the parameter restrictions (no non-default `temperature`, no forced `tool_choice`, no `thinking: disabled`) that shape the request ([llm.md](../dispatcher/docs/llm.md)).
 - **Anthropic: thinking configuration** — https://platform.claude.com/docs/en/build-with-claude/thinking — How thinking is turned off with `thinking: {"type": "between_tools"}`.
 - **Anthropic: structured outputs and strict tool use** — https://platform.claude.com/docs/en/build-with-claude/structured-outputs — Limits of strict mode (no `maxItems`, no numeric ranges), the reason tools are non-strict.
 

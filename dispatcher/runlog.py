@@ -1,4 +1,4 @@
-"""JSONL run log: one file per task plus an index (docs/run-log.md)."""
+"""JSONL run log: one file per task plus an index (dispatcher/docs/run-log.md)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from typing import Any, TextIO
 from .clock import Clock, MonotonicClock
 
 INDEX_FILE = "index.jsonl"
-FILE_TIME_FORMAT = "%Y%m%dT%H%M%S"     # local time at task start (docs/run-log.md)
+FILE_TIME_FORMAT = "%Y%m%dT%H%M%S"     # local time at task start (dispatcher/docs/run-log.md)
 RUN_ID_PREFIX_LEN = 8
 ENVELOPE_KEYS = frozenset({"ts", "t_mono_ms", "session_id", "run_id", "seq", "type"})
 

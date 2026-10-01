@@ -1,4 +1,4 @@
-"""Shared helpers for the skills that call the sport client (docs/skills.md): parameter checks,
+"""Shared helpers for the skills that call the sport client (skills/docs/skills.md): parameter checks,
 the constant-velocity 10 Hz command loop, and single SDK actions with a settle wait.
 Standard library and skills only."""
 

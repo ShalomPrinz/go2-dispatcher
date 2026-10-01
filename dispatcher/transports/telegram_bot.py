@@ -123,7 +123,7 @@ def on_stop_signal(app: Application) -> None:
     PTB's ``Application.stop()`` waits for every in-flight handler (including a running
     ``run_task``) before ``post_stop`` runs, so the kill must happen here, not only in
     ``on_post_stop``. ``request_stop`` is non-blocking: it kills the current skill; the
-    executor then sends StopMove and the task ends ``STOPPED`` (docs/safety.md, loop-and-context.md)."""
+    executor then sends StopMove and the task ends ``STOPPED`` (docs/safety.md, dispatcher/docs/loop-and-context.md)."""
     app.bot_data["dispatcher"].request_stop(SHUTDOWN_SOURCE)
     if not app.bot_data.get(_STOPPING_KEY):
         app.bot_data[_STOPPING_KEY] = True

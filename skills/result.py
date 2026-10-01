@@ -1,5 +1,5 @@
 """Shared skill-process helpers: stdout capture, response building, emit, run_skill,
-orphan watchdog (docs/skills.md). Standard library only."""
+orphan watchdog (skills/docs/skills.md). Standard library only."""
 
 from __future__ import annotations
 

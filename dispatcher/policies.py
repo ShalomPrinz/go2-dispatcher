@@ -1,4 +1,4 @@
-"""Re-export of the skill policy base classes (docs/skills.md)."""
+"""Re-export of the skill policy base classes (skills/docs/skills.md)."""
 
 from skills.policy_base import MotionCost, SkillPolicy
 

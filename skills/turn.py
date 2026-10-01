@@ -1,4 +1,4 @@
-"""Skill: turn in place by an angle, then stop (docs/skills.md). Degrees in the interface."""
+"""Skill: turn in place by an angle, then stop (skills/docs/skills.md). Degrees in the interface."""
 
 from __future__ import annotations
 

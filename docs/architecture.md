@@ -31,18 +31,18 @@ An operator sends a natural-language task over Telegram or the CLI. The LLM retu
 | Component | Code | Owner doc |
 |---|---|---|
 | Transports: CLI (`go2`) and Telegram (`go2 bot`), both over the same dispatcher | `dispatcher/transports/` | [running.md](running.md) |
-| Dispatcher loop, busy-reject, stop, shutdown | `dispatcher.py` | [loop-and-context.md](loop-and-context.md), [safety.md](safety.md) |
-| Context assembly and every fixed text | `context.py`, `prompts.py`, `render.py` | [loop-and-context.md](loop-and-context.md) |
-| LLM client, tool schema, infra retries | `llm.py` | [llm.md](llm.md) |
-| Plan validation, parameter bounds, motion budget | `validation.py`, `bounds.py`, `budget.py` | [loop-and-context.md](loop-and-context.md), [safety.md](safety.md) |
-| Skill registry and generated catalog | `registry.py`, `skills/*/SKILL.md` | [skills.md](skills.md) |
+| Dispatcher loop, busy-reject, stop, shutdown | `dispatcher.py` | [loop-and-context.md](../dispatcher/docs/loop-and-context.md), [safety.md](safety.md) |
+| Context assembly and every fixed text | `context.py`, `prompts.py`, `render.py` | [loop-and-context.md](../dispatcher/docs/loop-and-context.md) |
+| LLM client, tool schema, infra retries | `llm.py` | [llm.md](../dispatcher/docs/llm.md) |
+| Plan validation, parameter bounds, motion budget | `validation.py`, `bounds.py`, `budget.py` | [loop-and-context.md](../dispatcher/docs/loop-and-context.md), [safety.md](safety.md) |
+| Skill registry and generated catalog | `registry.py`, `skills/*/SKILL.md` | [skills.md](../skills/docs/skills.md) |
 | Executor: subprocesses, timeouts, kill, `StopMove`, state reads | `executor.py` | [safety.md](safety.md) |
-| Skill runtime, skills and utilities, real and stub backends, posture rule | `skills/` | [skills.md](skills.md), [robot.md](robot.md) |
-| Run log and index | `runlog.py` | [run-log.md](run-log.md) |
+| Skill runtime, skills and utilities, real and stub backends, posture rule | `skills/` | [skills.md](../skills/docs/skills.md), [robot.md](../skills/docs/robot.md) |
+| Run log and index | `runlog.py` | [run-log.md](../dispatcher/docs/run-log.md) |
 | Configuration and `.env` | `config.py` | [configuration.md](configuration.md) |
 | Single-instance lock | `process_lock.py` | [safety.md](safety.md) |
 
-One task, in outline: build the context from fixed slots → call the LLM → validate the plan and pre-check every step → run steps up to the model's checkpoint (or all of them), one subprocess each → call the LLM again with the reason (`plan_complete`, `checkpoint` or `failure`) → repeat until `DONE`, `ABORT`, or a budget or limit ends the task. The full loop is in [loop-and-context.md](loop-and-context.md).
+One task, in outline: build the context from fixed slots → call the LLM → validate the plan and pre-check every step → run steps up to the model's checkpoint (or all of them), one subprocess each → call the LLM again with the reason (`plan_complete`, `checkpoint` or `failure`) → repeat until `DONE`, `ABORT`, or a budget or limit ends the task. The full loop is in [loop-and-context.md](../dispatcher/docs/loop-and-context.md).
 
 ## Process model
 
@@ -68,9 +68,9 @@ What was lost, and how it is covered:
 
 | Lost from OpenClaw | Coverage here |
 |---|---|
-| Provider retry | Own infrastructure retries with backoff, logged separately, never counted as LLM calls or replans ([llm.md](llm.md)) |
+| Provider retry | Own infrastructure retries with backoff, logged separately, never counted as LLM calls or replans ([llm.md](../dispatcher/docs/llm.md)) |
 | Model failover | Not covered; accepted |
-| Free-text replies to the operator | `message` field, required on `DONE` / `ABORT`, optional on `PLAN` ([loop-and-context.md](loop-and-context.md)) |
+| Free-text replies to the operator | `message` field, required on `DONE` / `ABORT`, optional on `PLAN` ([loop-and-context.md](../dispatcher/docs/loop-and-context.md)) |
 | Telegram integration | Own thin integration on `python-telegram-bot` ([running.md](running.md)) |
 | Compaction | Removed deliberately: the context is fixed-slot and depends only on the current task |
 
@@ -80,16 +80,21 @@ OpenClaw remains in the project as a system-level baseline for the study ([proje
 
 Cross-cutting decisions. Decisions that belong to one topic are in that topic's document.
 
-- **Measurement validity comes first.** Anything that would make tokens, latency or replanning depend on something other than the task and the experimental condition is avoided: no conversation history, no compaction, no prompt caching, thinking at its lowest setting, fixed notice texts identical across conditions. The individual decisions are in [loop-and-context.md](loop-and-context.md) and [llm.md](llm.md).
+- **Measurement validity comes first.** Anything that would make tokens, latency or replanning depend on something other than the task and the experimental condition is avoided: no conversation history, no compaction, no prompt caching, thinking at its lowest setting, fixed notice texts identical across conditions. The individual decisions are in [loop-and-context.md](../dispatcher/docs/loop-and-context.md) and [llm.md](../dispatcher/docs/llm.md).
 - **The plan is a first-class object, returned through one tool (`submit_plan`).** It can be validated, logged, counted and inspected, and every LLM call has one output contract. Rejected: a generic multi-tool loop, where the plan exists only implicitly.
-- **Context is rebuilt from fixed slots on every call, not carried as a conversation.** Context size depends only on the current task, which keeps measurements comparable across conditions. Static content (tools, system text, catalog) comes first so prompt caching could be added later without reordering. Layout in [loop-and-context.md](loop-and-context.md).
+- **Context is rebuilt from fixed slots on every call, not carried as a conversation.** Context size depends only on the current task, which keeps measurements comparable across conditions. Static content (tools, system text, catalog) comes first so prompt caching could be added later without reordering. Layout in [loop-and-context.md](../dispatcher/docs/loop-and-context.md).
 - **One subprocess per skill call.** The Unitree SDK initialises DDS through a process-wide singleton, so a fresh process guarantees a clean channel. It also lets a hung call be killed, and isolates crashes in the native bindings.
 - **One stop path** (kill the skill's process group, then send `StopMove` from a fresh process) for operator stop, step timeouts, the task time limit, shutdown and internal errors: one tested mechanism, and a killed process cannot clean up after itself ([safety.md](safety.md)).
 - **Robot state is sampled at the start and end of every step and logged only.** v1 issues no verdicts; the model sees only a derived posture. This collects the data needed to set v2 verification thresholds before seeing any verification results ([roadmap.md](roadmap.md#v2-plan)).
-- **The stub replaces only the SDK layer inside the skill process**, so process start, timeouts and kills are exercised for real in offline development and tests ([skills.md](skills.md)).
+- **The stub replaces only the SDK layer inside the skill process**, so process start, timeouts and kills are exercised for real in offline development and tests ([skills.md](../skills/docs/skills.md)).
 - **Runs offline by default.** Stub mode and the default test suite need no SDK, API key, network or robot; SDK, CycloneDDS and vision libraries are imported lazily, only on real-backend paths. `uv` and `pyproject.toml`, no `sys.path` changes ([setup.md](setup.md)).
 - **Every starting value is a config key or a named constant**, never inline, because almost all of them are expected to be tuned ([configuration.md](configuration.md)).
 - **Simple, inspectable mechanisms** over clever ones (for example fixed settle waits rather than motion detection, commanded rather than estimated motion budget), matching the project's scope and the student's background.
+- **Two services, `dispatcher/` and `skills/`, each holding its own source, `docs/` and `tests/`.** The dispatcher depends on skills (stub, policy base classes, COCO names, module names it starts); skills never import the dispatcher. Keeping code, tests and docs for one service in one folder makes that boundary visible and keeps each service's material in one place. A small shared root `docs/` holds what covers both services (project, architecture, safety, configuration, setup, running, testing, roadmap, references); service docs live in the service's `docs/`.
+- **The service folder is the Python package** (`dispatcher`, `skills`), with `docs/` and `tests/` inside it and excluded from the wheel. Rejected: a `src` layout (packages under a top-level `src` folder), which puts two unrelated packages under one generic folder and separates them from their tests and docs; and a nested `dispatcher/dispatcher/` package folder, which adds a level without adding a boundary.
+- **Plain package names `dispatcher` and `skills`.** They match the folder and service names. The generic name `skills` could clash with another installed package; in this project's own virtual environment that is unlikely, and the short name reads naturally in imports and module strings.
+- **Skill manifests live in `skills/catalog/<name>/SKILL.md`**, next to the skill modules. The name matches the existing term: the `catalog` command and the catalog text the model sees are generated from them ([skills.md](../skills/docs/skills.md#catalog-and-registry-hash)).
+- **One `go2` command with subcommands** (`run`, `batch`, `catalog`, `state`, `bot`) and shared global options. Rejected: one console script per command (`go2-*`), which duplicates option handling and splits one tool into several names. The project and distribution name stays `go2-dispatcher`, matching the repository.
 
 ## Repository layout
 
@@ -100,12 +105,14 @@ go2-dispatcher/
 ├── .env.example                # ANTHROPIC_API_KEY, TELEGRAM_BOT_TOKEN
 ├── dispatcher/                 # dispatcher package; never imports the SDK
 │   ├── transports/             # build_dispatcher, CLI, Telegram
+│   ├── docs/                   # loop-and-context.md, llm.md, run-log.md
 │   └── tests/                  # unit/, integration/, helpers/, golden/ (excluded from the wheel)
 ├── skills/                     # skills package: skill and utility processes, backends, posture rule
 │   ├── catalog/<name>/SKILL.md # the loaded skill set (config skills.dir)
+│   ├── docs/                   # skills.md, robot.md
 │   └── tests/                  # unit/, integration/, robot/ (opt-in) (excluded from the wheel)
 ├── conftest.py                 # pytest options: --run-live, --run-robot, --update-golden
-├── docs/                       # this documentation
+├── docs/                       # shared documentation (index: docs/README.md)
 ├── runs/                       # run logs (gitignored)
 └── models/                     # YOLO weights (gitignored)
 ```

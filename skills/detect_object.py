@@ -1,4 +1,4 @@
-"""Skill: look through the front camera once for a COCO object (docs/skills.md). Never moves."""
+"""Skill: look through the front camera once for a COCO object (skills/docs/skills.md). Never moves."""
 
 from __future__ import annotations
 

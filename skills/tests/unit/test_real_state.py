@@ -1,4 +1,4 @@
-"""Real-robot state mapping from a SportModeState message (docs/robot.md). Pure code,
+"""Real-robot state mapping from a SportModeState message (skills/docs/robot.md). Pure code,
 importable without the SDK; the posture the model sees in the study comes from it."""
 
 from __future__ import annotations
