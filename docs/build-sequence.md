@@ -163,8 +163,8 @@ The orchestrator updates this section after every task. Keep handoff notes short
 
 | Task | Status | Commit | Handoff notes |
 |---|---|---|---|
-| T1 | done | (this commit) | src/ layout. `config.load_config(path, overrides)`, `build_config`, `load_config_and_env` (in config.py; T10 re-exports), `parse_env_file`, `load_env_file`; overrides are dotted keys. `clock.Clock/MonotonicClock`, `process_lock.acquire(log_dir)`. models: ConfigError, RegistryError, BusyError, LLMUnavailable(detail), LLMInterrupted(cause). <br>`coco.py` already created in T1 (T2 keeps it). Tests: `from helpers import make_config, REPO_ROOT`; `make_config(tmp_path, loop={...})`; `update_golden` fixture. robot extra locked fine (no fallback). |
-| T2 | pending | | |
+| T1 | done | 031106a | src/ layout. `config.load_config(path, overrides)`, `build_config`, `load_config_and_env` (in config.py; T10 re-exports), `parse_env_file`, `load_env_file`; overrides are dotted keys. `clock.Clock/MonotonicClock`, `process_lock.acquire(log_dir)`. models: ConfigError, RegistryError, BusyError, LLMUnavailable(detail), LLMInterrupted(cause). <br>`coco.py` already created in T1 (T2 keeps it). Tests: `from helpers import make_config, REPO_ROOT`; `make_config(tmp_path, loop={...})`; `update_golden` fixture. robot extra locked fine (no fallback). |
+| T2 | done | (pending hash) | models: SkillError, RobotState, SkillResponse. result: `run_skill(skill, body, *, sample_state=True)`, `InvalidParams`, `build_response`, `emit`, `capture_stdout`, `start_orphan_watchdog`, `parse_params`. backend: `get_sport_client`, `get_detector`, `sample_state`, `sleep`, DetectorError subclasses (CameraUnavailable, BadFrame, WeightsMissing; `.code`), BackendNotConfigured. <br>stub: `read_posture`, `write_posture(posture, path=None)` (for --reset-stub), STUB_ERR_* constants. Utilities strip GO2_STUB_FAULT; missing backend → backend_not_configured. <br>Test helpers: `stub_env(tmp_path, detections=None, fault=None, **extra)`, `run_module(name, params, env)`, `single_response(proc)`. Fault/crash/orphan tests are T3's. |
 | T3 | pending | | |
 | T4 | pending | | |
 | T5 | pending | | |
