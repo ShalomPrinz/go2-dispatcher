@@ -131,3 +131,12 @@ Implementation choices where the spec was silent, and outcomes of checks the spe
 - **`format_outcome`:** `Steps: {dispatched} run, {failures} failed` uses `TaskOutcome.failures` (which counts rejections too, per `FAILURE_OUTCOMES`). Truncation drops the oldest step lines one at a time until the text is ≤ `OUTCOME_MAX_CHARS` (4000), counting the inserted `({n} earlier lines omitted)` line.
 - **`planner_factory.factory()`** reads `GO2_TEST_SCRIPT` (JSON list of raw tool inputs, default `[]`). It imports `planner` as a top-level module when `tests/helpers` is on `PYTHONPATH`.
 - **Live test** lives in `tests/integration/test_live_llm.py` (builds the Dispatcher directly with `AnthropicPlanner`, no process lock); "every plan validated" = no `plan_invalid` or `horizon_rejection` record in the run log.
+
+## T11 — Telegram bot
+
+- **`go2-bot` checks `TELEGRAM_BOT_TOKEN` before `build_dispatcher`** (after config and `.env` load), so a missing token (`Missing TELEGRAM_BOT_TOKEN.`, exit 2) does not take the process lock or reset the stub. `main()` uses `build_dispatcher(need_llm=True, reset_stub=True)` as §16.3 states.
+- **`/start` reply** is `prompts.help_text(cfg.robot.backend)`.
+- **Order in `on_text`:** the stop-word check (`text.strip().lower() == "stop"`) comes first, then empty → `EMPTY_TASK`, then busy → `BUSY`. A `None` message text counts as empty.
+- **Authorisation and error handling** are one wrapper shared by all three handlers: missing user/message → ignore; unauthorised → stderr line `Warning: ignoring Telegram message from unauthorised user {id}.`, no reply; any exception → traceback on stderr, reply `Error: {ExceptionType}`.
+- **Constants:** `SHUTDOWN_EXTRA_S = 5.0` (the `+ 5` in `post_stop`), `STOP_WORD = "stop"`, `TOKEN_ENV`, `SOURCE = "telegram"`.
+- **Fake Telegram objects** live in `tests/helpers/fake_telegram.py` (`fake_update`, `fake_context`, `replies`); the module is not named `telegram.py` because `tests/helpers` is put on `PYTHONPATH` for CLI subprocesses and would shadow the library. Handler tests are in `tests/unit/test_telegram_bot.py` (no network; `build_application` uses a dummy token and is never initialised).
