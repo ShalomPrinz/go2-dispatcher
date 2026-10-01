@@ -91,3 +91,13 @@ Implementation choices where the spec was silent, and outcomes of checks the spe
 - **`max_tokens` reply:** `tool_input` is still filled from the first `submit_plan` block if present (logged), but it is not validated.
 - **Validation details:** a pydantic error with an empty `loc` (non-dict input) is reported as `input: {msg}` (`validation.ROOT_LOC`). The `replan_after` range rule is only checked for status PLAN (with DONE/ABORT only the "only allowed with status PLAN" error is reported). When the horizon is exceeded, schema and semantic checks still run and their errors follow the horizon error.
 - **`ScriptedPlanner`** (`tests/helpers/planner.py`, exported from `helpers`): `Plan` items are returned as valid without re-validation; `dict` items are validated with the horizon read from the `tool_schema` kwarg (`maxItems`). `on_call(call_index)` runs before returning or raising. Extras: `.calls` (list of kwargs dicts), `.remaining`, `SCRIPTED_USAGE`. Synthetic `content` is one `tool_use` block; `stop_reason="tool_use"`, `latency_ms=total_ms=0`, `response_id=f"msg_scripted_{n}"`, `request_id=None`.
+
+## T8 — Executor
+
+- **`ExecResult`** lives in `executor.py` with `Executor`. Constants: `SECRET_ENV`, `POLL_INTERVAL_S = 0.05`, `READER_JOIN_TIMEOUT_S = 2.0`, `STDERR_TAIL_CHARS = 2000`.
+- **`GO2_STUB_FAULT` is never inherited:** the child env drops any `GO2_STUB_FAULT` from the dispatcher's own environment before (optionally) setting it, so only the faulted step sees a fault (§9.2 "set only for the faulted step").
+- **`duration_ms`** covers process start to exit plus the reader joins; it excludes the StopMove that follows a kill (StopMove has its own `duration_ms`).
+- **Response on a killed step** is kept only if it parses and names the right skill (same parse rule as a normal exit).
+- **Utilities** (`stop_move`, `read_state`) get the same env as skills (incl. `GO2_PARENT_PID`) minus the fault, and are read with `communicate(timeout=…)`; on timeout the process group is SIGKILLed. Their response must name the utility (`stop_move` / `read_state`). `read_state()` returns `state_after` of any valid response (an error response has none → `None`).
+- **`kill_current`** returns `False` when nothing is running, the process already exited, or a kill cause was already recorded (first cause wins).
+- **Test-only skill** `tests/helpers/skill_modules/env_dump.py` is run as `skill_modules.env_dump` with `PYTHONPATH=tests/helpers` (avoids importing the `helpers` package in the child).
