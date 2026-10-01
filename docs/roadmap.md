@@ -88,7 +88,6 @@ Not scheduled.
 
 | Question | Current v1 behaviour | Resolved by |
 |---|---|---|
-| Does the participant study run on the real robot or on the stub? The project scope is simulation plus a small hardware demo, but the main study has participants interacting with the Go2. | Not decided; v1 supports both backends | Advisor and student, before designing the study |
 | Participant protocol: number of participants, session procedure, consent and ethics approval, participant safety around the robot beyond the [supervised-operation rules](safety.md#supervised-operation-rules). | Not designed | Experiment design with the advisor |
 | Task set: which tasks participants give, and whether each can run on both systems (the OpenClaw-baseline assumption, [project.md](project.md#openclaw-as-a-system-level-baseline)). | Not designed | Experiment design with the advisor |
 | How subjective trust and interaction quality are measured (questionnaire or other instrument). Dispatcher load is computed from the run log ([run-log.md](run-log.md#computing-the-study-metrics)). | Not designed | Experiment design with the advisor |
@@ -109,7 +108,7 @@ The gate for experiments with participants, collected from the sections above. E
 2. Implement the [v2 plan](#v2-plan), including the stub upgrade.
 3. Build the medium and composite skill tiers ([future ideas](#future-ideas)); decide the `stand` skill and whether `batch` needs a per-task reset.
 4. Run phase one: characterise the system in simulation and from run logs ([project.md](project.md#study-design)); tune the starting values.
-5. Settle the experiment-design [open questions](#open-questions) with the advisor: backend for the study, protocol, task set, trust measurement, how granularity and horizon are crossed, OpenClaw conditions, `max_llm_calls` per horizon.
+5. Settle the experiment-design [open questions](#open-questions) with the advisor: protocol, task set, trust measurement, how granularity and horizon are crossed, OpenClaw conditions, `max_llm_calls` per horizon.
 6. Freeze the system text, notices and operator messages; from then on the registry hash must stay fixed within a condition ([skills.md](skills.md#catalog-and-registry-hash)).
 
 ## Pending human work

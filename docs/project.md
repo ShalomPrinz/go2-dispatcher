@@ -6,7 +6,7 @@ A final-year, full-year capstone project at Bar-Ilan University. The lab's Unitr
 
 The dispatcher is also a measurement instrument. Every task writes a complete run log ([run-log.md](run-log.md)) from which tokens, latency and replanning can be computed. That log is the dataset for the study below, so many design choices favour comparable measurements over convenience (see [architecture.md](architecture.md#design-decisions)).
 
-Scope: simulation (a stub backend) plus a small hardware demo on the real robot. Whether the participant study (below) runs on the real robot or the stub is open ([roadmap](roadmap.md#open-questions)). The student has computer-science coursework but no hands-on control or RL background, so the design favours simple, inspectable mechanisms over clever ones.
+Scope: simulation (a stub backend) for development and phase-one characterisation; the participant study (below) runs on the real robot. The student has computer-science coursework but no hands-on control or RL background, so the design favours simple, inspectable mechanisms over clever ones.
 
 ### Predecessor
 
