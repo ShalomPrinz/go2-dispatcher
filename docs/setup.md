@@ -109,7 +109,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 TELEGRAM_BOT_TOKEN=123456789:AA...
 ```
 
-`config.toml` and `.env` are gitignored. Every key is described in `docs/configuration.md`. Before a live run, read the known issue about the default `llm.model` there.
+`config.toml` and `.env` are gitignored. Every key is described in `docs/configuration.md`. If you change `llm.model`, read Model compatibility there first.
 
 ## Verify
 

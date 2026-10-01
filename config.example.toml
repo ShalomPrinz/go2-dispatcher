@@ -5,7 +5,7 @@
 condition = ""                      # free-text experiment label, copied into task_start and index.jsonl
 
 [llm]
-model = "claude-sonnet-5-5"         # (sketch)
+model = "claude-opus-4-6"           # (sketch) must accept forced tool_choice + temperature
 max_tokens = 1024
 temperature = 0.0
 request_timeout_s = 60.0            # cap per attempt (sketch)

@@ -44,7 +44,7 @@ class RunConfig(_Section):
 
 
 class LLMConfig(_Section):
-    model: StrictStr = "claude-sonnet-5-5"  # (sketch)
+    model: StrictStr = "claude-opus-4-6"  # (sketch); see docs/decisions.md T13
     max_tokens: StrictInt = Field(1024, ge=1)
     temperature: float = Field(0.0, ge=0)
     request_timeout_s: float = Field(60.0, gt=0)  # (sketch)

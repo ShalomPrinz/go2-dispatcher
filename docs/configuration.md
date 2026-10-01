@@ -43,14 +43,14 @@ Types:
 
 | Key | Type | Default | Rule | Meaning |
 |---|---|---|---|---|
-| `model` | str | `"claude-sonnet-5-5"` (sketch) | | Anthropic model id. |
+| `model` | str | `"claude-opus-4-6"` (sketch) | | Anthropic model id. Must accept a forced `tool_choice` and `temperature` (see below). |
 | `max_tokens` | int | `1024` | ≥ 1 | `max_tokens` for each request. |
 | `temperature` | float | `0.0` | ≥ 0 | Sampling temperature. Sent in the request body. |
 | `request_timeout_s` | float | `60.0` (sketch) | > 0 | Upper limit for one HTTP attempt. Each attempt uses `min(request_timeout_s, remaining task time)`. |
 | `infra_max_retries` | int | `2` | ≥ 0 | Retries after transport or overload errors. Infra retries are not LLM calls. |
 | `infra_backoff_s` | list of float | `[1.0, 4.0]` | each ≥ 0; length ≥ `infra_max_retries` | Seconds to sleep before retry 1, retry 2, and so on. A `retry-after` header can raise a sleep, capped at 30 s. |
 
-**Known issue with the default model.** §12.3 requires a forced `tool_choice` (`{"type": "tool", "name": "submit_plan"}`) and sends `temperature`. The Anthropic docs say that `claude-sonnet-5-5` rejects both a forced `tool_choice` and a non-default `temperature` with HTTP 400. This has not been checked against the live API yet. If a live run fails with `LLM_ERROR` (`BadRequestError 400`), set `llm.model` to a model that accepts both, for example a Sonnet 4.6 or Haiku 4.5 id, or change the spec. See `docs/decisions.md` (T7).
+**Model compatibility.** §12.3 requires a forced `tool_choice` (`{"type": "tool", "name": "submit_plan"}`) and sends `temperature`. Per the Anthropic API docs, the newest models reject one or both with HTTP 400, which is not retried, so every task would end `LLM_ERROR`: forced `tool_choice` is rejected by Claude Fable 5.1, Opus 5.5 and Sonnet 5.5; `temperature` is rejected by Fable 5/5.1, Opus 5.5/5/4.8/4.7 and Sonnet 5 (Sonnet 5.5 rejects non-default values). Models that accept both include `claude-opus-4-6` (the default), `claude-sonnet-4-6` and `claude-haiku-4-5`. Not yet checked against the live API. See `docs/decisions.md` (T13).
 
 The Anthropic SDK in use (1.x) has no `temperature` keyword argument, so the value is sent through `extra_body`. The JSON request body is the same.
 
