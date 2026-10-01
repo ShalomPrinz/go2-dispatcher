@@ -19,7 +19,7 @@ uv run ruff check .              # lint (settings in [tool.ruff] in pyproject.to
 uv run ruff check --fix .        # apply safe fixes
 ```
 
-The lint must pass before a commit; CI runs it next to the default suite. Rules: pycodestyle, pyflakes, isort, bugbear and pyupgrade (`E`, `F`, `W`, `I`, `B`, `UP`) for Python 3.10, line length 120.
+The lint must pass before a commit; it runs locally, not in CI (the Claude Code Stop and SubagentStop hooks run it whenever an agent finishes). Rules: pycodestyle, pyflakes, isort, bugbear and pyupgrade (`E`, `F`, `W`, `I`, `B`, `UP`) for Python 3.10, line length 120.
 
 ### Coverage
 
@@ -29,7 +29,7 @@ uv run pytest --cov              # branch coverage of dispatcher and skills, wit
 
 Coverage is opt-in (`pytest-cov`; settings in `[tool.coverage.*]` in `pyproject.toml`). It measures branches, and it also measures the skill, utility and CLI subprocesses the integration tests start (coverage's `[run] patch = ["subprocess", "_exit"]`; `_exit` is needed because skills end with `os._exit`). Processes killed with SIGKILL (timeouts, stops) record nothing. A covered run takes about 20 s instead of about 12 s.
 
-The default run must pass on any machine after `uv sync` (core + dev dependencies only). CI (`.github/workflows/ci.yml`) runs it on every push to any branch, on Python 3.10, after `uv sync --locked`. Every test has a 30 s timeout (`pytest-timeout`). Parallel runs are opt-in (see design decisions below).
+The default run must pass on any machine after `uv sync` (core + dev dependencies only). CI (`.github/workflows/tests.yml`) runs it on every push to any branch, on Python 3.10, after `uv sync --locked`. Every test has a 30 s timeout (`pytest-timeout`). Parallel runs are opt-in (see design decisions below).
 
 ## Layout
 
@@ -125,4 +125,4 @@ There are no automated robot tests in v1. The real backend is checked by hand wi
 - **Pytest options come from a plugin module (`-p tests.pytest_plugin`), not a root `conftest.py`.** pytest registers an option only once, so the options cannot be defined in each suite's conftest, and a conftest is loaded only for paths below it, so a conftest in one suite is not loaded when another suite is run on its own. A root `conftest.py` worked but sat outside every test folder; the plugin keeps all test code under `tests/` and makes the options available for any subset (`uv run pytest skills/tests`). Helpers are imported with absolute package paths instead of a `pythonpath` entry, which avoids a bare top-level `helpers` module that could shadow other names.
 - **Coverage is opt-in, not in `addopts`.** Measuring subprocesses makes the run about 60 % slower, and the default run must stay fast.
 - **Ruff lints; it does not format.** The code uses hand-aligned trailing comments and long fixed-text lines that the formatter would rewrap (68 files). Line length is 120, not ruff's 88, which matches the existing code. `dispatcher/prompts.py` is exempt from `E501` because rewrapping its fixed texts would change the registry hash. Rejected: `ruff format`, for the churn and the alignment loss.
-- **CI runs only the default suite and the lint.** Live LLM tests would put the API key into CI secrets and cost money per push, and robot tests need a supervised session ([safety.md](safety.md)); both stay opt-in and manual. The `robot` and `vision` extras are not installed in CI, which also checks that the default run needs none of them.
+- **CI runs only the default suite.** The lint is a local pre-commit check, not a CI gate. Live LLM tests would put the API key into CI secrets and cost money per push, and robot tests need a supervised session ([safety.md](safety.md)); both stay opt-in and manual. The `robot` and `vision` extras are not installed in CI, which also checks that the default run needs none of them.
