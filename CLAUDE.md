@@ -42,8 +42,7 @@ Package commands (golden files, fault injection, opt-in tests) live in the folde
 ## Engineering rules
 
 - Ask before an architecture decision. "If possible I'd like X" is a question, not approval: answer it, then wait.
-- Build the simplest version first. After implementing, list the complexity left out and the signal that would justify adding it.
-- Choose the best architecture, not the smallest diff. The amount of code to move, rename or re-test is never a reason to keep a weaker design; "simplest" above limits features, not refactors.
+- Build only what the current goals need (YAGNI), and build it right: the cleanest design for that scope, never the smallest diff. The cost of moving, renaming or re-testing code is never a reason to keep a weaker design. After implementing, list the complexity left out and the signal that would justify adding it.
 - When a workaround fails twice, stop and research the root cause instead of trying a third.
 - Match the surrounding code's style, naming and comment density.
 - Code comments: one line by default, two at most. The reasoning belongs in the owning doc.
