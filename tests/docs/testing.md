@@ -41,7 +41,7 @@ The default run must pass on any machine after `uv sync` (core + dev dependencie
 | `dispatcher/tests/helpers/` | dispatcher-only helpers (below) |
 | `skills/tests/unit/` | shared skill helpers (`parse_params`, `require_*`, backend selection), motion loop, single actions and the `stop_move` utility with a fake sport client, real-robot state mapping (`real._state_from_msg`), `build_response` argument checks and message cutting, posture |
 | `skills/tests/robot/` | reserved for opt-in robot tests; empty in v1 (the robot checks are manual) |
-| `tests/integration/` | cross-service tests: executor, end-to-end with the real executor, CLI subprocesses (including "the CLI does not import `anthropic`"), live LLM, per-skill contract (one subprocess per skill), stub behaviour, one subprocess case per shared mechanism (invalid params, backend not configured, noise, faults), utilities, orphan watchdog, side-effect-free imports, skill policies against the registry (timeout covers the motion), `build_response` output against `SkillResponse` |
+| `tests/integration/` | cross-service tests: executor, end-to-end with the real executor, CLI subprocesses (including "the CLI does not import `anthropic`"), live LLM, per-skill contract (one subprocess per skill), stub behaviour, one subprocess case per shared mechanism (invalid params, backend not configured, faults), utilities, orphan watchdog, side-effect-free imports, skill policies against the registry (timeout covers the motion), `build_response` output against `SkillResponse` |
 | `tests/helpers/` | helpers shared by the root tests and a service suite (below) |
 | `tests/pytest_plugin.py` | the `--run-live`, `--run-robot` and `--update-golden` options, marker gating, the `update_golden` fixture and the network guard |
 | `tests/test_network_guard.py` | the network guard refuses an outbound connection |
@@ -103,7 +103,7 @@ uv run go2 run "turn left"
 
 ## Fault injection in tests
 
-The stub fault kinds `error`, `hang`, `crash` and `garbage` ([skills.md](../../skills/docs/skills.md#fault-injection)) drive the executor and end-to-end tests through `stub.faults` (by dispatched step) or the `GO2_STUB_FAULT` env var (one process). `GO2_STUB_NOISE=1` makes the stub write junk to stdout, to check that the response line stays clean.
+The stub fault kinds `error`, `hang`, `crash` and `garbage` ([skills.md](../../skills/docs/skills.md#fault-injection)) drive the executor and end-to-end tests through `stub.faults` (by dispatched step) or the `GO2_STUB_FAULT` env var (one process).
 
 ## Golden files
 
