@@ -153,7 +153,7 @@ def test_normal_task(cfg, registry):
         planner,
         FakeExecutor([exec_result("ok", skill="turn")]),
         RunLogFactory(cfg.log.dir, session_id="s1"),
-        clock=FakeClock(),
+        clock=FakeClock().now,
         initial_posture="standing",
     )
     u = fake_update("  turn left  ", USER)

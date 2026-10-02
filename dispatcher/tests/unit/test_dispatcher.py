@@ -65,7 +65,7 @@ class Rig:
             self.planner,
             self.executor,
             RunLogFactory(self.cfg.log.dir, session_id="s1"),
-            clock=self.clock,
+            clock=self.clock.now,
             initial_posture=posture,
         )
 

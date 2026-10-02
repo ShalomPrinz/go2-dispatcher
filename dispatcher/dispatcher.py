@@ -7,8 +7,10 @@ import platform
 import subprocess
 import sys
 import threading
+import time
 import traceback
 import uuid
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime
 from pathlib import Path
@@ -17,7 +19,6 @@ from typing import Any, Literal
 from . import prompts
 from .bounds import cut_message, precheck
 from .budget import MotionBudget
-from .clock import Clock, MonotonicClock
 from .config import Config
 from .context import ContextInput, build_user_message, schema_retry_message
 from .executor import STDERR_TAIL_CHARS, Executor
@@ -127,7 +128,7 @@ class Dispatcher:
         executor: Executor,
         runlog_factory: RunLogFactory,
         *,
-        clock: Clock = MonotonicClock(),  # noqa: B008  stateless
+        clock: Callable[[], float] = time.monotonic,
         initial_posture: str = "unknown",
     ):
         self.cfg = cfg
@@ -206,7 +207,7 @@ class Dispatcher:
     # --- task setup -------------------------------------------------------------------------
 
     def _new_task(self, task: str, source: str, sender_id: str | None) -> _Task:
-        now = self.clock.now()
+        now = self.clock()
         mb = self.cfg.motion_budget
         return _Task(
             run_id=uuid.uuid4().hex,
@@ -250,7 +251,7 @@ class Dispatcher:
             self._phase = phase
 
     def _remaining_s(self, t: _Task) -> float:
-        return t.deadline - self.clock.now()
+        return t.deadline - self.clock()
 
     def _budget_used(self, t: _Task) -> dict[str, float]:
         return {"distance_m": t.budget.used_distance_m, "rotation_deg": t.budget.used_rotation_deg}
@@ -437,7 +438,7 @@ class Dispatcher:
         text = prompts.operator_message(
             outcome, stop_move_failed=t.stop_move_failed, **self._operator_args(t, outcome, message, extra)
         )
-        duration_ms = (self.clock.now() - t.t_start) * 1000.0
+        duration_ms = (self.clock() - t.t_start) * 1000.0
         dispatched = [s for s in t.steps if s.index is not None]
         result = TaskOutcome(
             run_id=t.run_id,
@@ -521,14 +522,14 @@ class Dispatcher:
                 self.executor.kill_current("shutdown")
             except Exception:  # noqa: BLE001
                 pass
-            t0 = self.clock.now()
+            t0 = self.clock()
             try:
                 smr = self.executor.stop_move("internal_error")
             except Exception as se:  # noqa: BLE001 - Executor.stop_move never raises; fakes might
                 smr = StopMoveResult(
                     ok=False,
                     reason="internal_error",
-                    duration_ms=(self.clock.now() - t0) * 1000.0,
+                    duration_ms=(self.clock() - t0) * 1000.0,
                     stderr_tail=f"{type(se).__name__}: {se}"[-STDERR_TAIL_CHARS:],
                 )
         finally:

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 import threading
+import time
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any, TextIO
-
-from .clock import Clock, MonotonicClock
 
 INDEX_FILE = "index.jsonl"
 FILE_TIME_FORMAT = "%Y%m%dT%H%M%S"  # local time at task start (dispatcher/docs/run-log.md)
@@ -28,7 +28,7 @@ class RunLog:
     """One task's log file. ``write`` is thread-safe (``stop_requested`` comes from the
     transport thread) and flushes every line, so a crash leaves a usable partial log."""
 
-    def __init__(self, path: Path, *, session_id: str, run_id: str, t_start_mono: float, clock: Clock):
+    def __init__(self, path: Path, *, session_id: str, run_id: str, t_start_mono: float, clock: Callable[[], float]):
         self.path = Path(path)
         self._session_id = session_id
         self._run_id = run_id
@@ -44,7 +44,7 @@ class RunLog:
                 return
             record = {
                 "ts": _local_iso(),
-                "t_mono_ms": (self._clock.now() - self._t0) * 1000.0,
+                "t_mono_ms": (self._clock() - self._t0) * 1000.0,
                 "session_id": self._session_id,
                 "run_id": self._run_id,
                 "seq": self._seq,
@@ -71,7 +71,7 @@ class RunLogFactory:
         self.session_id = session_id
         self._index_lock = threading.Lock()
 
-    def open(self, run_id: str, t_start_mono: float, *, clock: Clock | None = None) -> RunLog:
+    def open(self, run_id: str, t_start_mono: float, *, clock: Callable[[], float] = time.monotonic) -> RunLog:
         """``clock`` is the clock ``t_start_mono`` was read from (default: monotonic)."""
         self.log_dir.mkdir(parents=True, exist_ok=True)
         name = f"{datetime.now().strftime(FILE_TIME_FORMAT)}_{run_id[:RUN_ID_PREFIX_LEN]}.jsonl"
@@ -80,7 +80,7 @@ class RunLogFactory:
             session_id=self.session_id,
             run_id=run_id,
             t_start_mono=t_start_mono,
-            clock=clock or MonotonicClock(),
+            clock=clock,
         )
 
     def append_index(self, row: dict) -> None:
