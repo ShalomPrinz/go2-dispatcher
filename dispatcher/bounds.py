@@ -6,9 +6,11 @@ import math
 from dataclasses import dataclass, field
 from typing import Any
 
+from skills.frontmatter import ParamSpec
+
 from .budget import MotionBudget
 from .models import Plan, PlanStep, StepRef, StepResult
-from .registry import ParamSpec, Registry
+from .registry import Registry
 
 # StepResult.error_message limit (dispatcher/docs/run-log.md, dispatcher/docs/loop-and-context.md)
 ERROR_MESSAGE_MAX = 200

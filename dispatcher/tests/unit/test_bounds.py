@@ -9,7 +9,8 @@ import pytest
 from dispatcher.bounds import ERROR_MESSAGE_MAX, check_step, cut_message, precheck
 from dispatcher.budget import MotionBudget
 from dispatcher.models import Plan, PlanStep, StepRef
-from dispatcher.registry import ParamSpec, Registry, SkillDescriptor
+from dispatcher.registry import Registry, SkillDescriptor
+from skills.frontmatter import ParamSpec
 from skills.result import MotionCost, SkillPolicy
 from tests.helpers import REPO_ROOT
 

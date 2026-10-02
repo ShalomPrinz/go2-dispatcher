@@ -1,4 +1,4 @@
-"""Registry: loading, validation errors, catalog golden file, registry hash
+"""Registry: loading, discovery and POLICY errors, catalog golden file, registry hash
 (skills/docs/skills.md, tests/docs/testing.md)."""
 
 from __future__ import annotations
@@ -154,11 +154,6 @@ def test_ignores_other_folders_and_files(tmp_path):
     assert Registry.load(tmp_path).names() == ["demo"]
 
 
-def test_expect_key_accepted(tmp_path):
-    write_skill(tmp_path, "demo", "expect: {anything: [1, 2]}\n")
-    assert Registry.load(tmp_path).names() == ["demo"]
-
-
 # --- RegistryError cases -----------------------------------------------------------------
 
 
@@ -173,91 +168,14 @@ def test_missing_skills_dir(tmp_path):
         Registry.load(tmp_path / "absent")
 
 
-@pytest.mark.parametrize(
-    "text",
-    [
-        "# no frontmatter\n",
-        "",
-        "---\nname: demo\n",  # not closed
-        "---\nname: [unclosed\n---\n",  # invalid YAML
-        "---\n- a\n- b\n---\n",  # not a mapping
-        "---\n---\n",  # empty
-    ],
-)
-def test_missing_or_invalid_frontmatter(tmp_path, text):
-    path = write_skill(tmp_path, "demo", text, raw=True)
-    assert_registry_error(tmp_path, path)
-
-
 def test_unknown_key(tmp_path):
     path = write_skill(tmp_path, "demo", "color: red\n")
     assert_registry_error(tmp_path, path, "color")
 
 
-@pytest.mark.parametrize("missing", ["name", "entrypoint", "description"])
-def test_missing_required_key(tmp_path, missing):
-    lines = {
-        "name": "name: demo",
-        "entrypoint": f"entrypoint: {GOOD_ENTRY}",
-        "description": "description: A demo skill.",
-    }
-    del lines[missing]
-    path = write_skill(tmp_path, "demo", "---\n" + "\n".join(lines.values()) + "\n---\n", raw=True)
-    assert_registry_error(tmp_path, path, missing)
-
-
 def test_name_not_folder_name(tmp_path):
     path = write_skill(tmp_path, "demo", "", name="other")
     assert_registry_error(tmp_path, path, "folder")
-
-
-def test_name_bad_pattern(tmp_path):
-    path = write_skill(tmp_path, "Demo", "", name="Demo")
-    assert_registry_error(tmp_path, path)
-
-
-@pytest.mark.parametrize(
-    ("params", "match"),
-    [
-        ("params:\n  x:\n    type: float\n    description: X.\n", "params.x.type"),  # bad type
-        ("params:\n  x:\n    type: number\n    description: X.\n    color: red\n", "color: unknown key"),
-        ("params:\n  x:\n    type: enum\n    description: X.\n", "values"),  # enum without values
-        ("params:\n  x:\n    type: string\n    min: 1\n    description: X.\n", "min"),  # min on string
-        ("params:\n  x:\n    type: number\n    min: 5\n    max: 1\n    description: X.\n", "min must be <= max"),
-        ("params:\n  Bad-Name:\n    type: number\n    description: X.\n", "Bad-Name"),
-    ],
-)
-def test_invalid_param_spec(tmp_path, params, match):
-    path = write_skill(tmp_path, "demo", params)
-    assert_registry_error(tmp_path, path, match)
-
-
-def test_explicit_null_and_set_rejected(tmp_path):
-    for key, spec in [
-        ("min", "type: number\n    min: null"),
-        ("unit", "type: string\n    unit: null"),
-        ("values", "type: string\n    values: null"),
-    ]:
-        path = write_skill(tmp_path, "demo", f"params:\n  x:\n    {spec}\n    description: X.\n")
-        assert_registry_error(tmp_path, path, f"params.x.{key}")
-    path = write_skill(
-        tmp_path, "demo", "params:\n  x:\n    type: enum\n    values: !!set {a, b}\n    description: X.\n"
-    )
-    assert_registry_error(tmp_path, path, "values must be a list")
-
-
-@pytest.mark.parametrize(
-    "spec",
-    [
-        "type: number\n    min: 1\n    max: 5\n    default: 9",  # above max
-        "type: number\n    default: true",  # bool is not a number
-        "type: enum\n    values: [a, b]\n    default: c",  # not a value
-        "type: string\n    default: null",  # explicit null is not "no default"
-    ],
-)
-def test_default_failing_its_own_checks(tmp_path, spec):
-    path = write_skill(tmp_path, "demo", f"params:\n  x:\n    {spec}\n    description: X.\n")
-    assert_registry_error(tmp_path, path, "default")
 
 
 def test_entrypoint_not_importable(tmp_path):

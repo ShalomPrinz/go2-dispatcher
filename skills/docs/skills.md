@@ -11,7 +11,7 @@ v1 skills: `walk`, `turn`, `sit`, `stretch`, `detect_object`. Two utilities, `st
 
 ## SKILL.md frontmatter
 
-The YAML block between the first two lines that are exactly `---` (the file must start with `---`), parsed with `yaml.safe_load`.
+The YAML block between the first two lines that are exactly `---` (the file must start with `---`), parsed with `yaml.safe_load`. The schema (`ParamSpec`, `SkillFrontmatter`) and the parser (`parse_skill_file`) live in `skills/frontmatter.py`; the dispatcher's registry calls them and adds the checks that need the folder or the module.
 
 | Key | Type | Required | Meaning |
 |---|---|---|---|
@@ -32,7 +32,7 @@ ParamSpec (parameter names match `^[a-z][a-z0-9_]*$`):
 | `default` | value of the param's type | all | Optional. If absent, the parameter is required. Must pass the param's own checks. |
 | `unit` | non-empty string | `number` | Optional. Shown in the catalog. |
 
-Any other key, a missing required key or an invalid value is a registry error, as are: an entrypoint that cannot be imported, a module without `POLICY`, a `POLICY` that is not a `SkillPolicy`, `POLICY.name` ≠ `name`, a missing skills folder, or zero skills. Transports print `Registry error: <message naming the file>` and exit 2. A frontmatter error reads `<path>: <dotted.loc>: <msg>` (e.g. `params.distance_m.min`); an extra key reads `unknown key`.
+Any other key, a missing required key or an invalid value is a registry error, as are: an entrypoint that cannot be imported, a module without `POLICY`, a `POLICY` that is not a `SkillPolicy`, `POLICY.name` ≠ `name`, a missing skills folder, or zero skills. Transports print `Registry error: <message naming the file>` and exit 2. A frontmatter error reads `<path>: <dotted.loc>: <msg>` (e.g. `params.distance_m.min`); an extra key reads `unknown key`. The parser raises these as `SkillFileError`, and the registry re-raises them unchanged as registry errors.
 
 `skills/catalog/walk/SKILL.md` is a full example. The dispatcher checks every planned step against these declarations before anything runs ([loop-and-context.md](../../dispatcher/docs/loop-and-context.md#step-bounds)).
 
@@ -133,7 +133,7 @@ The dispatcher reads only `name`, `context_observations`, `timeout_s(params)` an
 
 ## No side effects on import
 
-Importing a skill module must do nothing: no SDK import, no DDS init, no argument parsing, no output. All work happens in `main()`, under `if __name__ == "__main__": main()`. At top level a skill imports only the standard library and `skills`; `skills` never imports `dispatcher`. Third-party imports (`unitree_sdk2py`, `cv2`, `ultralytics`, `numpy`) happen inside functions in `skills/real.py`. A test imports every `skills` module in a fresh interpreter and checks that none of these were loaded. This is what lets the dispatcher read policies without touching the SDK.
+Importing a skill module must do nothing: no SDK import, no DDS init, no argument parsing, no output. All work happens in `main()`, under `if __name__ == "__main__": main()`. At top level a skill imports only the standard library and `skills`; `skills` never imports `dispatcher`. Third-party imports (`unitree_sdk2py`, `cv2`, `ultralytics`, `numpy`) happen inside functions in `skills/real.py`. A test imports every `skills` module in a fresh interpreter and checks that none of these were loaded. This is what lets the dispatcher read policies without touching the SDK. Separately, `skills/frontmatter.py` imports pydantic and PyYAML at top level; that is allowed because only the dispatcher process imports it, never a skill entry point, and the import test does not check for those two.
 
 ## Stub backend
 
@@ -212,6 +212,7 @@ Without `GO2_STUB_STATE_FILE` and `GO2_STUB_TIME_SCALE` the stub uses `runs/.stu
 - **Each skill owns its policy** (timeout formula, motion cost, observations shown to the model) as module constants next to the code that shares them, so a number like walking speed is defined once and tuned in one place.
 - **A policy is one frozen `SkillPolicy` dataclass instance per skill, not a subclass per skill.** The skills differ only in data (a name, a constant or a small formula for timeout and cost, an observation list), so a value with optional callables says it in a few lines and the constants sit at module level where `run_skill(POLICY, body)` and the body use them without a class prefix. The dataclass lives in `skills/result.py`, the module every skill already imports, instead of a separate base module. Rejected: a `SkillPolicy` base class with one `<Name>Policy` subclass per skill overriding `timeout_s()`/`motion_cost()`; it repeated boilerplate in every module and spread the constants across class attributes, without adding behaviour. The dispatcher still calls `timeout_s(params)` and `motion_cost(params)`, so it does not need to know whether a value is constant.
 - **One validator per contract, on the dispatcher side.** Plan params are validated only by the dispatcher's plan and bounds validation against `SKILL.md`, and skill responses only by the dispatcher's pydantic `SkillResponse`. Skills read params directly and `build_response` only assembles the dict. A second copy of the enums, type checks and response-shape rules in the skills had to be kept in step with `SKILL.md` and `dispatcher/models.py` and could drift from them. Rejected: validating on both sides; the skill-side checks only mattered for hand-run skills, where a missing key now reports `exception` instead of `invalid_params`.
+- **The `SKILL.md` schema and parser belong to `skills` (`skills/frontmatter.py`)**, so the package that defines the skills owns its catalog contract, and its rules are documented and tested here. pydantic is acceptable there because only the dispatcher process imports the parser; skill subprocesses never do. The registry hash stays in the dispatcher, because it also covers the system text and tool schema. Rejected: keeping the schema in the dispatcher's registry, which put the `SKILL.md` contract in the package that only consumes it.
 - **The catalog is generated from the registry, never hand-written**, so skill sets of different granularity are presented to the model in the same form and stay comparable. The `SKILL.md` prose never reaches the model.
 - **An unsupported `detect_object` target is a skill error with suggestions; the 80-class COCO list stays out of the catalog.** Listing every class would add tokens to every call; the skill validates the target and suggests close matches, so the model can correct itself on the next call.
 - **State is sampled at the start and end of every step, for logging only.** v1 gives no verdicts. The samples provide data to set v2 verification thresholds before seeing any verification results, and supply the posture shown to the model ([roadmap.md](../../docs/roadmap.md#v2-plan)).
