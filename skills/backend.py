@@ -8,7 +8,6 @@ functions, so importing this module has no side effects.
 from __future__ import annotations
 
 import os
-import time
 from dataclasses import dataclass
 from types import ModuleType
 
@@ -70,26 +69,17 @@ def _impl() -> ModuleType:
     return stub
 
 
-def get_sport_client():
-    """Object with Move, StopMove, StandDown, Stretch -> int."""
-    return _impl().get_sport_client()
+def _forward(name: str):
+    """A function that calls ``name`` on the configured backend module at call time."""
+
+    def call(*args, **kwargs):
+        return getattr(_impl(), name)(*args, **kwargs)
+
+    call.__name__ = name
+    return call
 
 
-def get_detector():
-    """Object with detect(target) -> DetectResult."""
-    return _impl().get_detector()
-
-
-def sample_state() -> dict:
-    """RobotState as a plain dict."""
-    return _impl().sample_state()
-
-
-def sleep(seconds: float) -> None:
-    """Real: time.sleep(seconds); stub: time.sleep(seconds * time_scale)."""
-    if backend_name() == "stub":
-        from skills import stub
-
-        stub.sleep(seconds)
-    else:
-        time.sleep(seconds)
+get_sport_client = _forward("get_sport_client")  # object with Move, StopMove, StandDown, Stretch -> int
+get_detector = _forward("get_detector")  # object with detect(target) -> DetectResult
+sample_state = _forward("sample_state")  # RobotState as a plain dict
+sleep = _forward("sleep")  # real: time.sleep(seconds); stub: scaled by time_scale

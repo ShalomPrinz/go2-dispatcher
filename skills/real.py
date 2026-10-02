@@ -30,6 +30,8 @@ STATE_WAIT_S = 1.0
 POSTURE_SITTING_MAX_M = 0.15  # (tunable, skills/docs/robot.md)
 POSTURE_STANDING_MIN_M = 0.22  # (tunable, skills/docs/robot.md)
 
+sleep = time.sleep
+
 _dds_ready = False
 _dds_lock = threading.Lock()
 
