@@ -189,7 +189,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if not cfg.telegram.allowed_user_ids:
         print(NO_ALLOWED_USERS_WARNING, file=sys.stderr)
-    dispatcher = build_dispatcher(cfg, need_llm=True, reset_stub=True)
+    dispatcher = build_dispatcher(cfg, reset_stub=True)
     build_application(dispatcher, cfg, token).run_polling()
     return 0
 
