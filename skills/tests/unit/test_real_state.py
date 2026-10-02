@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from skills import real
-from skills.real import POSTURE_SITTING_MAX_M, POSTURE_STANDING_MIN_M, derive_posture
+from skills.real import POSTURE_STANDING_MIN_M, derive_posture
 
 
 def msg(**overrides):
@@ -45,23 +45,9 @@ class Value:
         self.value = v
 
 
-@pytest.mark.parametrize(
-    "height, posture",
-    [
-        (POSTURE_STANDING_MIN_M, "standing"),
-        (POSTURE_SITTING_MAX_M - 0.01, "sitting"),
-        (math.nan, "unknown"),
-    ],
-    ids=["standing", "sitting", "nan"],
-)
-def test_posture_from_height(height, posture):
-    state = real._state_from_msg(msg(body_height=height))
-    assert state["posture"] == posture
-    assert state["backend"] == "real"
-
-
 def test_full_message_maps():
     state = real._state_from_msg(msg())
+    assert (state["backend"], state["posture"]) == ("real", "standing")
     assert state["position"] == [1.0, 2.0, 0.3]
     assert state["imu_rpy"] == [0.0, 0.0, 0.1]
     assert state["foot_force"] == [10.0, 11.0, 12.0, 13.0]
