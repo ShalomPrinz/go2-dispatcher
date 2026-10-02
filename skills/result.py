@@ -19,7 +19,6 @@ WATCHDOG_POLL_S = 0.2
 ORPHAN_GRACE_S = 2.0
 ORPHAN_EXIT_CODE = 137
 PARENT_PID_ENV = "GO2_PARENT_PID"
-STATUSES = ("ok", "error")
 
 Body = Callable[[dict], tuple[str, dict, "str | None", "str | None", dict]]
 # returns (status, observations, error_code, error_message, timing) where timing has init_ms, exec_ms
@@ -147,18 +146,10 @@ def build_response(
     state_error=None,
     timing=None,
 ) -> dict:
-    """Pure function returning the SkillResponse dict (schema_version=1).
-    status == "error" requires error_code and error_message (ValueError otherwise).
+    """Pure function returning the SkillResponse dict (schema_version=1). It only assembles the dict;
+    the dispatcher's SkillResponse model validates it (skills/docs/skills.md).
     error_message: newlines replaced by spaces, collapsed, cut to 300 chars."""
-    if status not in STATUSES:
-        raise ValueError(f"status must be 'ok' or 'error', got {status!r}")
-    error = None
-    if status == "error":
-        if not error_code or error_message is None:
-            raise ValueError("status 'error' requires error_code and error_message")
-        error = {"code": str(error_code), "message": one_line(error_message)}
-    elif error_code is not None or error_message is not None:
-        raise ValueError("status 'ok' must not carry error_code or error_message")
+    error = {"code": error_code, "message": one_line(error_message)} if status == "error" else None
     return {
         "schema_version": SCHEMA_VERSION,
         "skill": skill,
@@ -230,7 +221,7 @@ def parse_params(argv: list[str] | None = None) -> dict:
 
 
 class InvalidParams(Exception):
-    """Raised by skills (and parse_params) for code ``invalid_params``."""
+    """Raised by parse_params for code ``invalid_params``."""
 
 
 def ms_since(t0: float) -> float:

@@ -9,7 +9,6 @@ from skills import motion, result
 YAW_RATE_RPS = 1.0  # rad/s
 CMD_PERIOD_S = 0.1
 SDK_TIMEOUT_S = 10.0  # applied by the real backend's SportClient.SetTimeout
-DIRECTIONS = ("left", "right")
 DIRECTION_SIGN = {"left": 1, "right": -1}
 BASE_S = 10.0  # process start + SDK init + state samples (tunable)
 FACTOR = 1.5  # safety factor on commanded motion time (tunable)
@@ -22,8 +21,8 @@ POLICY = result.SkillPolicy(
 
 
 def body(params: dict):
-    direction = motion.require_enum(params, "direction", DIRECTIONS)
-    angle_deg = motion.require_number(params, "angle_deg")
+    direction = params["direction"]
+    angle_deg = float(params["angle_deg"])
     status, obs, code, msg, timing = motion.move_loop(
         0.0, 0.0, DIRECTION_SIGN[direction] * YAW_RATE_RPS, math.radians(angle_deg) / YAW_RATE_RPS, CMD_PERIOD_S
     )

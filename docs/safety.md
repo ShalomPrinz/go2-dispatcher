@@ -66,7 +66,7 @@ Each task may command at most `motion_budget.max_distance_m` (10 m) of travel an
 
 ## Bounds
 
-Every step of a plan is checked against its `SKILL.md` declaration before anything runs: walk 0.1–3.0 m, turn 5–180°, enum values, required params, no unknown skills or params. A violation rejects the whole plan (one failure, then a replan). Details in [loop-and-context.md](../dispatcher/docs/loop-and-context.md#step-bounds). Skills check only presence and types, so a skill run by hand is not range-limited.
+Every step of a plan is checked against its `SKILL.md` declaration before anything runs: walk 0.1–3.0 m, turn 5–180°, enum values, required params, no unknown skills or params. A violation rejects the whole plan (one failure, then a replan). Details in [loop-and-context.md](../dispatcher/docs/loop-and-context.md#step-bounds). Skills do not check params at all, so a skill run by hand is not range-limited ([skills.md](../skills/docs/skills.md#invocation)).
 
 ## If the dispatcher dies
 

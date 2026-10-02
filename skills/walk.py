@@ -7,7 +7,6 @@ from skills import motion, result
 VELOCITY_MPS = 0.3
 CMD_PERIOD_S = 0.1
 SDK_TIMEOUT_S = 10.0  # applied by the real backend's SportClient.SetTimeout
-DIRECTIONS = ("forward", "backward", "left", "right")
 # direction -> (vx, vy) as multiples of VELOCITY_MPS
 DIRECTION_VECTORS = {"forward": (1, 0), "backward": (-1, 0), "left": (0, 1), "right": (0, -1)}
 BASE_S = 10.0  # process start + SDK init + state samples (tunable)
@@ -21,8 +20,8 @@ POLICY = result.SkillPolicy(
 
 
 def body(params: dict):
-    direction = motion.require_enum(params, "direction", DIRECTIONS)
-    distance_m = motion.require_number(params, "distance_m")
+    direction = params["direction"]
+    distance_m = float(params["distance_m"])
     sx, sy = DIRECTION_VECTORS[direction]
     status, obs, code, msg, timing = motion.move_loop(
         sx * VELOCITY_MPS, sy * VELOCITY_MPS, 0.0, distance_m / VELOCITY_MPS, CMD_PERIOD_S

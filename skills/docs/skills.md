@@ -105,11 +105,11 @@ python -m skills.<name> '<params-json>'
 - The process runs with the base dir as working directory, in its own session (`start_new_session=True`), so a kill reaches the whole process group ([safety.md](../../docs/safety.md#the-stop-path)).
 - **Output:** exactly one JSON line on the real stdout, written by `result.emit()`. Everything else goes to stderr: `capture_stdout()` points fd 1 at stderr first, so output from the SDK, CycloneDDS, ultralytics or C code cannot corrupt the response line. The executor reads the last non-empty stdout line and requires its `skill` to match.
 - **Exit code:** 0 for `status = "ok"`, 1 for `status = "error"` (`emit` uses `os._exit`, because DDS threads can hang normal interpreter shutdown). No valid response line means step outcome `malformed`.
-- Skills check only presence, type and enum membership (`invalid_params`) and apply no defaults, so a skill run by hand is not range-limited and needs all params. Only `detect_object.target` is trimmed and lower-cased by the skill.
+- Skills do not validate params: they read them directly (`params["direction"]`) and apply no defaults. The dispatcher validates every plan against the `SKILL.md` types, enums and ranges before it runs a skill ([loop-and-context.md](../../dispatcher/docs/loop-and-context.md#step-bounds)). A skill run by hand is therefore not range-limited and needs all params; a missing key or wrong type ends as `exception`. Only `detect_object.target` is trimmed and lower-cased by the skill.
 
 ## Response schema
 
-Every skill and utility prints one `SkillResponse` (`schema_version` 1):
+Every skill and utility prints one `SkillResponse` (`schema_version` 1). `result.build_response` only assembles it; the dispatcher's pydantic `SkillResponse` model (`dispatcher/models.py`) is the one validator of the shape, and a line that fails it is step outcome `malformed`.
 
 | Field | Meaning |
 |---|---|
@@ -152,7 +152,7 @@ Walk and turn are open-loop: they command a velocity for the time the motion sho
 
 | Code | Skills | Meaning |
 |---|---|---|
-| `invalid_params` | all | Params are not a JSON object, a required key is missing, or a value has the wrong type or enum value. |
+| `invalid_params` | all | The params argument is missing, not valid JSON, or not a JSON object. Keys and values are not checked by the skill (the dispatcher validates them). |
 | `sdk_error` | walk, turn, sit, stretch, stop_move | An SDK call returned non-zero. Message `<Call> returned <code>` (walk/turn add `; StopMove returned <code>` if the cleanup stop also failed). Motion skills send `StopMove` first. |
 | `backend_not_configured` | all | `GO2_BACKEND` missing or unknown, or `GO2_IFACE` empty on the real backend. |
 | `exception` | all | Unexpected exception: `<Type>: <first line>`. The traceback goes to stderr. |
@@ -278,7 +278,7 @@ Example: a `stand` skill (recommended before experiments, see [roadmap.md](../..
    A real `stand` would call `StandUp()` then `BalanceStand()`. Each SDK method must exist on the stub (`StubSportClient`) and work through `real.get_sport_client()`.
 2. Create `skills/catalog/stand/SKILL.md` with frontmatter (`name: stand`, `entrypoint: skills.stand`, a one-line `description`, `params` if any) and a short prose section.
 3. If the skill moves the robot, pass `cost=` (a `MotionCost`, or a function of params returning one); a timeout that depends on params is a function too (see `skills/walk.py`). If some observations should reach the model, list them in `context_observations`.
-4. Use `backend.sleep()`, never `time.sleep`. In motion loops, check `result.orphaned()` and always end with `StopMove()`.
+4. Read params directly (`params["key"]`); do not re-check types, enums or ranges, which the dispatcher validates against the `SKILL.md`. Use `backend.sleep()`, never `time.sleep`. In motion loops, check `result.orphaned()` and always end with `StopMove()`.
 5. Run `uv run go2 catalog`, run the skill by hand (below), and add tests (contract test in `tests/integration/test_skills.py`, policy test in `tests/integration/test_skill_policies.py`). The catalog golden file and the registry hash change: rewrite the golden file with `uv run pytest --update-golden` and review the diff ([testing.md](../../tests/docs/testing.md)).
 6. Update this page (and [robot.md](robot.md) if the skill adds robot-side facts).
 
@@ -305,6 +305,7 @@ Without `GO2_STUB_STATE_FILE` and `GO2_STUB_TIME_SCALE` the stub uses `runs/.stu
 - **One common JSON response schema for all skills**, replacing the predecessor's three incompatible output formats, so the executor, the log and the context renderer handle every skill the same way.
 - **Each skill owns its policy** (timeout formula, motion cost, observations shown to the model) as module constants next to the code that shares them, so a number like walking speed is defined once and tuned in one place.
 - **A policy is one frozen `SkillPolicy` dataclass instance per skill, not a subclass per skill.** The skills differ only in data (a name, a constant or a small formula for timeout and cost, an observation list), so a value with optional callables says it in a few lines and the constants sit at module level where `run_skill(POLICY, body)` and the body use them without a class prefix. The dataclass lives in `skills/result.py`, the module every skill already imports, instead of a separate base module. Rejected: a `SkillPolicy` base class with one `<Name>Policy` subclass per skill overriding `timeout_s()`/`motion_cost()`; it repeated boilerplate in every module and spread the constants across class attributes, without adding behaviour. The dispatcher still calls `timeout_s(params)` and `motion_cost(params)`, so it does not need to know whether a value is constant.
+- **One validator per contract, on the dispatcher side.** Plan params are validated only by the dispatcher's plan and bounds validation against `SKILL.md`, and skill responses only by the dispatcher's pydantic `SkillResponse`. Skills read params directly and `build_response` only assembles the dict. A second copy of the enums, type checks and response-shape rules in the skills had to be kept in step with `SKILL.md` and `dispatcher/models.py` and could drift from them. Rejected: validating on both sides; the skill-side checks only mattered for hand-run skills, where a missing key now reports `exception` instead of `invalid_params`.
 - **The catalog is generated from the registry, never hand-written**, so skill sets of different granularity are presented to the model in the same form and stay comparable. The `SKILL.md` prose never reaches the model.
 - **An unsupported `detect_object` target is a skill error with suggestions; the 80-class COCO list stays out of the catalog.** Listing every class would add tokens to every call; the skill validates the target and suggests close matches, so the model can correct itself on the next call.
 - **State is sampled at the start and end of every step, for logging only.** v1 gives no verdicts. The samples provide data to set v2 verification thresholds before seeing any verification results, and supply the posture shown to the model ([roadmap.md](../../docs/roadmap.md#v2-plan)).

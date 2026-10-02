@@ -1,36 +1,14 @@
-"""Shared helpers for the skills that call the sport client (skills/docs/skills.md): parameter checks,
-the constant-velocity 10 Hz command loop, and single SDK actions with a settle wait.
+"""Shared helpers for the skills that call the sport client (skills/docs/skills.md): the
+constant-velocity 10 Hz command loop, and single SDK actions with a settle wait.
 Standard library and skills only."""
 
 from __future__ import annotations
 
-import math
 import sys
 import time
 import traceback
 
 from skills import backend, result
-
-# --- parameter checks (presence, type, enum membership; ranges are the dispatcher's) ---
-
-
-def require_enum(params: dict, key: str, values: tuple[str, ...]) -> str:
-    value = params.get(key)
-    if key not in params:
-        raise result.InvalidParams(f"missing required param '{key}'")
-    if not isinstance(value, str) or value not in values:
-        raise result.InvalidParams(f"'{key}' must be one of {', '.join(values)}, got {value!r}")
-    return value
-
-
-def require_number(params: dict, key: str) -> float:
-    if key not in params:
-        raise result.InvalidParams(f"missing required param '{key}'")
-    value = params[key]
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
-        raise result.InvalidParams(f"'{key}' must be a finite number, got {value!r}")
-    return float(value)
-
 
 # --- actions --------------------------------------------------------------------
 

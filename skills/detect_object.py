@@ -28,10 +28,7 @@ def unsupported_message(target: str) -> str:
 
 
 def body(params: dict):
-    raw = params.get("target")
-    if not isinstance(raw, str) or not raw.strip():
-        raise result.InvalidParams("'target' must be a non-empty string")
-    target = raw.strip().lower()
+    target = params["target"].strip().lower()
     obs: dict = {"target": target}
     if target not in COCO_CLASSES:
         return "error", obs, "unsupported_object", unsupported_message(target), {}

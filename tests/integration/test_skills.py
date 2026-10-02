@@ -61,13 +61,6 @@ def test_invalid_json(tmp_path):
     assert resp.status == "error" and resp.error.code == "invalid_params"
 
 
-def test_bad_param_value(tmp_path):
-    proc = run_module("walk", {"direction": "up", "distance_m": 1}, stub_env(tmp_path))
-    resp = SkillResponse.model_validate(single_response(proc))
-    assert proc.returncode == 1
-    assert resp.error.code == "invalid_params"
-
-
 def test_backend_not_configured(tmp_path):
     env = stub_env(tmp_path)
     env.pop("GO2_BACKEND")
