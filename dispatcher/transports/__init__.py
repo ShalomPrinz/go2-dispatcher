@@ -18,7 +18,7 @@ from ..executor import Executor
 from ..llm import AnthropicPlanner, PlannerClient
 from ..models import RegistryError, TaskOutcome
 from ..registry import Registry
-from ..runlog import RunLogFactory
+from ..runlog import RunLogFactory, SessionInfo
 
 __all__ = [
     "load_config_and_env",
@@ -94,7 +94,7 @@ def build_dispatcher(cfg: Config, *, reset_stub: bool, planner: PlannerClient | 
         registry,
         planner,
         executor,
-        RunLogFactory(cfg.log.dir, session_id=uuid.uuid4().hex),
+        RunLogFactory(cfg.log.dir, uuid.uuid4().hex, SessionInfo.collect(cfg, registry)),
         initial_posture=posture,
     )
     atexit.register(dispatcher.shutdown, 0)

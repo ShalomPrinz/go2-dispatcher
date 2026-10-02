@@ -38,7 +38,7 @@ The payload fields follow.
 
 ### `task_start`
 
-`task`, `source` (`cli` / `telegram` / `test`), `sender_id` (Telegram user id or null), `condition`, `config` (full config dump; it holds no secrets), `registry_hash`, `system_text`, `catalog_text`, `tool_schema`, `skills` (names), `previous_task` (`TaskSummary` or null), `posture`, `versions` (`python`, `anthropic`, `pydantic`, `go2-dispatcher`), `git_commit` (`git rev-parse HEAD` in the base dir, or null).
+`task`, `source` (`cli` / `telegram` / `test`), `sender_id` (Telegram user id or null), `condition`, `config` (full config dump; it holds no secrets), `registry_hash`, `system_text`, `catalog_text`, `tool_schema`, `skills` (names), `previous_task` (`TaskSummary` or null), `posture`, `versions` (`python`, `anthropic`, `pydantic`, `go2-dispatcher`), `git_commit` (`git rev-parse HEAD` in the base dir, or null). `versions` and `git_commit` are read once per process at startup.
 
 ### `llm_request`
 
@@ -125,6 +125,7 @@ Group tasks by condition first: `condition`, `registry_hash` (the skill set and 
 
 ## Design decisions
 
+- **Records are built only in `runlog.py`, by one named method per record type** (`RunLog.task_start`, `step_result`, `stop_move`, ...; the index row in `RunLogFactory.append_index`). The loop passes per-record data, mostly existing domain objects (`StepResult`, `StopMoveResult`, `LLMResult`, `TaskOutcome`), and never builds a record itself, so the record contract lives in one module. Each method writes exactly one record. The session-constant `task_start` fields (config, condition, prompt surface, registry hash, skills, versions, git commit) are collected once per process into `SessionInfo`, and the dispatcher plans with the prompt surface taken from it, so what is logged is what is sent. Rejected: one pydantic model per record type (`log.write(StepResultRecord(...))`), which only moves the long field lists into constructors.
 - **One file per task plus an index.** A task is the unit of analysis; the index lets analysis select tasks by condition without parsing every file.
 - **Every line is flushed as it is written**, under a lock, so a crash leaves a usable partial log and lines from the transport thread never interleave.
 - **The exact prompt surface is logged with every task** (system text, catalog, tool schema, registry hash) and the exact user message with every call, so any call can be reconstructed and conditions can be told apart by hash.

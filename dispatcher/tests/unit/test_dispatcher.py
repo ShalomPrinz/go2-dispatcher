@@ -12,7 +12,7 @@ from dispatcher.dispatcher import Dispatcher
 from dispatcher.executor import STDERR_TAIL_CHARS
 from dispatcher.models import BusyError, LLMInterrupted, LLMUnavailable, Plan, PlanStep
 from dispatcher.registry import Registry
-from dispatcher.runlog import RunLog, RunLogFactory
+from dispatcher.runlog import RunLog, RunLogFactory, SessionInfo
 from dispatcher.tests.helpers import (
     FakeClock,
     FakeExecutor,
@@ -64,7 +64,7 @@ class Rig:
             registry,
             self.planner,
             self.executor,
-            RunLogFactory(self.cfg.log.dir, session_id="s1"),
+            RunLogFactory(self.cfg.log.dir, "s1", SessionInfo.collect(self.cfg, registry)),
             clock=self.clock.now,
             initial_posture=posture,
         )
@@ -385,14 +385,10 @@ def test_internal_error_stop_move_stderr_tail_is_cut(tmp_path, registry):
 
 
 def test_task_end_write_fails_index_row_still_written(tmp_path, registry, monkeypatch, capsys):
-    real_write = RunLog.write
+    def task_end(self, *args, **kwargs):
+        raise OSError("disk full")
 
-    def write(self, type_, **fields):
-        if type_ == "task_end":
-            raise OSError("disk full")
-        return real_write(self, type_, **fields)
-
-    monkeypatch.setattr(RunLog, "write", write)
+    monkeypatch.setattr(RunLog, "task_end", task_end)
     r = Rig(tmp_path, registry, [done()])
     o = r.run()
     assert o.outcome == "DONE"

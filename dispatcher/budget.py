@@ -61,3 +61,7 @@ class MotionBudget:
             unit=KIND_UNITS[kind],
             kind=kind,
         )
+
+    def used(self) -> dict[str, float]:
+        """The ``budget_used`` field of the run log (dispatcher/docs/run-log.md)."""
+        return {"distance_m": self.used_distance_m, "rotation_deg": self.used_rotation_deg}

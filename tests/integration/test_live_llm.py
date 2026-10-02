@@ -11,7 +11,7 @@ from dispatcher.dispatcher import Dispatcher
 from dispatcher.executor import Executor
 from dispatcher.llm import AnthropicPlanner
 from dispatcher.registry import Registry
-from dispatcher.runlog import RunLogFactory
+from dispatcher.runlog import RunLogFactory, SessionInfo
 from dispatcher.tests.helpers import make_config
 from skills import stub
 from tests.helpers import REPO_ROOT
@@ -27,12 +27,13 @@ def test_live_turn_and_find_chair(tmp_path):
         pytest.skip("ANTHROPIC_API_KEY is not set")
     cfg = make_config(tmp_path, stub={"detections": {"chair": "center:near"}})
     stub.write_posture(cfg.stub.initial_posture, cfg.stub.state_file)
+    registry = Registry.load(REPO_ROOT / "skills" / "catalog")
     d = Dispatcher(
         cfg,
-        Registry.load(REPO_ROOT / "skills" / "catalog"),
+        registry,
         AnthropicPlanner(key, cfg.llm, cfg.loop.planning_horizon),
         Executor(cfg, cfg.base_dir),
-        RunLogFactory(cfg.log.dir, "live"),
+        RunLogFactory(cfg.log.dir, "live", SessionInfo.collect(cfg, registry)),
         initial_posture=cfg.stub.initial_posture,
     )
     o = d.run_task(TASK, source="test")

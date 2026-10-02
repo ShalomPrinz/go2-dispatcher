@@ -16,7 +16,7 @@ from dispatcher import prompts
 from dispatcher.dispatcher import Dispatcher
 from dispatcher.models import BusyError, Plan, PlanStep
 from dispatcher.registry import Registry
-from dispatcher.runlog import RunLogFactory
+from dispatcher.runlog import RunLogFactory, SessionInfo
 from dispatcher.tests.helpers import (
     FakeClock,
     FakeExecutor,
@@ -152,7 +152,7 @@ def test_normal_task(cfg, registry):
         registry,
         planner,
         FakeExecutor([exec_result("ok", skill="turn")]),
-        RunLogFactory(cfg.log.dir, session_id="s1"),
+        RunLogFactory(cfg.log.dir, "s1", SessionInfo.collect(cfg, registry)),
         clock=FakeClock().now,
         initial_posture="standing",
     )

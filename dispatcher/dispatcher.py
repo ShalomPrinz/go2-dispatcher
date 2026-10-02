@@ -2,18 +2,13 @@
 
 from __future__ import annotations
 
-import importlib.metadata
-import platform
-import subprocess
 import sys
 import threading
 import time
-import traceback
 import uuid
 from collections.abc import Callable
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import dataclass, field, fields
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Literal
 
 from . import prompts
@@ -22,7 +17,7 @@ from .budget import MotionBudget
 from .config import Config
 from .context import ContextInput, build_user_message, schema_retry_message
 from .executor import STDERR_TAIL_CHARS, Executor
-from .llm import LLMResult, PlannerClient, plan_tool_schema
+from .llm import LLMResult, PlannerClient
 from .models import (
     FAILURE_OUTCOMES,
     BusyError,
@@ -35,13 +30,11 @@ from .models import (
     TaskOutcomeCode,
     TaskSummary,
 )
-from .registry import Registry, registry_hash
-from .runlog import RunLog, RunLogFactory
+from .registry import Registry
+from .runlog import NullLog, RunLog, RunLogFactory
 
-__all__ = ["Dispatcher", "GIT_TIMEOUT_S", "VERSION_PACKAGES"]
+__all__ = ["Dispatcher"]
 
-GIT_TIMEOUT_S = 5.0  # best-effort `git rev-parse HEAD` at startup
-VERSION_PACKAGES = ("anthropic", "pydantic", "go2-dispatcher")
 KILLED_OUTCOMES = frozenset({"timeout", "interrupted"})
 STOP_CAUSES = frozenset({"operator", "shutdown"})  # interrupted -> STOPPED; else TIME_LIMIT
 EXCEPTION_WHERE = "run_task"
@@ -49,45 +42,8 @@ EXCEPTION_WHERE = "run_task"
 Phase = Literal["idle", "llm_call", "step", "between", "ending"]
 
 
-# --- startup facts for task_start ------------------------------------------------------
-
-
-def _versions() -> dict[str, str | None]:
-    out: dict[str, str | None] = {"python": platform.python_version()}
-    for pkg in VERSION_PACKAGES:
-        try:
-            out[pkg] = importlib.metadata.version(pkg)
-        except importlib.metadata.PackageNotFoundError:
-            out[pkg] = None
-    return out
-
-
-def _git_commit(base_dir: Path) -> str | None:
-    try:
-        proc = subprocess.run(
-            ["git", "rev-parse", "HEAD"], cwd=base_dir, capture_output=True, text=True, timeout=GIT_TIMEOUT_S
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    if proc.returncode != 0:
-        return None
-    return proc.stdout.strip() or None
-
-
 def _numeric_usage(usage: dict) -> dict[str, float]:
     return {k: v for k, v in usage.items() if isinstance(v, (int, float)) and not isinstance(v, bool)}
-
-
-class _NullLog:
-    """Stands in until the task's log file is open (or if opening it failed)."""
-
-    path = ""
-
-    def write(self, type: str, /, **payload: Any) -> None:
-        pass
-
-    def close(self) -> None:
-        pass
 
 
 # --- per-task state (dispatcher/docs/loop-and-context.md) -----------------------------------------------------------
@@ -103,7 +59,7 @@ class _Task:
     ts_start: str
     deadline: float
     budget: MotionBudget
-    log: RunLog | _NullLog = field(default_factory=_NullLog)
+    log: RunLog = field(default_factory=NullLog)
     steps: list[StepResult] = field(default_factory=list)
     dispatched_count: int = 0
     failures: int = 0
@@ -144,15 +100,13 @@ class Dispatcher:
         self._state_lock = threading.Lock()
         self._phase: Phase = "idle"
         self._stop_event = threading.Event()
-        self._log: RunLog | _NullLog | None = None
+        self._log: RunLog | None = None
 
-        horizon = cfg.loop.planning_horizon
-        self._catalog_text = registry.catalog_text()
-        self._system = prompts.system_blocks(horizon, self._catalog_text)
-        self._tool_schema = plan_tool_schema(horizon)
-        self.registry_hash = registry_hash(self._system[0], self._catalog_text, self._tool_schema)
-        self._versions = _versions()
-        self._git_commit = _git_commit(cfg.base_dir)
+        # the prompt surface is the one the run log records (dispatcher/docs/run-log.md)
+        session = runlog_factory.session
+        self._system = prompts.system_blocks(cfg.loop.planning_horizon, session.catalog_text)
+        self._tool_schema = session.tool_schema
+        self.registry_hash = session.registry_hash
 
     # --- public interface (dispatcher/docs/loop-and-context.md) ------------------------------------------------------
 
@@ -165,7 +119,7 @@ class Dispatcher:
                 return "idle"
             self._stop_event.set()
             if self._log is not None:
-                self._log.write("stop_requested", source=source, during=self._phase)
+                self._log.stop_requested(source, self._phase)
         self.executor.kill_current("operator")
         return "stopping"
 
@@ -181,7 +135,7 @@ class Dispatcher:
         smr = self.executor.stop_move("shutdown")
         with self._state_lock:
             if self._log is not None:
-                self._log.write("stop_move", **smr.model_dump(mode="json"))
+                self._log.stop_move(smr)
 
     def run_task(self, task: str, *, source: str, sender_id: str | None = None) -> TaskOutcome:
         if not task.strip():
@@ -226,23 +180,7 @@ class Dispatcher:
             t.log = log
             self._log = log
             self._phase = "between"
-        log.write(
-            "task_start",
-            task=t.task,
-            source=t.source,
-            sender_id=t.sender_id,
-            condition=self.cfg.run.condition,
-            config=self.cfg.model_dump(mode="json"),
-            registry_hash=self.registry_hash,
-            system_text=self._system[0],
-            catalog_text=self._catalog_text,
-            tool_schema=self._tool_schema,
-            skills=self.registry.names(),
-            previous_task=self.previous.model_dump(mode="json") if self.previous else None,
-            posture=self.posture,
-            versions=self._versions,
-            git_commit=self._git_commit,
-        )
+        log.task_start(t.task, t.source, t.sender_id, self.previous, self.posture)
 
     # --- helpers ------------------------------------------------------------------------------
 
@@ -252,9 +190,6 @@ class Dispatcher:
 
     def _remaining_s(self, t: _Task) -> float:
         return t.deadline - self.clock()
-
-    def _budget_used(self, t: _Task) -> dict[str, float]:
-        return {"distance_m": t.budget.used_distance_m, "rotation_deg": t.budget.used_rotation_deg}
 
     def _record(self, t: _Task, sr: StepResult, stop: StopMoveResult | None = None) -> None:
         """Append a step, update posture and the StopMove flag, log it (and the StopMove of a killed step)."""
@@ -268,15 +203,9 @@ class Dispatcher:
             t.last_failure = sr
         if sr.index is None:
             t.rejections += 1
-        t.log.write(
-            "step_result",
-            **sr.model_dump(mode="json"),
-            budget_used=self._budget_used(t),
-            failures=t.failures,
-            posture=self.posture,
-        )
+        t.log.step_result(sr, budget=t.budget, failures=t.failures, posture=self.posture)
         if stop is not None:
-            t.log.write("stop_move", **stop.model_dump(mode="json"))
+            t.log.stop_move(stop)
 
     def _update_posture_from_step(self, sr: StepResult, stop: StopMoveResult | None) -> None:
         """Last known posture from the step's state_after (dispatcher/docs/loop-and-context.md)."""
@@ -310,9 +239,7 @@ class Dispatcher:
         (interrupted, unavailable, or a stop/deadline that arrived during the call)."""
         call_index = t.llm_calls + 1
         self._set_phase("llm_call")
-        t.log.write(
-            "llm_request", call_index=call_index, return_reason=return_reason, retry_of=retry_of, user_text=user
-        )
+        t.log.llm_request(call_index, return_reason, retry_of, user)
         try:
             res = self.planner.plan(
                 system=list(self._system),
@@ -321,15 +248,15 @@ class Dispatcher:
                 call_index=call_index,
                 remaining_s=lambda: self._remaining_s(t),
                 stop_event=self._stop_event,
-                on_infra_retry=lambda rec: t.log.write("llm_retry", **rec),
+                on_infra_retry=t.log.llm_retry,
             )
         except LLMInterrupted as e:
             self._set_phase("between")
-            t.log.write("llm_interrupted", call_index=call_index, cause=e.cause)
+            t.log.llm_interrupted(call_index, e.cause)
             return self._end(t, "STOPPED" if e.cause == "operator" else "TIME_LIMIT_EXCEEDED", stop_move=True)
         except LLMUnavailable as e:
             self._set_phase("between")
-            t.log.write("llm_error", call_index=call_index, detail=e.detail)
+            t.log.llm_error(call_index, e.detail)
             return self._end(t, "LLM_ERROR", detail=e.detail)
         except BaseException:
             self._set_phase("between")
@@ -339,36 +266,15 @@ class Dispatcher:
         t.llm_calls += 1
         for k, v in _numeric_usage(res.usage).items():
             t.usage_totals[k] = t.usage_totals.get(k, 0) + v
-        t.log.write(
-            "llm_response",
-            call_index=call_index,
-            latency_ms=res.latency_ms,
-            total_ms=res.total_ms,
-            attempts=res.attempts,
-            stop_reason=res.stop_reason,
-            usage=res.usage,
-            content=res.content,
-            response_id=res.response_id,
-            request_id=res.request_id,
-        )
+        t.log.llm_response(call_index, res)
         if (o := self._check_interrupts(t)) is not None:
             return o
         return res
 
     def _log_invalid(self, t: _Task, res: LLMResult) -> None:
-        call_index = t.llm_calls
-        horizon = res.rejection_kind == "horizon"
-        if horizon:
+        if res.rejection_kind == "horizon":
             t.horizon_rejections += 1
-        t.log.write(
-            "plan_invalid",
-            call_index=call_index,
-            tool_input=res.tool_input,
-            rejection_kind=res.rejection_kind,
-            steps_in_plan=len(res.tool_input["steps"]) if horizon else None,  # horizon implies a steps list
-            horizon=self.cfg.loop.planning_horizon if horizon else None,
-            errors=res.errors,
-        )
+        t.log.plan_invalid(t.llm_calls, res, self.cfg.loop.planning_horizon)
 
     # --- interrupts and end ----------------------------------------------------------------------
 
@@ -401,7 +307,7 @@ class Dispatcher:
         return {}
 
     def _apply_stop_move(self, t: _Task, smr: StopMoveResult) -> None:
-        t.log.write("stop_move", **smr.model_dump(mode="json"))
+        t.log.stop_move(smr)
         if smr.response is not None and smr.response.state_after is not None:
             self.posture = smr.response.state_after.posture
         if not smr.ok:
@@ -443,50 +349,21 @@ class Dispatcher:
             log_path=str(t.log.path),
         )
         try:
-            t.log.write(
-                "task_end",
-                outcome=outcome,
-                message=text,
-                llm_calls=t.llm_calls,
-                failures=t.failures,
-                steps_recorded=len(t.steps),
-                steps_dispatched=len(dispatched),
+            t.log.task_end(
+                result,
                 rejections=t.rejections,
                 horizon_rejections=t.horizon_rejections,
                 usage_totals=t.usage_totals,
-                budget_used=self._budget_used(t),
-                stop_move_failed=t.stop_move_failed,
-                final_posture=self.posture,
-                duration_ms=duration_ms,
+                budget=t.budget,
             )
         except Exception as e:  # noqa: BLE001 - the index row must still be written (dispatcher/docs/loop-and-context.md)
             print(
                 f"go2-dispatcher: failed to write task_end for run {t.run_id}: {type(e).__name__}: {e}", file=sys.stderr
             )
         finally:
-            if isinstance(t.log, RunLog):
+            if not isinstance(t.log, NullLog):
                 self.runlog_factory.append_index(
-                    {
-                        "run_id": t.run_id,
-                        "file": t.log.path.name,
-                        "ts_start": t.ts_start,
-                        "task": t.task,
-                        "source": t.source,
-                        "outcome": outcome,
-                        "condition": self.cfg.run.condition,
-                        "backend": self.cfg.robot.backend,
-                        "model": self.cfg.llm.model,
-                        "thinking": self.cfg.llm.thinking,
-                        "planning_horizon": self.cfg.loop.planning_horizon,
-                        "max_llm_calls": self.cfg.loop.max_llm_calls,
-                        "registry_hash": self.registry_hash,
-                        "llm_calls": t.llm_calls,
-                        "failures": t.failures,
-                        "steps_dispatched": len(dispatched),
-                        "input_tokens": t.usage_totals.get("input_tokens", 0),
-                        "output_tokens": t.usage_totals.get("output_tokens", 0),
-                        "duration_ms": duration_ms,
-                    }
+                    t.log, result, ts_start=t.ts_start, source=t.source, usage_totals=t.usage_totals
                 )
         self.previous = TaskSummary(
             task=t.task, outcome=outcome, message=text, last_step=dispatched[-1] if dispatched else None
@@ -498,13 +375,7 @@ class Dispatcher:
         smr: StopMoveResult | None = None
         try:
             try:
-                t.log.write(
-                    "exception",
-                    where=EXCEPTION_WHERE,
-                    exception_type=type(e).__name__,
-                    message=str(e),
-                    traceback=traceback.format_exc(),
-                )
+                t.log.exception(EXCEPTION_WHERE, e)
             except Exception:  # noqa: BLE001
                 pass
             try:
@@ -554,7 +425,7 @@ class Dispatcher:
 
             plan = res.plan
             stop_at = plan.replan_after or len(plan.steps)
-            t.log.write("plan", call_index=t.llm_calls, plan=plan.model_dump(mode="json"), stop_at=stop_at)
+            t.log.plan(t.llm_calls, plan, stop_at)
             if plan.status == "DONE":
                 return self._end(t, "DONE", message=plan.message)
             if plan.status == "ABORT":
@@ -611,15 +482,14 @@ class Dispatcher:
         t.budget.charge(cost)
 
         self._set_phase("step")
-        t.log.write(
-            "step_start",
+        t.log.step_start(
             index=t.dispatched_count,
             call_index=t.llm_calls,
             plan_step=i,
             skill=step.skill,
             params=params,
             timeout_s=timeout,
-            motion_cost=asdict(cost),
+            cost=cost,
             fault=fault,
         )
         try:
