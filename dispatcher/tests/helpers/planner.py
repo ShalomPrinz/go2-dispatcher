@@ -6,9 +6,8 @@ import threading
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from dispatcher.llm import TOOL_NAME, LLMResult
+from dispatcher.llm import TOOL_NAME, LLMResult, validate_tool_input
 from dispatcher.models import Plan
-from dispatcher.validation import validate_tool_input
 
 SCRIPTED_USAGE = {"input_tokens": 100, "output_tokens": 20}
 
@@ -71,10 +70,10 @@ class ScriptedPlanner:
             plan: Plan | None = item
             tool_input: Any = item.model_dump(exclude_none=True)
             errors: list[str] = []
-            horizon_exceeded, kind = False, "none"
+            kind = "none"
         elif isinstance(item, dict):
             tool_input = item
-            plan, errors, horizon_exceeded, kind = validate_tool_input(item, _horizon_of(tool_schema))
+            plan, errors, kind = validate_tool_input(item, _horizon_of(tool_schema))
         else:
             raise TypeError(f"unsupported scripted item: {item!r}")
         return LLMResult(
@@ -82,7 +81,6 @@ class ScriptedPlanner:
             tool_input=tool_input,
             errors=errors,
             rejection_kind=kind,
-            horizon_exceeded=horizon_exceeded,
             usage=dict(SCRIPTED_USAGE),
             stop_reason="tool_use",
             content=[{"type": "tool_use", "id": f"toolu_scripted_{n + 1}", "name": TOOL_NAME, "input": tool_input}],

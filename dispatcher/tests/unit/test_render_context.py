@@ -1,4 +1,4 @@
-"""render.py + context.py, with golden files (dispatcher/docs/loop-and-context.md, tests/docs/testing.md)."""
+"""context.py: step rendering and the user message, with golden files (dispatcher/docs/loop-and-context.md)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,14 @@ from pathlib import Path
 import pytest
 
 from dispatcher.budget import MotionBudget
-from dispatcher.context import ContextInput, build_user_message, schema_retry_message
+from dispatcher.context import (
+    ContextInput,
+    build_user_message,
+    format_value,
+    render_remaining,
+    render_step,
+    schema_retry_message,
+)
 from dispatcher.models import (
     PlanStep,
     RobotState,
@@ -17,7 +24,6 @@ from dispatcher.models import (
     TaskSummary,
 )
 from dispatcher.registry import Registry
-from dispatcher.render import format_value, render_remaining, render_step
 from skills.result import MotionCost
 from tests.helpers import REPO_ROOT
 

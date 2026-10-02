@@ -9,7 +9,7 @@ import sys
 import threading
 import traceback
 import uuid
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -292,21 +292,15 @@ class Dispatcher:
 
     def _context(self, t: _Task) -> str:
         loop = self.cfg.loop
+        # ContextInput fields that _Task holds under the same name
+        shared = {f.name: getattr(t, f.name) for f in fields(ContextInput) if hasattr(t, f.name)}
         return build_user_message(
             ContextInput(
-                task=t.task,
+                **shared,
                 posture=self.posture,
-                budget=t.budget,
-                failures=t.failures,
                 max_failures=loop.max_failures,
-                llm_calls=t.llm_calls,
                 max_llm_calls=loop.max_llm_calls,
                 history_k=loop.context_history_k,
-                return_reason=t.return_reason,
-                steps=list(t.steps),
-                remaining=list(t.remaining),
-                remaining_tag=t.remaining_tag,
-                notice_args=dict(t.notice_args),
                 previous=self.previous,
             ),
             self.registry,
@@ -366,7 +360,7 @@ class Dispatcher:
 
     def _log_invalid(self, t: _Task, res: LLMResult) -> None:
         call_index = t.llm_calls
-        if res.horizon_exceeded:
+        if res.rejection_kind == "horizon":
             t.horizon_rejections += 1
             raw_steps = res.tool_input.get("steps") if isinstance(res.tool_input, dict) else None
             t.log.write(
@@ -650,24 +644,18 @@ class Dispatcher:
         finally:
             self._set_phase("between")
 
+        exec_fields = {k: v for k, v in ex if k != "interrupt_cause"}  # the rest maps 1:1 onto StepResult
+        exec_fields["error_message"] = cut_message(ex.error_message) if ex.error_message else None
         sr = StepResult(
+            **exec_fields,
             index=t.dispatched_count,
             call_index=t.llm_calls,
             plan_step=i,
             skill=step.skill,
             params=params,
-            outcome=ex.outcome,
-            error_code=ex.error_code,
-            error_message=cut_message(ex.error_message) if ex.error_message else None,
-            response=ex.response,
-            duration_ms=ex.duration_ms,
             timeout_s=timeout,
             motion_cost=cost,
             fault=fault,
-            exit_code=ex.exit_code,
-            pid=ex.pid,
-            stderr_tail=ex.stderr_tail,
-            stop_move=ex.stop_move,
         )
         self._record(t, sr)
 

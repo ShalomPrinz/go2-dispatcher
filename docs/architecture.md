@@ -32,9 +32,9 @@ An operator sends a natural-language task over Telegram or the CLI. The LLM retu
 |---|---|---|
 | Transports: CLI (`go2`) and Telegram (`go2 bot`), both over the same dispatcher | `dispatcher/transports/` | [running.md](running.md) |
 | Dispatcher loop, busy-reject, stop, shutdown | `dispatcher.py` | [loop-and-context.md](../dispatcher/docs/loop-and-context.md), [safety.md](safety.md) |
-| Context assembly and every fixed text | `context.py`, `prompts.py`, `render.py` | [loop-and-context.md](../dispatcher/docs/loop-and-context.md) |
+| Context assembly and every fixed text | `context.py`, `prompts.py` | [loop-and-context.md](../dispatcher/docs/loop-and-context.md) |
 | LLM client, tool schema, infra retries | `llm.py` | [llm.md](../dispatcher/docs/llm.md) |
-| Plan validation, parameter bounds, motion budget | `validation.py`, `bounds.py`, `budget.py` | [loop-and-context.md](../dispatcher/docs/loop-and-context.md), [safety.md](safety.md) |
+| Plan validation, parameter bounds, motion budget | `llm.py`, `bounds.py`, `budget.py` | [loop-and-context.md](../dispatcher/docs/loop-and-context.md), [safety.md](safety.md) |
 | Skill registry and generated catalog | `registry.py`, `skills/*/SKILL.md` | [skills.md](../skills/docs/skills.md) |
 | Executor: subprocesses, timeouts, kill, `StopMove`, state reads | `executor.py` | [safety.md](safety.md) |
 | Skill runtime, skills and utilities, real and stub backends, posture rule | `skills/` | [skills.md](../skills/docs/skills.md), [robot.md](../skills/docs/robot.md) |

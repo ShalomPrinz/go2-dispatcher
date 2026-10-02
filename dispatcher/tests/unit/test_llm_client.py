@@ -115,7 +115,7 @@ def test_request_thinking_adaptive(tmp_path):
 def test_valid_tool_use_parsed(tmp_path):
     h = Harness(tmp_path, [ok()])
     r = h.plan()
-    assert r.errors == [] and r.rejection_kind == "none" and not r.horizon_exceeded
+    assert r.errors == [] and r.rejection_kind == "none"
     assert r.plan is not None and r.plan.steps[0].skill == "sit"
     assert r.tool_input == GOOD_INPUT
     assert {k: r.usage[k] for k in USAGE} == USAGE
@@ -145,7 +145,7 @@ def test_first_submit_plan_block_used(tmp_path):
 def test_invalid_tool_input_validated(tmp_path):
     body = message([tool_use({"status": "PLAN", "steps": [{"skill": "sit"}] * (H + 1)})])
     r = Harness(tmp_path, [ok(body)]).plan()
-    assert r.plan is None and r.horizon_exceeded and r.rejection_kind == "horizon"
+    assert r.plan is None and r.rejection_kind == "horizon"
     assert r.errors == [f"plan has {H + 1} steps; the maximum is {H}"]
 
 

@@ -14,12 +14,12 @@ from skills import stub
 
 from .. import process_lock
 from ..config import Config, load_config_and_env
+from ..context import render_step
 from ..dispatcher import Dispatcher
 from ..executor import Executor
 from ..llm import AnthropicPlanner, LLMResult, PlannerClient
 from ..models import LLMUnavailable, RegistryError, TaskOutcome
 from ..registry import Registry
-from ..render import render_step
 from ..runlog import RunLogFactory
 
 __all__ = [

@@ -8,11 +8,10 @@ import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from .config import LLMConfig
 from .models import LLMInterrupted, LLMUnavailable, Plan
-from .validation import validate_tool_input
 
 if TYPE_CHECKING:
     import anthropic
@@ -34,6 +33,7 @@ __all__ = [
     "RETRY_AFTER_CAP_S",
     "ERR_MAX_TOKENS",
     "ERR_NO_TOOL_CALL",
+    "validate_tool_input",
 ]
 
 TOOL_NAME = "submit_plan"
@@ -47,6 +47,9 @@ ERR_MAX_TOKENS = "reply was cut off; keep the plan shorter"
 ERR_NO_TOOL_CALL = "no submit_plan call in reply"
 
 RejectionKind = Literal["none", "schema", "horizon", "semantic", "no_tool_call", "max_tokens"]
+
+# loc label for a pydantic error that has no location (the whole input is wrong)
+ROOT_LOC = "input"
 
 
 # --- Tool schema (dispatcher/docs/loop-and-context.md) ----------------------------------------------------------------
@@ -96,6 +99,74 @@ def plan_tool_schema(horizon: int) -> dict:
     }
 
 
+# --- Plan validation (dispatcher/docs/loop-and-context.md) -------------------------------------------------
+
+
+def _schema_errors(e: ValidationError) -> list[str]:
+    out: list[str] = []
+    for err in e.errors():
+        loc = ".".join(str(p) for p in err["loc"]) or ROOT_LOC
+        out.append(f"{loc}: {err['msg']}")
+    return out
+
+
+def _semantic_errors(plan: Plan) -> list[str]:
+    errors: list[str] = []
+    s = plan.status
+    n = len(plan.steps)
+    if s == "PLAN" and n == 0:
+        errors.append("status PLAN needs at least one step")
+    if s in ("DONE", "ABORT"):
+        if n > 0:
+            errors.append(f"status {s} must have no steps")
+        if plan.message is None or not plan.message.strip():
+            errors.append(f"status {s} needs a message")
+    if plan.replan_after is not None:
+        if s != "PLAN":
+            errors.append("replan_after is only allowed with status PLAN")
+        elif not 1 <= plan.replan_after <= n:
+            errors.append(f"replan_after must be between 1 and {n}")
+    return errors
+
+
+def validate_tool_input(raw: Any, horizon: int) -> tuple[Plan | None, list[str], RejectionKind]:
+    """Returns (plan, errors, rejection_kind). Plans are never truncated: an over-long plan is
+    rejected as a whole."""
+    errors: list[str] = []
+
+    # 1. horizon, on the raw input, before pydantic
+    horizon_exceeded = False
+    if isinstance(raw, dict) and isinstance(raw.get("steps"), list) and len(raw["steps"]) > horizon:
+        horizon_exceeded = True
+        errors.append(f"plan has {len(raw['steps'])} steps; the maximum is {horizon}")
+
+    # 2. schema
+    plan: Plan | None = None
+    schema_errors: list[str] = []
+    try:
+        plan = Plan.model_validate(raw)
+    except ValidationError as e:
+        schema_errors = _schema_errors(e)
+    errors.extend(schema_errors)
+
+    # 3. semantic, only if the schema passed
+    semantic_errors = _semantic_errors(plan) if plan is not None else []
+    errors.extend(semantic_errors)
+
+    # 5. rejection kind
+    if horizon_exceeded:
+        kind = "horizon"
+    elif schema_errors:
+        kind = "schema"
+    elif semantic_errors:
+        kind = "semantic"
+    else:
+        kind = "none"
+
+    # 4. a plan only if there are no errors at all
+    return (plan if not errors else None), errors, kind
+
+
 # --- Interfaces (dispatcher/docs/llm.md) -----------------------------------------------------------------
 
 
@@ -104,7 +175,6 @@ class LLMResult(BaseModel):
     tool_input: Any | None  # raw tool input as received
     errors: list[str]  # empty iff plan is valid
     rejection_kind: RejectionKind
-    horizon_exceeded: bool
     usage: dict  # response.usage.model_dump(), verbatim
     stop_reason: str | None
     content: list[dict]  # all response content blocks, model_dump()
@@ -249,19 +319,17 @@ class AnthropicPlanner:
         block = next((b for b in resp.content if b.type == "tool_use" and b.name == TOOL_NAME), None)
         tool_input = block.input if block is not None else None
         plan: Plan | None = None
-        horizon_exceeded = False
         if resp.stop_reason == "max_tokens":
             errors, kind = [ERR_MAX_TOKENS], "max_tokens"
         elif block is None:
             errors, kind = [ERR_NO_TOOL_CALL], "no_tool_call"
         else:
-            plan, errors, horizon_exceeded, kind = validate_tool_input(tool_input, self._horizon)
+            plan, errors, kind = validate_tool_input(tool_input, self._horizon)
         return LLMResult(
             plan=plan,
             tool_input=tool_input,
             errors=errors,
             rejection_kind=kind,
-            horizon_exceeded=horizon_exceeded,
             usage=resp.usage.model_dump(),
             stop_reason=resp.stop_reason,
             content=[b.model_dump() for b in resp.content],
