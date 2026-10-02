@@ -12,15 +12,13 @@ uv run pytest -q                               # default suite: no API key, robo
 uv run ruff format .                           # format; must be clean before a commit
 uv run ruff check .                            # lint; must pass before a commit
 uv run pytest -m integration                   # real subprocesses on the stub backend
-uv run pytest --update-golden                  # regenerate golden files; review the diff
 uv run go2 catalog                             # system text, catalog, tool schema, registry hash; no key needed
 uv run go2 state                               # stub state as JSON
 uv run go2 run "turn left 90 degrees"          # one task on the stub (needs ANTHROPIC_API_KEY in .env)
-uv run go2 --fault 1:hang run "…"              # stub fault injection (skills/docs/skills.md)
 uv run go2 --reset-stub                        # reset the stub posture and exit
 ```
 
-Opt-in tests (`--run-live`, `--run-robot`) are described in [tests/docs/testing.md](tests/docs/testing.md).
+Package commands (golden files, fault injection, opt-in tests) live in the folder CLAUDE.md files: [dispatcher/CLAUDE.md](dispatcher/CLAUDE.md), [skills/CLAUDE.md](skills/CLAUDE.md), [tests/CLAUDE.md](tests/CLAUDE.md). They load when Claude works in that folder.
 
 ## Documentation rules
 
@@ -30,14 +28,24 @@ Opt-in tests (`--run-live`, `--run-robot`) are described in [tests/docs/testing.
 - Open questions and pending work go into [docs/roadmap.md](docs/roadmap.md), each with an owner or a way to resolve it. When one is resolved, move the result into the owning doc and remove it from the roadmap.
 - Cite docs, not section numbers, in code comments (e.g. `(dispatcher/docs/loop-and-context.md)`). Mark starting values that will be tuned as `(tunable)`.
 - No process history and no personal contact details in docs.
+- A folder `CLAUDE.md` holds that folder's commands, doc table and gotchas only; rules for the whole repo stay here. It links docs, never repeats them.
+- Never put `@` before a doc path in a `CLAUDE.md`: `@path` inlines the file into every session. Use plain links so docs load only when read.
 
 ## Safety rules
 
 - **Never run the real backend unattended.** `--backend real` or `robot.backend = "real"` only with a person at the robot and the e-stop in reach ([docs/safety.md](docs/safety.md)).
 - The stub is the default backend. Development, tests and demos use the stub.
-- Opt-in robot tests (`--run-robot`) need a supervised session; never run them from an agent.
+- Agents never use `--backend real` or set `robot.backend = "real"`, and never run `--run-robot` tests; those are supervised human checks. `--run-live` and `go2 run` call the paid API: only when a brief asks.
 - No secrets in code, config files under version control, or logs. The API key and Telegram token live only in `.env` ([docs/configuration.md](docs/configuration.md)).
 - Fixed texts in `prompts.py` and `SKILL.md` files change the registry hash and the golden files; changing them makes runs incomparable ([skills/docs/skills.md](skills/docs/skills.md)).
+
+## Engineering rules
+
+- Ask before an architecture decision. "If possible I'd like X" is a question, not approval: answer it, then wait.
+- Build the simplest version first. After implementing, list the complexity left out and the signal that would justify adding it.
+- When a workaround fails twice, stop and research the root cause instead of trying a third.
+- Match the surrounding code's style, naming and comment density.
+- Code comments: one line by default, two at most. The reasoning belongs in the owning doc.
 
 ## Working pattern
 

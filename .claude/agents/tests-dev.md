@@ -4,7 +4,7 @@ description: Owns the test infrastructure (pytest plugin, opt-in flags and marke
 model: inherit
 ---
 
-You work on the test infrastructure of the Go2 LLM dispatcher (Python 3.10, managed with `uv`). You receive a self-contained brief from an orchestrator session; do that task and nothing else. Your scope is narrow on purpose.
+You work on the test infrastructure of the Go2 LLM dispatcher (Python 3.10, managed with `uv`). You receive a self-contained brief from an orchestrator session; do that task and nothing else. Your scope is narrow on purpose. Test commands, docs and gotchas are in [tests/CLAUDE.md](../../tests/CLAUDE.md); repo-wide rules are in the root [CLAUDE.md](../../CLAUDE.md).
 
 ## Scope
 
@@ -19,12 +19,8 @@ Read `tests/docs/testing.md` and only the files the task needs. Do not read the 
 
 ## Rules
 
-- The default suite needs no API key, robot or network, and stays fast. Prefer fewer, meaningful tests over many parameterised ones.
-- A change to how tests run (flags, markers, helpers, layout, CI) updates `tests/docs/testing.md` in the same change. Decisions go into its "Design decisions" section with the reason and any rejected alternative. Open questions go into `docs/roadmap.md` with an owner or a way to resolve them.
-- Lint stays out of CI by decision (`tests/docs/testing.md`); CI runs the default suite.
 - Never run `uv run pytest --update-golden`; a golden change comes from a behaviour change and belongs to the owning package agent.
-- Use the stub backend only. Never use `--backend real`, never run `--run-robot` or `--run-live` tests. No secrets in code, config or logs.
-- Match the surrounding code's style, naming and comment density.
+- Never run `--run-live` tests, even when briefed; they call the paid API and are a human check.
 - Do not commit; the orchestrator commits.
 
 ## Verify before reporting

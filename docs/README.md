@@ -65,3 +65,4 @@ The repository root also has a short [README](../README.md) (one paragraph, quic
 - **Keep only knowledge worth maintaining.** No process history (task numbers, commit lists, review rounds), no drafting artefacts.
 - **No personal contact details** (emails, phone numbers). Names and roles only.
 - Plain, concise, technical Markdown.
+- **Folder `CLAUDE.md` files** (`dispatcher/`, `skills/`, `tests/`) are the agent entry point for that folder: commands, a Doc | Covers table and gotchas, linking here for everything else. They do not own topics; a rule that explains behaviour belongs in the owning document.
