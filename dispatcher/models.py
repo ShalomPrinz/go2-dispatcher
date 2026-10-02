@@ -6,6 +6,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr, model_validator
 
+from skills.result import MotionCost
+
 # --- Exceptions (docs/architecture.md) -------------------------------------------------------
 
 
@@ -117,11 +119,6 @@ StepOutcome = Literal["ok", "error", "timeout", "malformed", "rejected", "motion
 FAILURE_OUTCOMES = frozenset({"error", "timeout", "malformed", "rejected", "motion_budget_exceeded"})
 
 
-class MotionCostModel(_Model):  # pydantic mirror of policy_base.MotionCost
-    distance_m: float = 0.0
-    rotation_deg: float = 0.0
-
-
 class StopMoveResult(_Model):
     ok: bool
     reason: Literal["operator", "task_time_limit", "step_timeout", "shutdown", "internal_error"]
@@ -143,7 +140,7 @@ class StepResult(_Model):
     response: SkillResponse | None = None
     duration_ms: float = 0.0  # wall clock around the subprocess; 0 if not dispatched
     timeout_s: float | None = None
-    motion_cost: MotionCostModel = MotionCostModel()
+    motion_cost: MotionCost = MotionCost()  # stdlib dataclass; dumps as {distance_m, rotation_deg}
     fault: str | None = None  # stub fault kind injected, if any
     exit_code: int | None = None
     pid: int | None = None  # LOG ONLY

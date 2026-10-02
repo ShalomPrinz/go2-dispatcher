@@ -23,8 +23,9 @@ from pydantic import (
     model_validator,
 )
 
+from skills.result import SkillPolicy
+
 from .models import RegistryError
-from .policies import SkillPolicy
 
 SKILL_FILE = "SKILL.md"
 FRONTMATTER_DELIMITER = "---"

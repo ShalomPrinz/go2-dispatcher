@@ -9,7 +9,7 @@ import sys
 import threading
 import traceback
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -27,7 +27,6 @@ from .models import (
     BusyError,
     LLMInterrupted,
     LLMUnavailable,
-    MotionCostModel,
     PlanStep,
     StepResult,
     StopMoveResult,
@@ -626,7 +625,6 @@ class Dispatcher:
         if self.cfg.robot.backend == "stub":
             fault = next((f.kind for f in self.cfg.stub.faults if f.step == t.dispatched_count), None)
         t.budget.charge(cost)
-        cost_model = MotionCostModel(distance_m=cost.distance_m, rotation_deg=cost.rotation_deg)
 
         self._set_phase("step")
         t.log.write(
@@ -637,7 +635,7 @@ class Dispatcher:
             skill=step.skill,
             params=params,
             timeout_s=timeout,
-            motion_cost=cost_model.model_dump(),
+            motion_cost=asdict(cost),
             fault=fault,
         )
         try:
@@ -664,7 +662,7 @@ class Dispatcher:
             response=ex.response,
             duration_ms=ex.duration_ms,
             timeout_s=timeout,
-            motion_cost=cost_model,
+            motion_cost=cost,
             fault=fault,
             exit_code=ex.exit_code,
             pid=ex.pid,

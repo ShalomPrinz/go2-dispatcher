@@ -1,4 +1,4 @@
-"""Shared skill helpers in process: params parsing and checks, backend selection (skills/docs/skills.md).
+"""Shared skill helpers in process: policy, params parsing and checks, backend selection (skills/docs/skills.md).
 One subprocess case per mechanism stays in tests/integration."""
 
 from __future__ import annotations
@@ -7,9 +7,9 @@ import math
 
 import pytest
 
-from skills import backend, detect_object
+from skills import backend, detect_object, sit, walk
 from skills.motion import require_enum, require_number
-from skills.result import InvalidParams, parse_params
+from skills.result import InvalidParams, MotionCost, parse_params
 
 
 @pytest.mark.parametrize(
@@ -20,6 +20,15 @@ from skills.result import InvalidParams, parse_params
 def test_parse_params_rejects(argv):
     with pytest.raises(InvalidParams):
         parse_params(argv)
+
+
+def test_policy_resolves_constants_and_functions():
+    p = {"direction": "forward", "distance_m": 1.5}
+    assert walk.POLICY.timeout_s(p) == walk.BASE_S + walk.FACTOR * 1.5 / walk.VELOCITY_MPS
+    assert walk.POLICY.motion_cost(p) == MotionCost(distance_m=1.5)
+    assert sit.POLICY.timeout_s({}) == sit.TIMEOUT_S
+    assert sit.POLICY.motion_cost({}) == MotionCost()
+    assert type(MotionCost(rotation_deg=90).rotation_deg) is float
 
 
 def test_parse_params_accepts_object():

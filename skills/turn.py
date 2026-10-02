@@ -5,29 +5,20 @@ from __future__ import annotations
 import math
 
 from skills import motion, result
-from skills.policy_base import MotionCost, SkillPolicy
 
-SKILL = "turn"
 YAW_RATE_RPS = 1.0  # rad/s
 CMD_PERIOD_S = 0.1
 SDK_TIMEOUT_S = 10.0  # applied by the real backend's SportClient.SetTimeout
 DIRECTIONS = ("left", "right")
 DIRECTION_SIGN = {"left": 1, "right": -1}
+BASE_S = 10.0  # process start + SDK init + state samples (tunable)
+FACTOR = 1.5  # safety factor on commanded motion time (tunable)
 
-
-class TurnPolicy(SkillPolicy):
-    name = "turn"
-    BASE_S = 10.0  # process start + SDK init + state samples (tunable)
-    FACTOR = 1.5  # safety factor on commanded motion time (tunable)
-
-    def timeout_s(self, p):
-        return self.BASE_S + self.FACTOR * math.radians(p["angle_deg"]) / YAW_RATE_RPS
-
-    def motion_cost(self, p):
-        return MotionCost(rotation_deg=p["angle_deg"])
-
-
-POLICY = TurnPolicy()
+POLICY = result.SkillPolicy(
+    name="turn",
+    timeout=lambda p: BASE_S + FACTOR * math.radians(p["angle_deg"]) / YAW_RATE_RPS,
+    cost=lambda p: result.MotionCost(rotation_deg=p["angle_deg"]),
+)
 
 
 def body(params: dict):
@@ -40,7 +31,7 @@ def body(params: dict):
 
 
 def main() -> None:
-    result.run_skill(SKILL, body)
+    result.run_skill(POLICY, body)
 
 
 if __name__ == "__main__":

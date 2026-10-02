@@ -16,9 +16,9 @@ from dispatcher.models import (
     StepResult,
     TaskSummary,
 )
-from dispatcher.policies import MotionCost
 from dispatcher.registry import Registry
 from dispatcher.render import format_value, render_remaining, render_step
+from skills.result import MotionCost
 from tests.helpers import REPO_ROOT
 
 GOLDEN = REPO_ROOT / "dispatcher" / "tests" / "golden"

@@ -166,27 +166,35 @@ Detector errors have the message `<ExceptionType>: <message>`. Outcomes the disp
 
 ## Policies
 
-Each skill module defines `class <Name>Policy(SkillPolicy)` and `POLICY = <Name>Policy()`. The dispatcher imports the module only to read `POLICY`:
+Each skill module defines one module-level `POLICY = result.SkillPolicy(...)`. The dispatcher imports the module only to read `POLICY`:
 
 ```python
+@dataclass(frozen=True)
+class MotionCost:
+    distance_m: float = 0.0  # both coerced to float
+    rotation_deg: float = 0.0
+
+
+@dataclass(frozen=True)
 class SkillPolicy:
-    name: str = ""
+    name: str  # equals the SKILL.md name; run_skill(POLICY, body) uses it as the response's skill
+    timeout: float | Callable[[dict], float]  # constant or function of params
+    cost: MotionCost | Callable[[dict], MotionCost] = MotionCost()  # default: zero
     context_observations: tuple[str, ...] = ()  # observation keys shown to the LLM on ok
 
-    def timeout_s(self, params: dict) -> float: ...
-    def motion_cost(self, params: dict) -> MotionCost:  # default: zero
-        return MotionCost()  # MotionCost(distance_m, rotation_deg)
+    def timeout_s(self, params: dict) -> float: ...  # calls timeout if callable, else returns it
+    def motion_cost(self, params: dict) -> MotionCost: ...  # same for cost
 ```
 
-`params` are the filled, checked params. Every number is a class attribute, tunable in one place:
+The dispatcher reads only `name`, `context_observations`, `timeout_s(params)` and `motion_cost(params)`. `params` are the filled, checked params. Every number is a module-level constant in `skills/<skill>.py`, tunable in one place; a function reads the constants when called:
 
-| Policy | Timeout | Motion cost | Constants |
+| Skill | Timeout | Motion cost | Constants |
 |---|---|---|---|
-| `WalkPolicy` | `BASE_S + FACTOR × distance_m / VELOCITY_MPS` | `distance_m` | `BASE_S = 10.0`, `FACTOR = 1.5` (*tunable*); `VELOCITY_MPS = 0.3` |
-| `TurnPolicy` | `BASE_S + FACTOR × radians(angle_deg) / YAW_RATE_RPS` | `rotation_deg = angle_deg` | `BASE_S = 10.0`, `FACTOR = 1.5` (*tunable*); `YAW_RATE_RPS = 1.0` |
-| `SitPolicy` | `TIMEOUT_S` | zero | `TIMEOUT_S = 15.0`, `SETTLE_S = 3.0` (*tunable*) |
-| `StretchPolicy` | `TIMEOUT_S` | zero | `TIMEOUT_S = 20.0`, `SETTLE_S = 6.0` (*tunable*) |
-| `DetectObjectPolicy` | `TIMEOUT_S` | zero | `TIMEOUT_S = 45.0` (*tunable*; covers YOLO load on CPU) |
+| `walk` | `BASE_S + FACTOR × distance_m / VELOCITY_MPS` | `distance_m` | `BASE_S = 10.0`, `FACTOR = 1.5` (*tunable*); `VELOCITY_MPS = 0.3` |
+| `turn` | `BASE_S + FACTOR × radians(angle_deg) / YAW_RATE_RPS` | `rotation_deg = angle_deg` | `BASE_S = 10.0`, `FACTOR = 1.5` (*tunable*); `YAW_RATE_RPS = 1.0` |
+| `sit` | `TIMEOUT_S` | zero | `TIMEOUT_S = 15.0`, `SETTLE_S = 3.0` (*tunable*) |
+| `stretch` | `TIMEOUT_S` | zero | `TIMEOUT_S = 20.0`, `SETTLE_S = 6.0` (*tunable*) |
+| `detect_object` | `TIMEOUT_S` | zero | `TIMEOUT_S = 45.0` (*tunable*; covers YOLO load on CPU) |
 
 `BASE_S` covers process start, SDK init and the two state samples; `FACTOR` is a margin on the commanded motion time. The timeout covers the whole process from start to exit. Settle waits are explained in [robot.md](robot.md). The motion cost feeds the motion budget ([safety.md](../../docs/safety.md#motion-budget)).
 
@@ -248,30 +256,20 @@ Example: a `stand` skill (recommended before experiments, see [roadmap.md](../..
 1. Create `skills/stand.py`:
    ```python
    from skills import motion, result
-   from skills.policy_base import SkillPolicy
 
-   SKILL = "stand"
+   TIMEOUT_S = 15.0  # tunable
+   SETTLE_S = 3.0  # tunable
 
-
-   class StandPolicy(SkillPolicy):
-       name = "stand"
-       TIMEOUT_S = 15.0  # tunable
-       SETTLE_S = 3.0  # tunable
-
-       def timeout_s(self, p):
-           return self.TIMEOUT_S
-
-
-   POLICY = StandPolicy()
+   POLICY = result.SkillPolicy(name="stand", timeout=TIMEOUT_S)
 
 
    def body(params: dict):
        # returns (status, observations, error_code, error_message, timing)
-       return motion.single_action("StandUp", StandPolicy.SETTLE_S)
+       return motion.single_action("StandUp", SETTLE_S)
 
 
    def main() -> None:
-       result.run_skill(SKILL, body)
+       result.run_skill(POLICY, body)
 
 
    if __name__ == "__main__":
@@ -279,7 +277,7 @@ Example: a `stand` skill (recommended before experiments, see [roadmap.md](../..
    ```
    A real `stand` would call `StandUp()` then `BalanceStand()`. Each SDK method must exist on the stub (`StubSportClient`) and work through `real.get_sport_client()`.
 2. Create `skills/catalog/stand/SKILL.md` with frontmatter (`name: stand`, `entrypoint: skills.stand`, a one-line `description`, `params` if any) and a short prose section.
-3. If the skill moves the robot, return a `MotionCost` from `motion_cost()`. If some observations should reach the model, list them in `context_observations`.
+3. If the skill moves the robot, pass `cost=` (a `MotionCost`, or a function of params returning one); a timeout that depends on params is a function too (see `skills/walk.py`). If some observations should reach the model, list them in `context_observations`.
 4. Use `backend.sleep()`, never `time.sleep`. In motion loops, check `result.orphaned()` and always end with `StopMove()`.
 5. Run `uv run go2 catalog`, run the skill by hand (below), and add tests (contract test in `tests/integration/test_skills.py`, policy test in `tests/integration/test_skill_policies.py`). The catalog golden file and the registry hash change: rewrite the golden file with `uv run pytest --update-golden` and review the diff ([testing.md](../../tests/docs/testing.md)).
 6. Update this page (and [robot.md](robot.md) if the skill adds robot-side facts).
@@ -305,7 +303,8 @@ Without `GO2_STUB_STATE_FILE` and `GO2_STUB_TIME_SCALE` the stub uses `runs/.stu
 - **One subprocess per skill call, never reused.** The Unitree SDK initialises DDS through a process-wide singleton, so a fresh process guarantees a clean channel. It also lets a hung call be killed and isolates crashes in the native bindings.
 - **`walk` was split into `walk` and `turn`.** The predecessor's single range mixed metres and degrees. Separate skills give the model clearer parameters and allow separate travel and rotation budgets. `turn` uses **degrees** at the interface because that is what operators say; the skill converts to radians.
 - **One common JSON response schema for all skills**, replacing the predecessor's three incompatible output formats, so the executor, the log and the context renderer handle every skill the same way.
-- **Each skill owns its policy** (timeout formula, motion cost, observations shown to the model) as class constants next to the code that shares them, so a number like walking speed is defined once and tuned in one place.
+- **Each skill owns its policy** (timeout formula, motion cost, observations shown to the model) as module constants next to the code that shares them, so a number like walking speed is defined once and tuned in one place.
+- **A policy is one frozen `SkillPolicy` dataclass instance per skill, not a subclass per skill.** The skills differ only in data (a name, a constant or a small formula for timeout and cost, an observation list), so a value with optional callables says it in a few lines and the constants sit at module level where `run_skill(POLICY, body)` and the body use them without a class prefix. The dataclass lives in `skills/result.py`, the module every skill already imports, instead of a separate base module. Rejected: a `SkillPolicy` base class with one `<Name>Policy` subclass per skill overriding `timeout_s()`/`motion_cost()`; it repeated boilerplate in every module and spread the constants across class attributes, without adding behaviour. The dispatcher still calls `timeout_s(params)` and `motion_cost(params)`, so it does not need to know whether a value is constant.
 - **The catalog is generated from the registry, never hand-written**, so skill sets of different granularity are presented to the model in the same form and stay comparable. The `SKILL.md` prose never reaches the model.
 - **An unsupported `detect_object` target is a skill error with suggestions; the 80-class COCO list stays out of the catalog.** Listing every class would add tokens to every call; the skill validates the target and suggests close matches, so the model can correct itself on the next call.
 - **State is sampled at the start and end of every step, for logging only.** v1 gives no verdicts. The samples provide data to set v2 verification thresholds before seeing any verification results, and supply the posture shown to the model ([roadmap.md](../../docs/roadmap.md#v2-plan)).

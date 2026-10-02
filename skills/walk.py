@@ -3,30 +3,21 @@
 from __future__ import annotations
 
 from skills import motion, result
-from skills.policy_base import MotionCost, SkillPolicy
 
-SKILL = "walk"
 VELOCITY_MPS = 0.3
 CMD_PERIOD_S = 0.1
 SDK_TIMEOUT_S = 10.0  # applied by the real backend's SportClient.SetTimeout
 DIRECTIONS = ("forward", "backward", "left", "right")
 # direction -> (vx, vy) as multiples of VELOCITY_MPS
 DIRECTION_VECTORS = {"forward": (1, 0), "backward": (-1, 0), "left": (0, 1), "right": (0, -1)}
+BASE_S = 10.0  # process start + SDK init + state samples (tunable)
+FACTOR = 1.5  # safety factor on commanded motion time (tunable)
 
-
-class WalkPolicy(SkillPolicy):
-    name = "walk"
-    BASE_S = 10.0  # process start + SDK init + state samples (tunable)
-    FACTOR = 1.5  # safety factor on commanded motion time (tunable)
-
-    def timeout_s(self, p):
-        return self.BASE_S + self.FACTOR * p["distance_m"] / VELOCITY_MPS
-
-    def motion_cost(self, p):
-        return MotionCost(distance_m=p["distance_m"])
-
-
-POLICY = WalkPolicy()
+POLICY = result.SkillPolicy(
+    name="walk",
+    timeout=lambda p: BASE_S + FACTOR * p["distance_m"] / VELOCITY_MPS,
+    cost=lambda p: result.MotionCost(distance_m=p["distance_m"]),
+)
 
 
 def body(params: dict):
@@ -40,7 +31,7 @@ def body(params: dict):
 
 
 def main() -> None:
-    result.run_skill(SKILL, body)
+    result.run_skill(POLICY, body)
 
 
 if __name__ == "__main__":

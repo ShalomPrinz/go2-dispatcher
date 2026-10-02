@@ -1,5 +1,5 @@
-"""Shared skill-process helpers: stdout capture, response building, emit, run_skill,
-orphan watchdog (skills/docs/skills.md). Standard library only."""
+"""Shared skill helpers: the per-skill dispatcher policy, stdout capture, response building,
+emit, run_skill, orphan watchdog (skills/docs/skills.md). Standard library only."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ import threading
 import time
 import traceback
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import NoReturn
 
 SCHEMA_VERSION = 1
@@ -22,6 +23,38 @@ STATUSES = ("ok", "error")
 
 Body = Callable[[dict], tuple[str, dict, "str | None", "str | None", dict]]
 # returns (status, observations, error_code, error_message, timing) where timing has init_ms, exec_ms
+
+
+# --- policy -------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class MotionCost:
+    distance_m: float = 0.0
+    rotation_deg: float = 0.0
+
+    def __post_init__(self):  # plan params may be ints; the run log records floats
+        object.__setattr__(self, "distance_m", float(self.distance_m))
+        object.__setattr__(self, "rotation_deg", float(self.rotation_deg))
+
+
+@dataclass(frozen=True)
+class SkillPolicy:
+    """Per-skill dispatcher policy, one module-level ``POLICY`` per skill (skills/docs/skills.md).
+    ``timeout`` and ``cost`` are a constant or a function of the validated params; the dispatcher
+    reads them only through ``timeout_s(params)`` and ``motion_cost(params)``."""
+
+    name: str
+    timeout: float | Callable[[dict], float]
+    cost: MotionCost | Callable[[dict], MotionCost] = MotionCost()
+    context_observations: tuple[str, ...] = ()  # observation keys shown to the LLM on ok
+
+    def timeout_s(self, params: dict) -> float:
+        return self.timeout(params) if callable(self.timeout) else self.timeout
+
+    def motion_cost(self, params: dict) -> MotionCost:
+        return self.cost(params) if callable(self.cost) else self.cost
+
 
 _saved_stdout_fd: int | None = None
 ORPHANED = False
@@ -222,7 +255,7 @@ def sample_state_safe(errors: list[str], label: str) -> tuple[dict | None, float
     return state, time.monotonic() - t
 
 
-def run_skill(skill: str, body: Body, *, sample_state: bool = True) -> NoReturn:
+def run_skill(policy: SkillPolicy, body: Body, *, sample_state: bool = True) -> NoReturn:
     """Standard main():
     1. capture_stdout(); start_orphan_watchdog(); t0 = monotonic()
     2. params = json.loads(argv[1]); must be a dict -> else emit error invalid_params
@@ -263,7 +296,7 @@ def run_skill(skill: str, body: Body, *, sample_state: bool = True) -> NoReturn:
         timing["state_ms"] = round(state_s * 1000.0, 3)
     timing["total_ms"] = ms_since(t0)
     emit(
-        skill,
+        policy.name,
         status,
         observations=obs,
         error_code=code,

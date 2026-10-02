@@ -9,21 +9,14 @@ import pytest
 from dispatcher.bounds import ERROR_MESSAGE_MAX, check_step, cut_message, precheck
 from dispatcher.budget import MotionBudget
 from dispatcher.models import Plan, PlanStep
-from dispatcher.policies import MotionCost, SkillPolicy
 from dispatcher.registry import ParamSpec, Registry, SkillDescriptor
+from skills.result import MotionCost, SkillPolicy
 from tests.helpers import REPO_ROOT
 
 
 @pytest.fixture(scope="module")
 def registry() -> Registry:
     return Registry.load(REPO_ROOT / "skills" / "catalog")
-
-
-class _NullPolicy(SkillPolicy):
-    name = "count"
-
-    def timeout_s(self, p):
-        return 1.0
 
 
 @pytest.fixture
@@ -35,7 +28,15 @@ def typed_registry() -> Registry:
         "level": ParamSpec(type="number", description="level", max=5, default=1.0),
     }
     return Registry(
-        {"count": SkillDescriptor(name="count", entrypoint="x", description="d", params=params, policy=_NullPolicy())}
+        {
+            "count": SkillDescriptor(
+                name="count",
+                entrypoint="x",
+                description="d",
+                params=params,
+                policy=SkillPolicy(name="count", timeout=1.0),
+            )
+        }
     )
 
 

@@ -8,7 +8,7 @@ import pytest
 
 from dispatcher.registry import Registry
 from skills import detect_object, sit, stretch, turn, walk
-from skills.policy_base import MotionCost
+from skills.result import MotionCost
 from tests.helpers import REPO_ROOT
 
 REGISTRY = Registry.load(REPO_ROOT / "skills" / "catalog")
@@ -26,15 +26,13 @@ def max_params(name: str) -> dict:
 MOTION_S = {
     "walk": lambda p: p["distance_m"] / walk.VELOCITY_MPS,
     "turn": lambda p: math.radians(p["angle_deg"]) / turn.YAW_RATE_RPS,
-    "sit": lambda p: sit.SitPolicy.SETTLE_S,
-    "stretch": lambda p: stretch.StretchPolicy.SETTLE_S,
+    "sit": lambda p: sit.SETTLE_S,
+    "stretch": lambda p: stretch.SETTLE_S,
     "detect_object": lambda p: 0.0,
 }
 
 
-def test_names_match_modules():
-    for mod in (walk, turn, sit, stretch, detect_object):
-        assert mod.POLICY.name == mod.SKILL
+def test_policies_cover_catalog():
     assert sorted(MOTION_S) == REGISTRY.names()
 
 

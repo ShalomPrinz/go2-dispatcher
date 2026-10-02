@@ -9,9 +9,9 @@ import pytest
 
 from dispatcher.llm import plan_tool_schema
 from dispatcher.models import RegistryError
-from dispatcher.policies import SkillPolicy
 from dispatcher.prompts import system_text
 from dispatcher.registry import Registry, registry_hash
+from skills.result import SkillPolicy
 from tests.helpers import REPO_ROOT
 
 SKILLS_DIR = REPO_ROOT / "skills" / "catalog"

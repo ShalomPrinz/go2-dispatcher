@@ -1,10 +1,5 @@
 """Test skill module whose POLICY.name does not match its SKILL.md name."""
 
-from skills.policy_base import SkillPolicy
+from skills.result import SkillPolicy
 
-
-class OtherPolicy(SkillPolicy):
-    name = "other"
-
-
-POLICY = OtherPolicy()
+POLICY = SkillPolicy(name="other", timeout=5.0)

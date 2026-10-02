@@ -7,24 +7,17 @@ import time
 
 from skills import backend, result
 from skills.coco import COCO_CLASSES
-from skills.policy_base import SkillPolicy
 
-SKILL = "detect_object"
 SUGGESTIONS_N = 3
 SUGGESTIONS_CUTOFF = 0.5
 CONFIDENCE_DECIMALS = 2
+TIMEOUT_S = 45.0  # YOLO load on CPU (tunable)
 
-
-class DetectObjectPolicy(SkillPolicy):
-    name = "detect_object"
-    context_observations = ("object_found", "position", "closeness", "confidence")
-    TIMEOUT_S = 45.0  # YOLO load on CPU (tunable)
-
-    def timeout_s(self, p):
-        return self.TIMEOUT_S
-
-
-POLICY = DetectObjectPolicy()
+POLICY = result.SkillPolicy(
+    name="detect_object",
+    timeout=TIMEOUT_S,
+    context_observations=("object_found", "position", "closeness", "confidence"),
+)
 
 
 def unsupported_message(target: str) -> str:
@@ -63,7 +56,7 @@ def body(params: dict):
 
 
 def main() -> None:
-    result.run_skill(SKILL, body)
+    result.run_skill(POLICY, body)
 
 
 if __name__ == "__main__":

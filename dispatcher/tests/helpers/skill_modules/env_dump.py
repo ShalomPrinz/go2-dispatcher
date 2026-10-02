@@ -9,20 +9,11 @@ from __future__ import annotations
 import os
 
 from skills import result
-from skills.policy_base import SkillPolicy
 
 SKILL = "env_dump"
 
 
-class EnvDumpPolicy(SkillPolicy):
-    name = SKILL
-    TIMEOUT_S = 10.0
-
-    def timeout_s(self, params):
-        return self.TIMEOUT_S
-
-
-POLICY = EnvDumpPolicy()
+POLICY = result.SkillPolicy(name=SKILL, timeout=10.0)
 
 
 def _body(params: dict):
@@ -30,4 +21,4 @@ def _body(params: dict):
 
 
 if __name__ == "__main__":
-    result.run_skill(SKILL, _body, sample_state=False)
+    result.run_skill(POLICY, _body, sample_state=False)
