@@ -52,7 +52,7 @@ patch = ["subprocess", "_exit"]         # measure skill and CLI subprocesses; sk
 show_missing = true
 skip_covered = true
 
-[tool.ruff]                             # lint only, no formatter (docs/testing.md)
+[tool.ruff]                             # lint and format (docs/testing.md)
 target-version = "py310"
 line-length = 120
 

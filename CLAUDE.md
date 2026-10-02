@@ -9,6 +9,7 @@ Go2 LLM dispatcher: a research system that turns an operator's natural-language 
 ```bash
 uv sync                                        # core + dev deps (stub mode); lab machine: uv sync --extra robot --extra vision
 uv run pytest -q                               # default suite: no API key, robot or network needed
+uv run ruff format .                           # format; must be clean before a commit
 uv run ruff check .                            # lint; must pass before a commit
 uv run pytest -m integration                   # real subprocesses on the stub backend
 uv run pytest --update-golden                  # regenerate golden files; review the diff

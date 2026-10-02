@@ -12,14 +12,15 @@ uv run pytest -m integration     # real subprocesses on the stub backend
 uv run pytest -k context         # by name
 ```
 
-### Lint
+### Lint and format
 
 ```bash
 uv run ruff check .              # lint (settings in [tool.ruff] in pyproject.toml)
 uv run ruff check --fix .        # apply safe fixes
+uv run ruff format .             # format (ruff defaults, line length 120)
 ```
 
-The lint must pass before a commit; it runs locally, not in CI (the Claude Code Stop and SubagentStop hooks run it whenever an agent finishes). Rules: pycodestyle, pyflakes, isort, bugbear and pyupgrade (`E`, `F`, `W`, `I`, `B`, `UP`) for Python 3.10, line length 120.
+Formatting must be clean and the lint must pass before a commit; both run locally, not in CI. The Claude Code Stop and SubagentStop hook (`.claude/hooks/lint.sh`) first runs `.claude/hooks/format.sh`, which applies `ruff format` and import sorting to the changed and untracked `.py` files, then blocks the stop while `ruff check .` fails. `.git-blame-ignore-revs` lists the formatting sweep (`git config blame.ignoreRevsFile .git-blame-ignore-revs`). Rules: pycodestyle, pyflakes, isort, bugbear and pyupgrade (`E`, `F`, `W`, `I`, `B`, `UP`) for Python 3.10, line length 120.
 
 ### Coverage
 
@@ -124,5 +125,6 @@ There are no automated robot tests in v1. The real backend is checked by hand wi
 - **Service folders hold unit tests of their own service; cross-service tests live in a root `tests/` package.** `skills/tests/` must not import `dispatcher`, so that the dependency direction of the code (the dispatcher imports skills, never the reverse) also holds for the tests. Integration tests drive both services (the executor starts skill processes, skill responses are parsed by the dispatcher's models), so they are cross-service by nature and all live in `tests/integration/`, together with the in-process tests that check skills against the dispatcher's registry or models. Rejected: keeping each test in the service whose code it mostly exercises, which made `skills/tests/` import `dispatcher`.
 - **Pytest options come from a plugin module (`-p tests.pytest_plugin`), not a root `conftest.py`.** pytest registers an option only once, so the options cannot be defined in each suite's conftest, and a conftest is loaded only for paths below it, so a conftest in one suite is not loaded when another suite is run on its own. A root `conftest.py` worked but sat outside every test folder; the plugin keeps all test code under `tests/` and makes the options available for any subset (`uv run pytest skills/tests`). Helpers are imported with absolute package paths instead of a `pythonpath` entry, which avoids a bare top-level `helpers` module that could shadow other names.
 - **Coverage is opt-in, not in `addopts`.** Measuring subprocesses makes the run about 60 % slower, and the default run must stay fast.
-- **Ruff lints; it does not format.** The code uses hand-aligned trailing comments and long fixed-text lines that the formatter would rewrap (68 files). Line length is 120, not ruff's 88, which matches the existing code. `dispatcher/prompts.py` is exempt from `E501` because rewrapping its fixed texts would change the registry hash. Rejected: `ruff format`, for the churn and the alignment loss.
+- **`ruff format` is the formatter, with its defaults and line length 120** (not 88, which matches the existing code). One consistent style outweighs the hand-aligned trailing comments it removed. The formatter does not change string values, so the fixed texts in `dispatcher/prompts.py` and the registry hash are unaffected; that file stays exempt from `E501` because its fixed-text lines are long by design.
+- **Format runs non-blocking on Stop, on changed files only, before lint.** Formatting never needs the agent's attention, so it does not block; limiting it to changed files keeps the hook fast; it runs from `lint.sh` in sequence because hooks for one event run in parallel and would race on the same files.
 - **CI runs only the default suite.** The lint is a local pre-commit check, not a CI gate. Live LLM tests would put the API key into CI secrets and cost money per push, and robot tests need a supervised session ([safety.md](safety.md)); both stay opt-in and manual. The `robot` and `vision` extras are not installed in CI, which also checks that the default run needs none of them.

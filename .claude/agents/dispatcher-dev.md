@@ -32,6 +32,7 @@ Read only what the task needs: the owning doc for the topic (see the table in `d
 
 ```bash
 uv run pytest -q 2>&1 | tail -n 15
+uv run ruff format .
 uv run ruff check .
 ```
 
