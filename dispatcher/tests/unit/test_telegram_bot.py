@@ -155,7 +155,7 @@ def test_normal_task(cfg, registry):
         planner,
         FakeExecutor([exec_result("ok", skill="turn")]),
         surface,
-        RunLogFactory(cfg.log.dir, "s1", SessionInfo.collect(cfg, registry, surface)),
+        RunLogFactory(cfg.log.dir, "s1", SessionInfo.collect(cfg, surface)),
         clock=FakeClock().now,
         initial_posture="standing",
     )

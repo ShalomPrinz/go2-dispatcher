@@ -42,7 +42,7 @@ def build(tmp_path, registry, items, **cfg_over):
         planner,
         Executor(cfg, cfg.base_dir),
         surface,
-        RunLogFactory(cfg.log.dir, "e2e", SessionInfo.collect(cfg, registry, surface)),
+        RunLogFactory(cfg.log.dir, "e2e", SessionInfo.collect(cfg, surface)),
         initial_posture=cfg.stub.initial_posture,
     )
     return d, planner, cfg

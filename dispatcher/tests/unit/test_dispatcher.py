@@ -67,7 +67,7 @@ class Rig:
             self.planner,
             self.executor,
             surface,
-            RunLogFactory(self.cfg.log.dir, "s1", SessionInfo.collect(self.cfg, registry, surface)),
+            RunLogFactory(self.cfg.log.dir, "s1", SessionInfo.collect(self.cfg, surface)),
             clock=self.clock.now,
             initial_posture=posture,
         )
@@ -92,7 +92,7 @@ def reasons(outcome):
 def test_session_must_match_prompt_surface(tmp_path, registry):
     cfg = make_config(tmp_path)
     surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
-    session = SessionInfo.collect(cfg, registry, surface).model_copy(update={"catalog_text": "other"})
+    session = SessionInfo.collect(cfg, surface).model_copy(update={"catalog_text": "other"})
     with pytest.raises(ValueError, match="prompt surface"):
         Dispatcher(
             cfg, registry, ScriptedPlanner([]), FakeExecutor(), surface, RunLogFactory(cfg.log.dir, "s1", session)

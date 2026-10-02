@@ -34,6 +34,7 @@ class PromptSurface:
     catalog_text: str
     tool_schema: dict[str, Any]
     registry_hash: str
+    skills: tuple[str, ...]
 
     @classmethod
     def build(cls, registry: Registry, horizon: int) -> PromptSurface:
@@ -45,6 +46,7 @@ class PromptSurface:
             catalog_text=catalog_text,
             tool_schema=tool_schema,
             registry_hash=registry_hash(system_text, catalog_text, tool_schema),
+            skills=tuple(registry.names()),
         )
 
 

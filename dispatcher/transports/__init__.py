@@ -96,7 +96,7 @@ def build_dispatcher(cfg: Config, *, reset_stub: bool, planner: PlannerClient | 
         planner,
         executor,
         surface,
-        RunLogFactory(cfg.log.dir, uuid.uuid4().hex, SessionInfo.collect(cfg, registry, surface)),
+        RunLogFactory(cfg.log.dir, uuid.uuid4().hex, SessionInfo.collect(cfg, surface)),
         initial_posture=posture,
     )
     atexit.register(dispatcher.shutdown, 0)

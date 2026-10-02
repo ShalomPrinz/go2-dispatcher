@@ -25,7 +25,6 @@ if TYPE_CHECKING:
     from .context import PromptSurface
     from .llm import LLMResult
     from .models import Plan, StepResult, StopMoveResult, TaskOutcome, TaskSummary
-    from .registry import Registry
 
 INDEX_FILE = "index.jsonl"
 FILE_TIME_FORMAT = "%Y%m%dT%H%M%S"  # local time at task start (dispatcher/docs/run-log.md)
@@ -79,7 +78,7 @@ class SessionInfo(BaseModel):
     git_commit: str | None
 
     @classmethod
-    def collect(cls, cfg: Config, registry: Registry, surface: PromptSurface) -> SessionInfo:
+    def collect(cls, cfg: Config, surface: PromptSurface) -> SessionInfo:
         return cls(
             condition=cfg.run.condition,
             config=cfg.model_dump(mode="json"),
@@ -87,7 +86,7 @@ class SessionInfo(BaseModel):
             system_text=surface.system[0],
             catalog_text=surface.catalog_text,
             tool_schema=surface.tool_schema,
-            skills=registry.names(),
+            skills=list(surface.skills),
             versions=_versions(),
             git_commit=_git_commit(cfg.base_dir),
         )

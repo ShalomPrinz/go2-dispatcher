@@ -105,8 +105,15 @@ class Dispatcher:
 
         # what the run log records must be what is sent (dispatcher/docs/run-log.md)
         session = runlog_factory.session
-        logged = (session.system_text, session.catalog_text, session.tool_schema, session.registry_hash)
-        if logged != (surface.system[0], surface.catalog_text, surface.tool_schema, surface.registry_hash):
+        logged = (session.system_text, session.catalog_text, session.tool_schema, session.registry_hash, session.skills)
+        sent = (
+            surface.system[0],
+            surface.catalog_text,
+            surface.tool_schema,
+            surface.registry_hash,
+            list(surface.skills),
+        )
+        if logged != sent:
             raise ValueError("run-log session does not match the prompt surface")
         self._system = surface.system
         self._tool_schema = surface.tool_schema

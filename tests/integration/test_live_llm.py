@@ -36,7 +36,7 @@ def test_live_turn_and_find_chair(tmp_path):
         AnthropicPlanner(key, cfg.llm, cfg.loop.planning_horizon),
         Executor(cfg, cfg.base_dir),
         surface,
-        RunLogFactory(cfg.log.dir, "live", SessionInfo.collect(cfg, registry, surface)),
+        RunLogFactory(cfg.log.dir, "live", SessionInfo.collect(cfg, surface)),
         initial_posture=cfg.stub.initial_posture,
     )
     o = d.run_task(TASK, source="test")
