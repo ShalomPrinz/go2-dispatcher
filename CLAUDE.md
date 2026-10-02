@@ -41,7 +41,7 @@ Opt-in tests (`--run-live`, `--run-robot`) are described in [tests/docs/testing.
 
 ## Working pattern
 
-- The main session is an **orchestrator**: it always delegates code and doc changes to a project agent (`.claude/agents/`), one task at a time, with a self-contained brief. It does not edit `dispatcher/` or `skills/` itself.
+- The main session is an **orchestrator**: it always delegates code and doc changes to a project agent (`.claude/agents/`), one task at a time, with a self-contained brief written with the `delegate` skill (`.claude/skills/delegate/`). It does not edit `dispatcher/` or `skills/` itself.
   - `dispatcher-dev`: anything under `dispatcher/` or owned by `dispatcher/docs/`.
   - `skills-dev`: anything under `skills/` or owned by `skills/docs/`.
   - `tests-dev`: test infrastructure only (pytest plugin, helpers, markers, golden mechanism, coverage, CI) and `tests/docs/testing.md`. Tests of package behaviour go with the package agent.
