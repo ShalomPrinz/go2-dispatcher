@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from skills import real
-from skills.posture import POSTURE_SITTING_MAX_M, POSTURE_STANDING_MIN_M
+from skills.real import POSTURE_SITTING_MAX_M, POSTURE_STANDING_MIN_M, derive_posture
 
 
 def msg(**overrides):
@@ -99,3 +99,22 @@ def test_numpy_and_ctypes_scalars():
     assert state["posture"] == "standing"
     assert state["mode"] == 2
     assert state["position"] == [1.0, 2.0, 3.0]
+
+
+@pytest.mark.parametrize(
+    "height, expected",
+    [
+        (0.1499, "sitting"),
+        (0.15, "unknown"),
+        (0.2199, "unknown"),
+        (0.22, "standing"),
+        (None, "unknown"),
+    ],
+)
+def test_thresholds(height, expected):
+    assert derive_posture(height, None) == expected
+
+
+def test_mode_is_ignored_in_v1():
+    assert derive_posture(0.32, 1) == derive_posture(0.32, 7) == "standing"
+    assert derive_posture(None, 1) == "unknown"

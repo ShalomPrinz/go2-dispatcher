@@ -19,7 +19,6 @@ from skills.backend import (
     StateUnavailable,
     WeightsMissing,
 )
-from skills.posture import derive_posture
 
 IFACE_ENV = "GO2_IFACE"
 YOLO_WEIGHTS_ENV = "GO2_YOLO_WEIGHTS"
@@ -28,6 +27,8 @@ SPORT_CLIENT_TIMEOUT_S = 10.0
 SPORT_STATE_TOPIC = "rt/sportmodestate"
 SUBSCRIBER_QUEUE_LEN = 10
 STATE_WAIT_S = 1.0
+POSTURE_SITTING_MAX_M = 0.15  # (tunable, skills/docs/robot.md)
+POSTURE_STANDING_MIN_M = 0.22  # (tunable, skills/docs/robot.md)
 
 _dds_ready = False
 _dds_lock = threading.Lock()
@@ -205,6 +206,19 @@ def _floats(v, n: int) -> list[float] | None:
     if len(items) != n or any(x is None for x in items):
         return None
     return items
+
+
+def derive_posture(body_height: float | None, mode: int | None) -> str:
+    """The single posture rule (skills/docs/robot.md): body_height < SITTING_MAX -> "sitting";
+    >= STANDING_MIN -> "standing"; otherwise or None -> "unknown". `mode` is unused in v1."""
+    del mode  # unused in v1 (skills/docs/robot.md)
+    if body_height is None:
+        return "unknown"
+    if body_height < POSTURE_SITTING_MAX_M:
+        return "sitting"
+    if body_height >= POSTURE_STANDING_MIN_M:
+        return "standing"
+    return "unknown"
 
 
 def _state_from_msg(msg) -> dict:

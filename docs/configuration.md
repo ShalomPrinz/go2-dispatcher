@@ -191,7 +191,7 @@ Some *tunable* values are named constants in code, not config keys:
 |---|---|
 | Per-skill timeouts and settle waits (`BASE_S`, `FACTOR`, `TIMEOUT_S`, `SETTLE_S`) | Module constants used by `POLICY` in `skills/<skill>.py` ([skills.md](../skills/docs/skills.md#policies)) |
 | Walking speed, yaw rate, command period | `VELOCITY_MPS`, `YAW_RATE_RPS`, `CMD_PERIOD_S` in `walk.py` / `turn.py` |
-| Posture thresholds (0.15 / 0.22 m) | `POSTURE_SITTING_MAX_M`, `POSTURE_STANDING_MIN_M` in `skills/posture.py` ([robot.md](../skills/docs/robot.md#posture-rule)) |
+| Posture thresholds (0.15 / 0.22 m) | `POSTURE_SITTING_MAX_M`, `POSTURE_STANDING_MIN_M` in `skills/real.py` ([robot.md](../skills/docs/robot.md#posture-rule)) |
 | Detector thresholds | `RealDetector` constants in `skills/real.py` ([robot.md](../skills/docs/robot.md#object-detection)) |
 | `StopMove` settle wait (0.5 s) | `SETTLE_S` in `skills/stop_move.py` |
 | Stub durations and body heights | Constants at the top of `skills/stub.py` |

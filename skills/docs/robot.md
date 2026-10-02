@@ -76,7 +76,7 @@ State is **logged only** in v1. No step gets a verdict from it; the model sees o
 
 ## Posture rule
 
-`derive_posture(body_height, mode)` in `skills/posture.py` is the only place posture is derived, on both backends:
+`derive_posture(body_height, mode)` in `skills/real.py` is the only place posture is derived from a state sample; the stub stores posture directly in its state file:
 
 | `body_height` | Posture |
 |---|---|
