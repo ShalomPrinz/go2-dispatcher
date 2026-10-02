@@ -4,7 +4,8 @@
       "Read(./.env)",
       "Bash(*--backend real*)",
       "Bash(*--backend=real*)",
-      "Bash(*--run-robot*)"
+      "Bash(*--run-robot*)",
+      "Bash(git stash*)"
     ],
     "ask": [
       "Bash(*--run-live*)"
