@@ -65,15 +65,15 @@ An invalid reply (any non-`none` rejection kind) gets exactly **one** retry:
 - The retry's return reason is `schema_retry`; the `llm_request` record's `retry_of` holds the reason being retried.
 - The retry is an LLM call and counts toward `loop.max_llm_calls` (checked before it is sent).
 - If the retry is also invalid, the task ends `LLM_INVALID`.
-- Invalid replies never count as failures. Each invalid reply is logged as `plan_invalid`, or as `horizon_rejection` when the horizon was exceeded.
+- Invalid replies never count as failures. Each invalid reply is logged as `plan_invalid` with its `rejection_kind`.
 
 ## Horizon rejection
 
 A plan with more steps than `loop.planning_horizon` is **rejected as a whole and retried, never truncated**. The horizon is stated three times: in the system text, as `maxItems` in the tool schema, and by validation.
 
-Every such reply is logged as its own `horizon_rejection` record (with the raw tool input, the number of steps and the horizon), and `task_end.horizon_rejections` counts them, so the rate can be measured per condition.
+Every such reply is logged as `plan_invalid` with `rejection_kind = "horizon"` (with the raw tool input, `steps_in_plan` and `horizon`), and `task_end.horizon_rejections` counts them, so the rate can be measured per condition.
 
-**Monitoring rule.** Watch the horizon-rejection rate in the run logs. Even 1 in 100 calls is a lot. If the rate is high, inspect those plans and either switch to truncation or fix it another way, for example by stating the horizon more prominently. This is an open question until there is data ([roadmap.md](../../docs/roadmap.md#open-questions)).
+**Monitoring rule.** Watch the horizon-rejection rate in the run logs (`plan_invalid` records with `rejection_kind == "horizon"`). Even 1 in 100 calls is a lot. If the rate is high, inspect those plans and either switch to truncation or fix it another way, for example by stating the horizon more prominently. This is an open question until there is data ([roadmap.md](../../docs/roadmap.md#open-questions)).
 
 ## Infrastructure retries
 

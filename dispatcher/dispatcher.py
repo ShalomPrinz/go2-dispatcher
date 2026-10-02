@@ -256,12 +256,12 @@ class Dispatcher:
     def _budget_used(self, t: _Task) -> dict[str, float]:
         return {"distance_m": t.budget.used_distance_m, "rotation_deg": t.budget.used_rotation_deg}
 
-    def _record(self, t: _Task, sr: StepResult) -> None:
-        """Append a step, update posture and the StopMove flag, log it (and its StopMove)."""
+    def _record(self, t: _Task, sr: StepResult, stop: StopMoveResult | None = None) -> None:
+        """Append a step, update posture and the StopMove flag, log it (and the StopMove of a killed step)."""
         t.steps.append(sr)
         if sr.index is not None:
-            self._update_posture_from_step(sr)
-        if sr.stop_move is not None and not sr.stop_move.ok:
+            self._update_posture_from_step(sr, stop)
+        if stop is not None and not stop.ok:
             t.stop_move_failed = True
         if sr.outcome in FAILURE_OUTCOMES:
             t.failures += 1
@@ -275,19 +275,15 @@ class Dispatcher:
             failures=t.failures,
             posture=self.posture,
         )
-        if sr.stop_move is not None:
-            t.log.write("stop_move", **sr.stop_move.model_dump(mode="json"))
+        if stop is not None:
+            t.log.write("stop_move", **stop.model_dump(mode="json"))
 
-    def _update_posture_from_step(self, sr: StepResult) -> None:
+    def _update_posture_from_step(self, sr: StepResult, stop: StopMoveResult | None) -> None:
         """Last known posture from the step's state_after (dispatcher/docs/loop-and-context.md)."""
         if sr.response is not None and sr.response.state_after is not None:
             self.posture = sr.response.state_after.posture
-        elif (
-            sr.stop_move is not None
-            and sr.stop_move.response is not None
-            and sr.stop_move.response.state_after is not None
-        ):
-            self.posture = sr.stop_move.response.state_after.posture
+        elif stop is not None and stop.response is not None and stop.response.state_after is not None:
+            self.posture = stop.response.state_after.posture
         elif sr.outcome in KILLED_OUTCOMES:
             self.posture = "unknown"
 
@@ -361,25 +357,18 @@ class Dispatcher:
 
     def _log_invalid(self, t: _Task, res: LLMResult) -> None:
         call_index = t.llm_calls
-        if res.rejection_kind == "horizon":
+        horizon = res.rejection_kind == "horizon"
+        if horizon:
             t.horizon_rejections += 1
-            raw_steps = res.tool_input.get("steps") if isinstance(res.tool_input, dict) else None
-            t.log.write(
-                "horizon_rejection",
-                call_index=call_index,
-                tool_input=res.tool_input,
-                steps_in_plan=len(raw_steps) if isinstance(raw_steps, list) else None,
-                horizon=self.cfg.loop.planning_horizon,
-                errors=res.errors,
-            )
-        else:
-            t.log.write(
-                "plan_invalid",
-                call_index=call_index,
-                tool_input=res.tool_input,
-                rejection_kind=res.rejection_kind,
-                errors=res.errors,
-            )
+        t.log.write(
+            "plan_invalid",
+            call_index=call_index,
+            tool_input=res.tool_input,
+            rejection_kind=res.rejection_kind,
+            steps_in_plan=len(res.tool_input["steps"]) if horizon else None,  # horizon implies a steps list
+            horizon=self.cfg.loop.planning_horizon if horizon else None,
+            errors=res.errors,
+        )
 
     # --- interrupts and end ----------------------------------------------------------------------
 
@@ -645,7 +634,7 @@ class Dispatcher:
         finally:
             self._set_phase("between")
 
-        exec_fields = {k: v for k, v in ex if k != "interrupt_cause"}  # the rest maps 1:1 onto StepResult
+        exec_fields = {k: v for k, v in ex if k not in ("interrupt_cause", "stop_move")}  # the rest maps 1:1
         exec_fields["error_message"] = cut_message(ex.error_message) if ex.error_message else None
         sr = StepResult(
             **exec_fields,
@@ -658,7 +647,7 @@ class Dispatcher:
             motion_cost=cost,
             fault=fault,
         )
-        self._record(t, sr)
+        self._record(t, sr, ex.stop_move)
 
         if sr.outcome == "interrupted":
             # StopMove was already sent by the executor

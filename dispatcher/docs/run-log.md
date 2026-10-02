@@ -17,7 +17,7 @@ Each line is written and flushed while a lock is held, so a crash leaves a usabl
 
 ## Record order
 
-A task's file starts with `task_start` and ends with `task_end`. In between, for each LLM call: `llm_request`, any `llm_retry`, then `llm_response` (followed by `plan`, `plan_invalid` or `horizon_rejection`) or `llm_error` / `llm_interrupted`. For each step of a valid plan: `step_start` and `step_result` for a dispatched step, only `step_result` for a step rejected by the pre-check, and a `stop_move` after the `step_result` of a killed step. `stop_requested` can appear anywhere (it is written from the transport thread). A stop or time limit that kills a step shows up as that step's `stop_move`; one that arrives while no step runs adds a `stop_move` just before `task_end`. An internal error adds `exception` and a `stop_move`.
+A task's file starts with `task_start` and ends with `task_end`. In between, for each LLM call: `llm_request`, any `llm_retry`, then `llm_response` (followed by `plan` or `plan_invalid`) or `llm_error` / `llm_interrupted`. For each step of a valid plan: `step_start` and `step_result` for a dispatched step, only `step_result` for a step rejected by the pre-check, and a `stop_move` after the `step_result` of a killed step. `stop_requested` can appear anywhere (it is written from the transport thread). A stop or time limit that arrives while no step runs adds a `stop_move` just before `task_end`. An internal error adds `exception` and a `stop_move`.
 
 ## Envelope
 
@@ -36,96 +36,50 @@ The payload fields follow.
 
 ## Record types
 
-Examples below are from a stub run with a scripted planner (long fields shortened with `…`).
-
 ### `task_start`
 
 `task`, `source` (`cli` / `telegram` / `test`), `sender_id` (Telegram user id or null), `condition`, `config` (full config dump; it holds no secrets), `registry_hash`, `system_text`, `catalog_text`, `tool_schema`, `skills` (names), `previous_task` (`TaskSummary` or null), `posture`, `versions` (`python`, `anthropic`, `pydantic`, `go2-dispatcher`), `git_commit` (`git rev-parse HEAD` in the base dir, or null).
-
-```json
-{"ts":"2026-10-01T11:36:03.637094+03:00","t_mono_ms":0.44,"session_id":"8877711a…","run_id":"b6bb52fe…","seq":0,"type":"task_start","task":"turn left 90 degrees, then tell me if you see a chair","source":"cli","sender_id":null,"condition":"","config":{"run":{"condition":""},"llm":{"model":"claude-sonnet-5-5","max_tokens":2048,"thinking":"between_tools",…},…},"registry_hash":"bf06b5af6abd480b","system_text":"You plan actions for a Unitree Go2 …","catalog_text":"detect_object: …","tool_schema":{"name":"submit_plan",…},"skills":["detect_object","sit","stretch","turn","walk"],"previous_task":null,"posture":"standing","versions":{"python":"3.10.12","anthropic":"1.11.0","pydantic":"2.13.5","go2-dispatcher":"0.1.0"},"git_commit":null}
-```
 
 ### `llm_request`
 
 `call_index` (1-based), `return_reason` (`initial` / `plan_complete` / `checkpoint` / `failure` / `schema_retry`), `retry_of` (for `schema_retry`: the reason being retried; otherwise null), `user_text` (the exact user message).
 
-```json
-{…,"seq":1,"type":"llm_request","call_index":1,"return_reason":"initial","retry_of":null,"user_text":"## Previous task\n(none)\n\n## Robot\nPosture: standing\n\n## Task\nturn left 90 degrees, then tell me if you see a chair\n\n## Budget\n…"}
-```
-
 ### `llm_retry`
 
 An infra retry (not an LLM call): `call_index`, `attempt` (1-based number of the attempt that failed), `error_type`, `status_code` (null for connection errors), `attempt_latency_ms`, `sleep_s`.
 
-```json
-{…,"type":"llm_retry","call_index":2,"attempt":1,"error_type":"InternalServerError","status_code":529,"attempt_latency_ms":812.4,"sleep_s":1.0}
-```
-
 ### `llm_response`
 
 `call_index`, `latency_ms` (successful attempt only), `total_ms` (whole call including failed attempts and backoff), `attempts`, `stop_reason`, `usage` (verbatim from the API), `content` (all response blocks, including any `thinking` or `text` blocks; only the first `submit_plan` `tool_use` block is used), `response_id`, `request_id`.
-
-```json
-{…,"seq":2,"type":"llm_response","call_index":1,"latency_ms":1834.2,"total_ms":1834.9,"attempts":1,"stop_reason":"tool_use","usage":{"input_tokens":100,"output_tokens":20},"content":[{"type":"tool_use","id":"toolu_…","name":"submit_plan","input":{"status":"PLAN","steps":[…]}}],"response_id":"msg_…","request_id":"req_…"}
-```
 
 ### `llm_error` / `llm_interrupted`
 
 `llm_error`: `call_index`, `detail` (for example `"BadRequestError 400"`). The task ends `LLM_ERROR`.
 `llm_interrupted`: `call_index`, `cause` (`operator` / `task_time_limit`). A stop or the deadline cut the retries short.
 
-```json
-{…,"type":"llm_error","call_index":1,"detail":"BadRequestError 400"}
-```
-
 ### `plan`
 
 A valid plan: `call_index`, `plan` (`status`, `steps`, `replan_after`, `message`), `stop_at` (`replan_after` or the number of steps).
 
-```json
-{…,"seq":3,"type":"plan","call_index":1,"plan":{"status":"PLAN","steps":[{"skill":"turn","params":{"direction":"left","angle_deg":90}},{"skill":"detect_object","params":{"target":"chair"}}],"replan_after":null,"message":null},"stop_at":2}
-```
+### `plan_invalid`
 
-### `horizon_rejection` / `plan_invalid`
-
-An invalid reply. `horizon_rejection` (more steps than the horizon): `call_index`, `tool_input`, `steps_in_plan`, `horizon`, `errors` (all errors, horizon first). `plan_invalid` (any other invalid reply): `call_index`, `tool_input`, `rejection_kind` (`schema` / `semantic` / `no_tool_call` / `max_tokens`), `errors`.
-
-```json
-{…,"type":"plan_invalid","call_index":1,"tool_input":{"status":"DONE","steps":[]},"rejection_kind":"semantic","errors":["status DONE needs a message"]}
-```
+An invalid reply: `call_index`, `tool_input`, `rejection_kind` (`horizon` / `schema` / `semantic` / `no_tool_call` / `max_tokens`), `steps_in_plan` and `horizon` (both null unless `rejection_kind` is `horizon`), `errors` (all errors, horizon first).
 
 ### `step_start`
 
 `index` (task-wide dispatched count), `call_index`, `plan_step`, `skill`, `params` (filled), `timeout_s`, `motion_cost`, `fault`.
 
-```json
-{…,"seq":4,"type":"step_start","index":1,"call_index":1,"plan_step":1,"skill":"turn","params":{"direction":"left","angle_deg":90},"timeout_s":12.356,"motion_cost":{"distance_m":0.0,"rotation_deg":90.0},"fault":null}
-```
-
 ### `step_result`
 
-All `StepResult` fields at the top level: `index` (null if not dispatched), `call_index`, `plan_step`, `skill`, `params`, `outcome`, `error_code`, `error_message`, `response` (full `SkillResponse` with `state_before` / `state_after` / `timing`), `duration_ms`, `timeout_s`, `motion_cost`, `fault`, `exit_code`, `pid`, `stderr_tail`, `stop_move`, `verification` (always `"unverified"`). It also adds `budget_used`, `failures` and `posture` **after** this step has been counted. It is written for both dispatched and rejected steps.
-
-```json
-{…,"seq":5,"type":"step_result","index":1,"call_index":1,"plan_step":1,"skill":"turn","params":{"direction":"left","angle_deg":90},"outcome":"ok","error_code":null,"error_message":null,"response":{"schema_version":1,"skill":"turn","status":"ok","observations":{"direction":"left","angle_deg":90.0,"duration_s":1.6,"sdk_ret":0},"error":null,"state_before":{…},"state_after":{…},"state_error":null,"timing":{"init_ms":0.007,"exec_ms":22.999,"state_ms":5.272,"total_ms":28.342}},"duration_ms":101.87,"timeout_s":12.356,"motion_cost":{"distance_m":0.0,"rotation_deg":90.0},"fault":null,"exit_code":0,"pid":505362,"stderr_tail":null,"stop_move":null,"verification":"unverified","budget_used":{"distance_m":0.0,"rotation_deg":90.0},"failures":0,"posture":"standing"}
-```
+All `StepResult` fields at the top level: `index` (null if not dispatched), `call_index`, `plan_step`, `skill`, `params`, `outcome`, `error_code`, `error_message`, `response` (full `SkillResponse` with `state_before` / `state_after` / `timing`), `duration_ms`, `timeout_s`, `motion_cost`, `fault`, `exit_code`, `pid`, `stderr_tail`, `verification` (always `"unverified"`). It also adds `budget_used`, `failures` and `posture` **after** this step has been counted. It is written for both dispatched and rejected steps.
 
 ### `stop_requested`
 
 `source` (`cli` / `telegram` / `shutdown`), `during` (`llm_call` / `step` / `between`).
 
-```json
-{…,"type":"stop_requested","source":"telegram","during":"step"}
-```
-
 ### `stop_move`
 
-All `StopMoveResult` fields: `ok`, `reason` (`operator` / `task_time_limit` / `step_timeout` / `shutdown` / `internal_error`), `duration_ms`, `exit_code`, `response` (its `timing.stop_call_ms` and `state_after`), `stderr_tail`. It is written after the `step_result` of a killed step, and for every StopMove the dispatcher sends itself. If the utility process could not even be started, `ok` is false, `exit_code` and `response` are null, and `stderr_tail` holds `"<ExceptionType>: <message>"` (StopMove never raises).
-
-```json
-{…,"type":"stop_move","ok":true,"reason":"operator","duration_ms":612.3,"exit_code":0,"response":{"schema_version":1,"skill":"stop_move","status":"ok","observations":{"sdk_ret":0},…,"timing":{"stop_call_ms":48.1,"state_ms":5.2,"total_ms":560.4}},"stderr_tail":null}
-```
+All `StopMoveResult` fields: `ok`, `reason` (`operator` / `task_time_limit` / `step_timeout` / `shutdown` / `internal_error`), `duration_ms`, `exit_code`, `response` (its `timing.stop_call_ms` and `state_after`), `stderr_tail`. It is the only record of a StopMove: written right after the `step_result` of a killed step, and for every StopMove the dispatcher sends itself. If the utility process could not even be started, `ok` is false, `exit_code` and `response` are null, and `stderr_tail` holds `"<ExceptionType>: <message>"` (StopMove never raises).
 
 ### `exception`
 
@@ -134,10 +88,6 @@ All `StopMoveResult` fields: `ok`, `reason` (`operator` / `task_time_limit` / `s
 ### `task_end`
 
 `outcome`, `message`, `llm_calls`, `failures`, `steps_recorded`, `steps_dispatched`, `rejections` (non-dispatched steps), `horizon_rejections`, `usage_totals` (sum of every top-level numeric `usage` field over all responses), `budget_used`, `stop_move_failed`, `final_posture`, `duration_ms`.
-
-```json
-{…,"seq":11,"type":"task_end","outcome":"DONE","message":"I turned left 90 degrees and see a chair ahead, close by.","llm_calls":2,"failures":0,"steps_recorded":2,"steps_dispatched":2,"rejections":0,"horizon_rejections":0,"usage_totals":{"input_tokens":200,"output_tokens":40},"budget_used":{"distance_m":0.0,"rotation_deg":90.0},"stop_move_failed":false,"final_posture":"standing","duration_ms":156.1}
-```
 
 ## `index.jsonl`
 
@@ -164,7 +114,7 @@ Group tasks by condition first: `condition`, `registry_hash` (the skill set and 
 | Infrastructure retries | `llm_retry` records (`error_type`, `status_code`, `attempt_latency_ms`, `sleep_s`); `llm_response.attempts` |
 | Task latency | `index.jsonl` / `task_end` `duration_ms` |
 | Failures and rejections | `task_end.failures`, `task_end.rejections` (pre-check rejections only); per step `step_result.outcome` and `error_code` |
-| Invalid replies | `plan_invalid` by `rejection_kind`; horizon rejection rate = `horizon_rejection` records ÷ `llm_response` records (monitoring rule in [llm.md](llm.md#horizon-rejection)) |
+| Invalid replies | `plan_invalid` by `rejection_kind`; horizon rejection rate = `plan_invalid` with `rejection_kind == "horizon"` ÷ `llm_response` records (monitoring rule in [llm.md](llm.md#horizon-rejection)) |
 | Skill wall time | `step_result.duration_ms` (whole subprocess) |
 | Process overhead per step | `step_result.duration_ms − response.timing.total_ms` (interpreter start and teardown outside the skill's own timing) |
 | Stop latency | `stop_move.response.timing.stop_call_ms` (utility start to `StopMove()` return) and `stop_move.duration_ms` (whole utility process) |
@@ -173,52 +123,13 @@ Group tasks by condition first: `condition`, `registry_hash` (the skill set and 
 | Exact prompts | `task_start.system_text` / `catalog_text` / `tool_schema` + `llm_request.user_text` |
 | Session continuity | `session_id` links tasks of one process; `task_start.previous_task` and `posture` show what carried over |
 
-## Analysis example
-
-```python
-import json
-from collections import Counter
-from pathlib import Path
-
-log_dir = Path("runs")
-index = [json.loads(l) for l in (log_dir / "index.jsonl").open()]
-
-by_cond: dict[str, list[dict]] = {}
-for row in index:
-    by_cond.setdefault(f"{row['condition']}/h{row['planning_horizon']}", []).append(row)
-
-for cond, rows in sorted(by_cond.items()):
-    n = len(rows)
-    done = sum(r["outcome"] == "DONE" for r in rows)
-    reasons, horizon_rej, responses, overhead = Counter(), 0, 0, []
-    for r in rows:
-        for line in (log_dir / r["file"]).open():
-            rec = json.loads(line)
-            t = rec["type"]
-            if t == "llm_request":
-                reasons[rec["return_reason"]] += 1
-            elif t == "llm_response":
-                responses += 1
-            elif t == "horizon_rejection":
-                horizon_rej += 1
-            elif t == "step_result" and rec["index"] is not None and rec["response"]:
-                overhead.append(rec["duration_ms"] - rec["response"]["timing"]["total_ms"])
-    print(
-        f"{cond}: {n} tasks, {done} DONE, "
-        f"mean in/out tokens {sum(r['input_tokens'] for r in rows) / n:.0f}/"
-        f"{sum(r['output_tokens'] for r in rows) / n:.0f}, "
-        f"mean calls {sum(r['llm_calls'] for r in rows) / n:.2f} {dict(reasons)}, "
-        f"horizon rejections {horizon_rej}/{responses}, "
-        f"mean process overhead {sum(overhead) / max(len(overhead), 1):.0f} ms"
-    )
-```
-
 ## Design decisions
 
 - **One file per task plus an index.** A task is the unit of analysis; the index lets analysis select tasks by condition without parsing every file.
 - **Every line is flushed as it is written**, under a lock, so a crash leaves a usable partial log and lines from the transport thread never interleave.
 - **The exact prompt surface is logged with every task** (system text, catalog, tool schema, registry hash) and the exact user message with every call, so any call can be reconstructed and conditions can be told apart by hash.
 - **The return reason is logged on every call.** Without it, horizon 1 would look like constant replanning; with it, `plan_complete` calls can be separated from replans after a failure ([loop-and-context.md](loop-and-context.md#return-reasons)).
-- **Horizon rejections are their own record type**, so their rate can be measured per condition rather than hidden among other invalid replies ([llm.md](llm.md#horizon-rejection)).
+- **Horizon rejections are a `plan_invalid` kind** (`rejection_kind == "horizon"`, with `steps_in_plan` and `horizon`), not a record of their own: one record per invalid reply, and the rate is still a simple filter per condition ([llm.md](llm.md#horizon-rejection)). The two fields are always present (null for other kinds) so every `plan_invalid` has the same keys.
+- **One place per StopMove result**: the `stop_move` record. A killed step's `step_result` does not repeat it; the `stop_move` record follows it directly.
 - **Infrastructure retries are logged separately and never counted as LLM calls or replans**, so provider trouble does not contaminate the replanning metric.
 - **Full robot state is logged, not just posture**, as the data for setting v2 verification thresholds ([roadmap.md](../../docs/roadmap.md#v2-plan)).

@@ -41,4 +41,4 @@ def test_live_turn_and_find_chair(tmp_path):
     assert "chair" in o.message.lower()
     with open(o.log_path, encoding="utf-8") as f:
         types = [json.loads(line)["type"] for line in f]
-    assert "plan_invalid" not in types and "horizon_rejection" not in types
+    assert "plan_invalid" not in types

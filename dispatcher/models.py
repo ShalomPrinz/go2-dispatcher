@@ -145,7 +145,6 @@ class StepResult(_Model):
     exit_code: int | None = None
     pid: int | None = None  # LOG ONLY
     stderr_tail: str | None = None  # last 2000 chars; LOG ONLY, never in context
-    stop_move: StopMoveResult | None = None
     verification: Literal["unverified"] = "unverified"
 
 

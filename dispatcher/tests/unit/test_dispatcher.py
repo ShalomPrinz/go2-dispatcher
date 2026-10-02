@@ -186,8 +186,8 @@ def test_horizon_rejection(tmp_path, registry):
     r = Rig(tmp_path, registry, [too_long, plan(turn()), done()], [exec_result()], loop={"planning_horizon": 2})
     o = r.run()
     assert o.outcome == "DONE"
-    hr = records(o, "horizon_rejection")
-    assert len(hr) == 1 and hr[0]["steps_in_plan"] == 3 and hr[0]["horizon"] == 2
+    (hr,) = records(o, "plan_invalid")
+    assert (hr["rejection_kind"], hr["steps_in_plan"], hr["horizon"]) == ("horizon", 3, 2)
     assert [c["skill"] for c in r.executor.runs] == ["turn"]
     assert records(o, "task_end")[0]["horizon_rejections"] == 1
 
@@ -253,6 +253,9 @@ def test_stop_during_step(tmp_path, registry):
     assert r.executor.stop_moves == []
     sm = records(o, "stop_move")
     assert len(sm) == 1 and sm[0]["ok"] is True and sm[0]["reason"] == "operator"
+    types = [rec["type"] for rec in records(o)]
+    assert types[types.index("step_result") + 1] == "stop_move"
+    assert "stop_move" not in records(o, "step_result")[0]
 
 
 def test_stop_between_steps(tmp_path, registry):

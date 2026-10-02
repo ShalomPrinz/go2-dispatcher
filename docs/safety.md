@@ -37,7 +37,7 @@ Details:
 
 ### StopMove failure
 
-If the `stop_move` process cannot be started, times out, exits without a valid response, or reports a non-zero SDK code, `stop_move_failed` is set on the task and the operator message ends with the warning above. The `stop_move` record in the run log holds the exit code, stderr tail and response. There is no automatic retry; a person must stop the robot.
+If the `stop_move` process cannot be started, times out, exits without a valid response, or reports a non-zero SDK code, `stop_move_failed` is set on the task and the operator message ends with the warning above. The `stop_move` record holds the details ([run-log.md](../dispatcher/docs/run-log.md#stop_move)). There is no automatic retry; a person must stop the robot.
 
 ### Between kill and StopMove
 
@@ -45,7 +45,7 @@ A SIGKILL runs no cleanup, so the killed skill cannot send `StopMove()` itself. 
 
 ### Measured latency
 
-`stop_move` records `timing.stop_call_ms`: from the start of the utility process to the return of `StopMove()` (interpreter start, DDS init and the call). Kill-to-stop latency = executor kill + process start + `stop_call_ms`. There is no required number; the real value is **unverified on the robot** and is measured by the robot checklist ([robot.md](../skills/docs/robot.md)). Every `StopMove` is logged as a `stop_move` record with `duration_ms` and the state 0.5 s after the call ([run-log.md](../dispatcher/docs/run-log.md)).
+`stop_move` records `timing.stop_call_ms`: from the start of the utility process to the return of `StopMove()` (interpreter start, DDS init and the call). Kill-to-stop latency = executor kill + process start + `stop_call_ms`. There is no required number; the real value is **unverified on the robot** and is measured by the robot checklist ([robot.md](../skills/docs/robot.md)).
 
 ## Busy-reject
 

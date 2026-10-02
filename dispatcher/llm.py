@@ -135,9 +135,9 @@ def validate_tool_input(raw: Any, horizon: int) -> tuple[Plan | None, list[str],
     errors: list[str] = []
 
     # 1. horizon, on the raw input, before pydantic
-    horizon_exceeded = False
+    kind: RejectionKind = "none"
     if isinstance(raw, dict) and isinstance(raw.get("steps"), list) and len(raw["steps"]) > horizon:
-        horizon_exceeded = True
+        kind = "horizon"
         errors.append(f"plan has {len(raw['steps'])} steps; the maximum is {horizon}")
 
     # 2. schema
@@ -153,17 +153,13 @@ def validate_tool_input(raw: Any, horizon: int) -> tuple[Plan | None, list[str],
     semantic_errors = _semantic_errors(plan) if plan is not None else []
     errors.extend(semantic_errors)
 
-    # 5. rejection kind
-    if horizon_exceeded:
-        kind = "horizon"
-    elif schema_errors:
+    # 4. rejection kind: horizon first
+    if kind == "none" and schema_errors:
         kind = "schema"
-    elif semantic_errors:
+    elif kind == "none" and semantic_errors:
         kind = "semantic"
-    else:
-        kind = "none"
 
-    # 4. a plan only if there are no errors at all
+    # 5. a plan only if there are no errors at all
     return (plan if not errors else None), errors, kind
 
 
