@@ -20,16 +20,16 @@ All SDK use is in `skills/real.py`, selected in the skill process by `GO2_BACKEN
 | What | How |
 |---|---|
 | DDS init | `ChannelFactoryInitialize(0, $GO2_IFACE)`, once per process, before anything touches DDS. An empty `GO2_IFACE` gives `backend_not_configured`. |
-| Sport client | `SportClient()`, `SetTimeout(10.0)`, `Init()`. One per skill process. |
+| Sport client | `SportClient()`, `SetTimeout(SPORT_CLIENT_TIMEOUT_S)`, `Init()`. One per skill process. |
 | Calls used | `Move(vx, vy, vyaw)`, `StopMove()`, `StandDown()`, `Stretch()`. Each returns an int; 0 is success, anything else is an `sdk_error` with the code in `observations.sdk_ret`. |
-| Camera | `VideoClient`, `SetTimeout(3.0)`, `Init()`, `GetImageSample()` → JPEG bytes, decoded with OpenCV. |
-| State | `ChannelSubscriber("rt/sportmodestate", SportModeState_)`, queue length 10 ([state sampling](#state-sampling)). |
+| Camera | `VideoClient`, `SetTimeout(CAMERA_TIMEOUT_S)`, `Init()`, `GetImageSample()` → JPEG bytes, decoded with OpenCV. |
+| State | `ChannelSubscriber("rt/sportmodestate", SportModeState_)`, queue length `SUBSCRIBER_QUEUE_LEN` ([state sampling](#state-sampling)). |
 
-Each skill call and each utility (`stop_move`, `read_state`) is a fresh process, so DDS is initialised once per call and the SDK's process-wide channel singleton is always clean ([architecture.md](../../docs/architecture.md#design-decisions)).
+Constants are module-level in `skills/real.py` (detector ones on `RealDetector`). Each skill call and utility is a fresh process, so DDS is initialised once per call ([skills.md](skills.md#design-decisions)).
 
 ### Motion
 
-`walk` and `turn` are open-loop: they send `Move` every 0.1 s at 0.3 m/s (walk) or 1.0 rad/s (turn) for the time the motion should take, then `StopMove()`. Nothing measures the distance or angle covered. If `Move` returns non-zero, the loop sends `StopMove()` and reports `sdk_error`. If the dispatcher dies, the loop notices on its next iteration, stops the robot and exits ([safety.md](../../docs/safety.md#if-the-dispatcher-dies)). Parameters and constants: [skills.md](skills.md#the-skills).
+`walk` and `turn` are open-loop: they send `Move` every `CMD_PERIOD_S` at `VELOCITY_MPS` (both in `walk.py`) or `YAW_RATE_RPS` (`CMD_PERIOD_S` and `YAW_RATE_RPS` in `turn.py`) for the time the motion should take, then `StopMove()`. Nothing measures the distance or angle covered. If `Move` returns non-zero, the loop sends `StopMove()` and reports `sdk_error`. If the dispatcher dies, the loop notices on its next iteration, stops the robot and exits ([safety.md](../../docs/safety.md#if-the-dispatcher-dies)).
 
 `sit` is `StandDown()` and `stretch` is the robot's built-in `Stretch()` routine, each followed by a settle wait.
 
@@ -38,22 +38,21 @@ Each skill call and each utility (`stop_move`, `read_state`) is a fresh process,
 `detect_object` on the real backend takes one frame from the front camera and runs YOLO on it (`ultralytics`, weights from `robot.yolo_weights`):
 
 - The weights file is checked before the camera is touched and is **never downloaded automatically**; a missing file is `weights_missing`. YOLO is loaded on the first detection in the process.
-- Inference at `imgsz` 640 with confidence threshold 0.4. Of the boxes whose class equals the target, the one with the highest confidence is used.
-- **Position** from the box centre's horizontal fraction of the image: < 0.4 `left`, > 0.6 `right`, else `center`.
-- **Closeness** from the box height's fraction of the image: > 0.6 `near`, > 0.3 `medium`, else `far`.
-- Confidence is rounded to 2 decimals.
+- Inference at `IMGSZ` with confidence threshold `CONF`. Of the boxes whose class equals the target, the one with the highest confidence is used.
+- **Position** from the box centre's horizontal fraction of the image (`LEFT_MAX_X`, `RIGHT_MIN_X`); **closeness** from the box height's fraction (`NEAR_MIN_H`, `MEDIUM_MIN_H`).
+- Confidence is rounded to `CONFIDENCE_DECIMALS` decimals.
 
-All thresholds are class constants of `RealDetector` and are *tunable* and *unverified* on the robot's camera.
+All thresholds are class constants of `RealDetector`, *tunable* and *unverified* on the robot's camera.
 
 ## State sampling
 
 Robot state is sampled:
 
 - at the start and end of every skill call (`state_before`, `state_after`);
-- by the `stop_move` utility 0.5 s after `StopMove()` (`state_after`);
+- by the `stop_move` utility after `StopMove()` and its [settle wait](#settle-waits) (`state_after`);
 - by the `read_state` utility: `go2 state`, and at startup on the real backend to set the initial posture (`unknown` if it fails).
 
-**How.** On the first sample in a process, the backend subscribes to `rt/sportmodestate`. A sample waits up to 1.0 s for a message that arrived *after* the sample was requested; if none arrives, it uses the latest earlier message; if there is none at all, the sample fails. A failed sample does not fail the step: it is reported in `state_error` and the state is `null` ([skills.md](skills.md#response-schema)).
+**How.** On the first sample in a process, the backend subscribes to `rt/sportmodestate`. A sample waits up to `STATE_WAIT_S` for a message that arrived *after* the sample was requested; if none arrives, it uses the latest earlier message; if there is none at all, the sample fails. A failed sample does not fail the step: it is reported in `state_error` and the state is `null` ([skills.md](skills.md#response-schema)).
 
 **Fields.** Each sample is a `RobotState`:
 
@@ -76,13 +75,7 @@ State is **logged only** in v1. No step gets a verdict from it; the model sees o
 
 ## Posture rule
 
-`derive_posture(body_height, mode)` in `skills/real.py` is the only place posture is derived from a state sample; the stub stores posture directly in its state file:
-
-| `body_height` | Posture |
-|---|---|
-| < 0.15 m (`POSTURE_SITTING_MAX_M`) | `sitting` |
-| ≥ 0.22 m (`POSTURE_STANDING_MIN_M`) | `standing` |
-| in between, or `null` | `unknown` |
+`derive_posture(body_height, mode)` in `skills/real.py` is the only place posture is derived from a state sample; the stub stores posture directly in its state file. `body_height` below `POSTURE_SITTING_MAX_M` is `sitting`, at or above `POSTURE_STANDING_MIN_M` is `standing`; in between or `null` is `unknown`.
 
 `mode` is passed in but not used yet, so the rule can switch to `mode` after the checklist without touching any caller. Both thresholds are *tunable* and *unverified*; checklist items 1 and 7 decide them. How posture is carried through a task and shown to the model: [loop-and-context.md](../../dispatcher/docs/loop-and-context.md#user-message).
 
@@ -90,20 +83,16 @@ State is **logged only** in v1. No step gets a verdict from it; the model sees o
 
 Because an SDK action call returns when the command is accepted, a skill waits after a **successful** call so that `state_after` is sampled with the robot at rest:
 
-| Where | Wait | Constant |
-|---|---|---|
-| `sit` after `StandDown()` | 3.0 s | `SETTLE_S` in `sit.py` |
-| `stretch` after `Stretch()` | 6.0 s | `SETTLE_S` in `stretch.py` |
-| `stop_move` after `StopMove()` | 0.5 s | `SETTLE_S` in `stop_move.py` |
+`sit` after `StandDown()`, `stretch` after `Stretch()` and `stop_move` after `StopMove()`, each for `SETTLE_S` in its module.
 
-The waits are guesses, *tunable* and *unverified*; checklist items 3 and 7 measure them. They are included in `timing.exec_ms` and must fit inside the skill's timeout ([skills.md](skills.md#policies)). Waits go through `backend.sleep()`, so on the stub they are scaled by `stub.time_scale`.
+The waits are guesses, *tunable* and *unverified*; checklist items 3 and 7 measure them. They are included in `timing.exec_ms` and must fit inside the skill's timeout ([skills.md](skills.md#policies)).
 
 ## Open robot-side questions
 
 The list of open questions with owners is in [roadmap.md](../../docs/roadmap.md#open-questions) and [pending human work](../../docs/roadmap.md#pending-human-work). What they mean on the robot side, and what v1 does meanwhile:
 
 - **Odometry.** `SportModeState` has `position` and `velocity`, and Go2 topic lists include `rt/utlidar/robot_odom` and `rt/utlidar/robot_pose`. Whether the robot's own estimate is available and usable is unknown (ask Achiya). v1 logs `position` and `velocity` in every sample and uses neither. The answer decides whether `walk` can be verified in v2 and whether a geofence is possible ([roadmap.md](../../docs/roadmap.md#verifiability-per-skill)).
-- **No skill can stand the robot up.** After `sit`, motion fails until a person stands the robot up with the remote; in a batch run one `sit` affects every later task. On the stub, `go2 --reset-stub` restores the posture. A `stand` skill (`StandUp()` then `BalanceStand()`, with a settle wait) is recommended before experiments; adding one is shown in [skills.md](skills.md#adding-a-new-skill).
+- **No skill can stand the robot up.** After `sit`, motion fails until a person stands the robot up with the remote; in a batch run one `sit` affects every later task. On the stub, `go2 --reset-stub` restores the posture. A `stand` skill (`StandUp()` then `BalanceStand()`, with a settle wait) is recommended before experiments ([skills.md](skills.md#adding-a-new-skill)).
 - **`Move` while lying down.** v1 treats a non-zero return code as `sdk_error` (the stub returns 1). If the real robot silently ignores `Move` and returns 0, `walk` and `turn` report `ok` while nothing moved. Checklist item 8 finds out.
 - **Kill-to-stop latency** and whether the sport service stops by itself when `Move` commands stop arriving: [safety.md](../../docs/safety.md#between-kill-and-stopmove). Checklist item 5 measures the latency.
 - **Installing the `robot` extra on the lab machine** (CycloneDDS build) and the Python version to pin: [setup.md](../../docs/setup.md#lab-machine-real-robot).

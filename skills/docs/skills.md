@@ -34,48 +34,11 @@ ParamSpec (parameter names match `^[a-z][a-z0-9_]*$`):
 
 Any other key, a missing required key or an invalid value is a registry error, as are: an entrypoint that cannot be imported, a module without `POLICY`, a `POLICY` that is not a `SkillPolicy`, `POLICY.name` ≠ `name`, a missing skills folder, or zero skills. Transports print `Registry error: <message naming the file>` and exit 2. A frontmatter error reads `<path>: <dotted.loc>: <msg>` (e.g. `params.distance_m.min`); an extra key reads `unknown key`.
 
-Example (`skills/catalog/walk/SKILL.md`):
-
-```yaml
----
-name: walk
-entrypoint: skills.walk
-description: Walk in a straight line forward, backward, or sideways by a distance, then stop.
-params:
-  direction:
-    type: enum
-    values: [forward, backward, left, right]
-    description: Direction of travel relative to the robot's current heading.
-  distance_m:
-    type: number
-    min: 0.1
-    max: 3.0
-    default: 0.9
-    unit: metres
-    description: Distance to travel.
----
-```
-
-The dispatcher checks every planned step against these declarations before anything runs ([loop-and-context.md](../../dispatcher/docs/loop-and-context.md#step-bounds)).
+`skills/catalog/walk/SKILL.md` is a full example. The dispatcher checks every planned step against these declarations before anything runs ([loop-and-context.md](../../dispatcher/docs/loop-and-context.md#step-bounds)).
 
 ## Catalog and registry hash
 
-The catalog (`Registry.catalog_text()`) is generated from the frontmatter, skills sorted by name, one line per parameter, no trailing newline. It is sent as `system[1]` = `"## Skills\n" + catalog`. Current catalog (`dispatcher/tests/golden/catalog.txt`):
-
-```
-detect_object: Look through the front camera once and report whether an object is visible, where it is in the frame, and roughly how close it is. Does not move the robot.
-  - target (required): text. Object to look for, as a lowercase COCO class name (for example chair, person, bottle, cell phone).
-sit: Lower the robot's body to the ground (sit or lie down).
-  - no parameters
-stretch: Perform the robot's built-in stretch routine.
-  - no parameters
-turn: Turn in place to the left or right by an angle, then stop.
-  - direction (required): one of left, right. Which way to turn.
-  - angle_deg (optional, default 45): number from 5 to 180 degrees. Angle to turn.
-walk: Walk in a straight line forward, backward, or sideways by a distance, then stop.
-  - direction (required): one of forward, backward, left, right. Direction of travel relative to the robot's current heading.
-  - distance_m (optional, default 0.9): number from 0.1 to 3 metres. Distance to travel.
-```
+The catalog (`Registry.catalog_text()`) is generated from the frontmatter, skills sorted by name, one line per parameter, no trailing newline. It is sent as `system[1]` = `"## Skills\n" + catalog`. The current catalog is the golden file `dispatcher/tests/golden/catalog.txt`.
 
 Type phrases: `one of a, b`; `text`; `number from X to Y`, `number, at least X`, `number, at most Y` or `number`, followed by the unit.
 
@@ -118,35 +81,25 @@ Every skill and utility prints one `SkillResponse` (`schema_version` 1). `result
 | `status` | `ok` or `error`. |
 | `observations` | Skill-specific results. |
 | `error` | `{code, message}` if and only if `status = "error"`, else `null`. One line, at most 300 characters. |
-| `state_before`, `state_after` | Robot state sampled at start and end (utilities: `state_after` only). |
+| `state_before`, `state_after` | Robot state sampled at start and end ([robot.md](robot.md#state-sampling)); utilities have `state_after` only. |
 | `state_error` | Why a state sample failed (`before: ...` / `after: ...`, joined with `; `), else `null`. |
-| `timing` | `init_ms`, `exec_ms`, `state_ms`, `total_ms`; `stop_move` adds `stop_call_ms`. |
+| `timing` | `init_ms`, `exec_ms`, `state_ms`, `total_ms`; `stop_move` adds `stop_call_ms`, from utility start to the return of `StopMove()`. |
 
-Robot state fields: `t` (unix time), `backend`, `posture` (`standing` / `sitting` / `unknown`), `mode`, `gait_type`, `body_height`, `position` [x, y, z], `velocity`, `yaw_speed`, `imu_rpy`, `foot_force`, `error_code`. Missing or non-finite values are `null`. State is **logged only**; the model sees only the derived posture ([loop-and-context.md](../../dispatcher/docs/loop-and-context.md#user-message)). Field sources and the posture rule: [robot.md](robot.md).
+Robot state fields, their sources and the posture rule are in [robot.md](robot.md#state-sampling). State is **logged only**; the model sees only the derived posture ([loop-and-context.md](../../dispatcher/docs/loop-and-context.md#user-message)).
 
-`ok` example (stub, `turn`):
-
-```json
-{"schema_version":1,"skill":"turn","status":"ok","observations":{"direction":"left","angle_deg":90.0,"duration_s":1.6,"sdk_ret":0},"error":null,"state_before":{"t":1790843763.67,"backend":"stub","posture":"standing","mode":null,"gait_type":null,"body_height":0.32,"position":null,"velocity":null,"yaw_speed":null,"imu_rpy":null,"foot_force":null,"error_code":null},"state_after":{"t":1790843763.69,"backend":"stub","posture":"standing","mode":null,"gait_type":null,"body_height":0.32,"position":null,"velocity":null,"yaw_speed":null,"imu_rpy":null,"foot_force":null,"error_code":null},"state_error":null,"timing":{"init_ms":0.007,"exec_ms":22.999,"state_ms":5.272,"total_ms":28.342}}
-```
-
-`error` example (stub, `walk` while sitting; exit code 1):
-
-```json
-{"schema_version":1,"skill":"walk","status":"error","observations":{"direction":"forward","distance_m":0.5,"duration_s":0.0,"sdk_ret":1},"error":{"code":"sdk_error","message":"Move returned 1"},"state_before":{"t":1790843774.54,"backend":"stub","posture":"sitting","mode":null,"gait_type":null,"body_height":0.08,"position":null,"velocity":null,"yaw_speed":null,"imu_rpy":null,"foot_force":null,"error_code":null},"state_after":{"t":1790843774.54,"backend":"stub","posture":"sitting","mode":null,"gait_type":null,"body_height":0.08,"position":null,"velocity":null,"yaw_speed":null,"imu_rpy":null,"foot_force":null,"error_code":null},"state_error":null,"timing":{"init_ms":0.009,"exec_ms":0.051,"state_ms":5.438,"total_ms":5.545}}
-```
+Run a skill by hand ([below](#running-a-skill-by-hand)) to see a full response.
 
 ## The skills
 
-| Skill | Params | Action | Observations | Shown to the model on `ok` |
-|---|---|---|---|---|
-| `walk` | `direction` ∈ forward/backward/left/right; `distance_m` 0.1–3.0, default 0.9 | `Move` at 0.3 m/s every 0.1 s for `distance_m / 0.3` s, then `StopMove` | `direction`, `distance_m`, `duration_s` (commanded), `sdk_ret`, `orphaned` (only if set) | nothing |
-| `turn` | `direction` ∈ left/right; `angle_deg` 5–180, default 45 | `Move(0, 0, ±1.0 rad/s)` every 0.1 s for `radians(angle_deg)` s, then `StopMove` | `direction`, `angle_deg`, `duration_s`, `sdk_ret`, `orphaned` | nothing |
-| `sit` | none | `StandDown()`, then a settle wait | `sdk_ret` | nothing |
-| `stretch` | none | `Stretch()`, then a settle wait | `sdk_ret` | nothing |
-| `detect_object` | `target`: a COCO class name | one camera frame + YOLO; never moves | `target`, `object_found`, `position` (left/center/right), `closeness` (near/medium/far), `confidence` | `object_found`, `position`, `closeness`, `confidence` |
+| Skill | Action | Observations | Shown to the model on `ok` |
+|---|---|---|---|
+| `walk` | `Move` for `distance_m / VELOCITY_MPS` s, then `StopMove` | `direction`, `distance_m`, `duration_s` (commanded), `sdk_ret`, `orphaned` (only if set) | nothing |
+| `turn` | `Move(0, 0, ±YAW_RATE_RPS)` for `radians(angle_deg) / YAW_RATE_RPS` s, then `StopMove` | `direction`, `angle_deg`, `duration_s`, `sdk_ret`, `orphaned` | nothing |
+| `sit` | `StandDown()`, then a settle wait | `sdk_ret` | nothing |
+| `stretch` | `Stretch()`, then a settle wait | `sdk_ret` | nothing |
+| `detect_object` | one camera frame + YOLO; never moves | `target`, `object_found`, `position` (left/center/right), `closeness` (near/medium/far), `confidence` | `object_found`, `position`, `closeness`, `confidence` |
 
-Walk and turn are open-loop: they command a velocity for the time the motion should take; nothing measures the distance covered. Not finding an object is `status = ok` with `object_found: false`, not an error. Ranges are starting values (*tunable*).
+Params and ranges are in each `SKILL.md`. Walk and turn are open-loop ([robot.md](robot.md#motion)). Not finding an object is `status = ok` with `object_found: false`, not an error.
 
 ### Error codes
 
@@ -166,37 +119,17 @@ Detector errors have the message `<ExceptionType>: <message>`. Outcomes the disp
 
 ## Policies
 
-Each skill module defines one module-level `POLICY = result.SkillPolicy(...)`. The dispatcher imports the module only to read `POLICY`:
+Each skill module defines one module-level `POLICY = result.SkillPolicy(name, timeout, cost, context_observations)` (`skills/result.py`). `timeout` and `cost` (a `MotionCost(distance_m, rotation_deg)`, default zero) are each a constant or a function of params; `context_observations` lists the observation keys shown to the model on `ok`. The dispatcher imports the module only to read `POLICY`.
 
-```python
-@dataclass(frozen=True)
-class MotionCost:
-    distance_m: float = 0.0  # both coerced to float
-    rotation_deg: float = 0.0
+The dispatcher reads only `name`, `context_observations`, `timeout_s(params)` and `motion_cost(params)`, with the filled, checked params. Every number is a module-level constant in `skills/<skill>.py`:
 
+| Skill | Timeout | Motion cost |
+|---|---|---|
+| `walk` | `BASE_S + FACTOR × distance_m / VELOCITY_MPS` | `distance_m` |
+| `turn` | `BASE_S + FACTOR × radians(angle_deg) / YAW_RATE_RPS` | `rotation_deg = angle_deg` |
+| `sit`, `stretch`, `detect_object` | `TIMEOUT_S` | zero |
 
-@dataclass(frozen=True)
-class SkillPolicy:
-    name: str  # equals the SKILL.md name; run_skill(POLICY, body) uses it as the response's skill
-    timeout: float | Callable[[dict], float]  # constant or function of params
-    cost: MotionCost | Callable[[dict], MotionCost] = MotionCost()  # default: zero
-    context_observations: tuple[str, ...] = ()  # observation keys shown to the LLM on ok
-
-    def timeout_s(self, params: dict) -> float: ...  # calls timeout if callable, else returns it
-    def motion_cost(self, params: dict) -> MotionCost: ...  # same for cost
-```
-
-The dispatcher reads only `name`, `context_observations`, `timeout_s(params)` and `motion_cost(params)`. `params` are the filled, checked params. Every number is a module-level constant in `skills/<skill>.py`, tunable in one place; a function reads the constants when called:
-
-| Skill | Timeout | Motion cost | Constants |
-|---|---|---|---|
-| `walk` | `BASE_S + FACTOR × distance_m / VELOCITY_MPS` | `distance_m` | `BASE_S = 10.0`, `FACTOR = 1.5` (*tunable*); `VELOCITY_MPS = 0.3` |
-| `turn` | `BASE_S + FACTOR × radians(angle_deg) / YAW_RATE_RPS` | `rotation_deg = angle_deg` | `BASE_S = 10.0`, `FACTOR = 1.5` (*tunable*); `YAW_RATE_RPS = 1.0` |
-| `sit` | `TIMEOUT_S` | zero | `TIMEOUT_S = 15.0`, `SETTLE_S = 3.0` (*tunable*) |
-| `stretch` | `TIMEOUT_S` | zero | `TIMEOUT_S = 20.0`, `SETTLE_S = 6.0` (*tunable*) |
-| `detect_object` | `TIMEOUT_S` | zero | `TIMEOUT_S = 45.0` (*tunable*; covers YOLO load on CPU) |
-
-`BASE_S` covers process start, SDK init and the two state samples; `FACTOR` is a margin on the commanded motion time. The timeout covers the whole process from start to exit. Settle waits are explained in [robot.md](robot.md). The motion cost feeds the motion budget ([safety.md](../../docs/safety.md#motion-budget)).
+`BASE_S` covers process start, SDK init and the two state samples; `FACTOR` is a margin on the commanded motion time; `detect_object`'s `TIMEOUT_S` covers loading YOLO on CPU. The timeout covers the whole process from start to exit, including any [settle wait](robot.md#settle-waits). The motion cost feeds the motion budget ([safety.md](../../docs/safety.md#motion-budget)).
 
 ## No side effects on import
 
@@ -204,17 +137,17 @@ Importing a skill module must do nothing: no SDK import, no DDS init, no argumen
 
 ## Stub backend
 
-The stub (`skills/stub.py`) replaces only the SDK layer inside the skill process; processes, timeouts, kills and `StopMove` run for real. It keeps posture in a JSON state file (`{"posture": "standing" | "sitting"}`; a missing file means standing), written atomically.
+The stub (`skills/stub.py`) replaces only the SDK layer inside the skill process; processes, timeouts, kills and `StopMove` run for real. Constants are in `skills/stub.py`. It keeps posture in a JSON state file (`{"posture": "standing" | "sitting"}`; a missing file means standing), written atomically.
 
 | Call | While standing | While sitting |
 |---|---|---|
 | `Move` | 0 | 1 (not standing) |
 | `StopMove` | 0 | 0 |
-| `StandDown` | 0; posture → sitting; waits 1.5 s | 0; no change |
-| `Stretch` | 0; waits 3.0 s | 1 |
+| `StandDown` | 0; posture → sitting; waits `STAND_DOWN_S` | 0; no change |
+| `Stretch` | 0; waits `STRETCH_S` | 1 |
 
-- `detect(target)` waits 0.5 s and returns found (`confidence` 0.9, position and closeness from the entry) if the target is listed in `stub.detections`, else not found.
-- `sample_state()` returns `body_height` 0.32 (standing) or 0.08 (sitting); other fields are `null`.
+- `detect(target)` waits `DETECT_S` and returns found (`DETECT_CONFIDENCE`, position and closeness from the entry) if the target is listed in `stub.detections`, else not found.
+- `sample_state()` returns a `body_height` per posture (`BODY_HEIGHT_*_M`); other fields are `null`.
 - All stub waits go through `backend.sleep()` and are multiplied by `stub.time_scale`. Skills never call `time.sleep` themselves.
 - The stub is reset to `stub.initial_posture` at startup and by `go2 --reset-stub`, not between tasks ([running.md](../../docs/running.md)).
 
@@ -229,12 +162,7 @@ Configure them in config:
 faults = [ { step = 2, kind = "hang" } ]
 ```
 
-or on the command line, where `--fault STEP:KIND` (repeatable) replaces the whole list:
-
-```bash
-uv run go2 --fault 2:hang run "turn left, then walk forward one metre"
-uv run go2 --fault 1:error --fault 3:crash batch tasks.txt
-```
+or on the command line with `--fault STEP:KIND` (repeatable), which replaces the whole list ([running.md](../../docs/running.md)).
 
 - `step` counts **dispatched** steps in the task, 1-based, across plans. Rejected steps are not counted. Steps must be unique.
 - The dispatcher sets `GO2_STUB_FAULT` for that step only. Inside the process, the fault hits the first action call the skill makes (`Move`, `StopMove`, `StandDown`, `Stretch` or `detect`); later calls behave normally.
@@ -253,29 +181,7 @@ For one process run by hand, set `GO2_STUB_FAULT=<kind>` directly.
 
 Example: a `stand` skill (recommended before experiments, see [roadmap.md](../../docs/roadmap.md#open-questions)).
 
-1. Create `skills/stand.py`:
-   ```python
-   from skills import motion, result
-
-   TIMEOUT_S = 15.0  # tunable
-   SETTLE_S = 3.0  # tunable
-
-   POLICY = result.SkillPolicy(name="stand", timeout=TIMEOUT_S)
-
-
-   def body(params: dict):
-       # returns (status, observations, error_code, error_message, timing)
-       return motion.single_action("StandUp", SETTLE_S)
-
-
-   def main() -> None:
-       result.run_skill(POLICY, body)
-
-
-   if __name__ == "__main__":
-       main()
-   ```
-   A real `stand` would call `StandUp()` then `BalanceStand()`. Each SDK method must exist on the stub (`StubSportClient`) and work through `real.get_sport_client()`.
+1. Create `skills/stand.py` by copying `skills/sit.py` (a single SDK action with a settle wait via `motion.single_action`). A real `stand` would call `StandUp()` then `BalanceStand()`. Each SDK method must exist on the stub (`StubSportClient`) and work through `real.get_sport_client()`.
 2. Create `skills/catalog/stand/SKILL.md` with frontmatter (`name: stand`, `entrypoint: skills.stand`, a one-line `description`, `params` if any) and a short prose section.
 3. If the skill moves the robot, pass `cost=` (a `MotionCost`, or a function of params returning one); a timeout that depends on params is a function too (see `skills/walk.py`). If some observations should reach the model, list them in `context_observations`.
 4. Read params directly (`params["key"]`); do not re-check types, enums or ranges, which the dispatcher validates against the `SKILL.md`. Use `backend.sleep()`, never `time.sleep`. In motion loops, check `result.orphaned()` and always end with `StopMove()`.
