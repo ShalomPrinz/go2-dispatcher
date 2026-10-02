@@ -72,7 +72,7 @@ def test_turn_then_detect(tmp_path, registry):
     assert types.count("step_start") == 2 and types.count("step_result") == 2
     starts = [r for r in recs if r["type"] == "step_start"]
     results = [r for r in recs if r["type"] == "step_result"]
-    assert [r["dispatch"]["index"] for r in results] == [r["index"] for r in starts] == [1, 2]
+    assert [r["dispatch"]["index"] for r in results] == [r["dispatch"]["index"] for r in starts] == [1, 2]
     assert types[0] == "task_start" and types[-1] == "task_end"
     assert all(r["usage"] for r in recs if r["type"] == "llm_response")
     seqs = [r["seq"] for r in recs]

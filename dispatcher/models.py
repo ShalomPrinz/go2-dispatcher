@@ -137,17 +137,23 @@ class StepDispatch(_Model):
     fault: str | None = None  # stub fault kind injected, if any
 
 
-class StepResult(_Model):
-    call_index: int  # LLM call that produced the plan (1-based)
-    plan_step: int  # 1-based position within that plan
+class StepRef(_Model):
+    """Which plan step this is; every recorded step has one, built once (dispatcher/docs/run-log.md)."""
+
+    call_index: StrictInt  # LLM call that produced the plan (1-based)
+    plan_step: StrictInt  # 1-based position within that plan
     skill: str
-    params: dict[str, Any]  # dispatched: filled + normalised params; rejected: raw params as received
+    params: dict[str, Any]  # filled + normalised; raw as received for a bounds rejection
+
+
+class StepResult(_Model):
+    ref: StepRef
+    dispatch: StepDispatch | None = None  # None if not dispatched (rejected)
     outcome: StepOutcome
     error_code: str | None = None
     error_message: str | None = None  # one line, <= 200 chars, safe for LLM context
     response: SkillResponse | None = None
     duration_ms: float = 0.0  # wall clock around the subprocess; 0 if not dispatched
-    dispatch: StepDispatch | None = None  # None if not dispatched (rejected)
     exit_code: int | None = None
     pid: int | None = None  # LOG ONLY
     stderr_tail: str | None = None  # last 2000 chars; LOG ONLY, never in context

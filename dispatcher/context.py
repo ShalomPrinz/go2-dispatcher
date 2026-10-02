@@ -84,7 +84,7 @@ def format_call(skill: str, params: dict[str, Any], registry: Registry) -> str:
 
 
 def _observations(sr: StepResult, registry: Registry) -> str:
-    desc = registry.get(sr.skill)
+    desc = registry.get(sr.ref.skill)
     if desc is None or sr.response is None:
         return ""
     obs = sr.response.observations
@@ -100,7 +100,7 @@ def _failure_text(sr: StepResult) -> str:
 def render_step(sr: StepResult, registry: Registry, *, numbered: bool) -> str:
     """One line for a recorded step. ``numbered=False`` drops the ``{index}. `` prefix.
     Never includes stderr or tracebacks."""
-    call = format_call(sr.skill, sr.params, registry)
+    call = format_call(sr.ref.skill, sr.ref.params, registry)
     if sr.outcome in NOT_DISPATCHED_OUTCOMES or sr.dispatch is None:
         return f"{NOT_DISPATCHED_PREFIX}{call} -> {_failure_text(sr)}"
     if sr.outcome == "ok":

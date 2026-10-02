@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from .config import Config
     from .context import PromptSurface
     from .llm import LLMResult
-    from .models import Plan, StepDispatch, StepResult, StopMoveResult, TaskOutcome, TaskSummary
+    from .models import Plan, StepDispatch, StepRef, StepResult, StopMoveResult, TaskOutcome, TaskSummary
 
 INDEX_FILE = "index.jsonl"
 FILE_TIME_FORMAT = "%Y%m%dT%H%M%S"  # local time at task start (dispatcher/docs/run-log.md)
@@ -206,17 +206,8 @@ class RunLog:
             errors=res.errors,
         )
 
-    def step_start(self, dispatch: StepDispatch, *, call_index: int, plan_step: int, skill: str, params: dict) -> None:
-        d = dispatch.model_dump(mode="json")
-        self._write(
-            "step_start",
-            index=d.pop("index"),
-            call_index=call_index,
-            plan_step=plan_step,
-            skill=skill,
-            params=params,
-            **d,
-        )
+    def step_start(self, ref: StepRef, dispatch: StepDispatch) -> None:
+        self._write("step_start", ref=ref.model_dump(mode="json"), dispatch=dispatch.model_dump(mode="json"))
 
     def step_result(self, sr: StepResult, *, budget: MotionBudget, failures: int, posture: str) -> None:
         self._write(

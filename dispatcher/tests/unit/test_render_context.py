@@ -21,6 +21,7 @@ from dispatcher.models import (
     SkillError,
     SkillResponse,
     StepDispatch,
+    StepRef,
     StepResult,
     TaskSummary,
 )
@@ -72,10 +73,7 @@ def dispatched(index: int) -> StepDispatch:
 def ok_step(index, skill, params, *, plan_step=None, call_index=1, observations=None):
     return StepResult(
         dispatch=dispatched(index),
-        call_index=call_index,
-        plan_step=plan_step or index,
-        skill=skill,
-        params=params,
+        ref=StepRef(call_index=call_index, plan_step=plan_step or index, skill=skill, params=params),
         outcome="ok",
         response=response(skill, observations=observations),
     )
@@ -119,10 +117,9 @@ def test_format_value():
 
 def test_params_declared_order_then_extra(registry):
     sr = StepResult(
-        call_index=1,
-        plan_step=1,
-        skill="walk",
-        params={"speed": 2, "distance_m": 1.5, "direction": "forward"},
+        ref=StepRef(
+            call_index=1, plan_step=1, skill="walk", params={"speed": 2, "distance_m": 1.5, "direction": "forward"}
+        ),
         outcome="rejected",
         error_message="unknown parameter 'speed' for skill walk",
     )
@@ -134,10 +131,7 @@ def test_params_declared_order_then_extra(registry):
 
 def test_unknown_skill_received_order(registry):
     sr = StepResult(
-        call_index=1,
-        plan_step=2,
-        skill="jump",
-        params={"b": "x", "a": 1},
+        ref=StepRef(call_index=1, plan_step=2, skill="jump", params={"b": "x", "a": 1}),
         outcome="rejected",
         error_message="unknown skill",
     )
@@ -171,10 +165,7 @@ def test_long_error_cut_to_200(registry):
     msg = "x" * 250
     sr = StepResult(
         dispatch=dispatched(1),
-        call_index=1,
-        plan_step=1,
-        skill="sit",
-        params={},
+        ref=StepRef(call_index=1, plan_step=1, skill="sit", params={}),
         outcome="error",
         error_message=msg,
         response=response("sit", error="y"),
@@ -229,10 +220,7 @@ def test_after_failure(registry, update_golden):
         ok_step(1, "turn", {"direction": "left", "angle_deg": 90}),
         StepResult(
             dispatch=dispatched(2),
-            call_index=1,
-            plan_step=2,
-            skill="walk",
-            params={"direction": "forward", "distance_m": 2.0},
+            ref=StepRef(call_index=1, plan_step=2, skill="walk", params={"direction": "forward", "distance_m": 2.0}),
             outcome="error",
             error_code="sdk_error",
             error_message="Move returned 3104",
@@ -263,10 +251,7 @@ def test_after_rejection(registry, update_golden):
         PlanStep(skill="walk", params={"direction": "up", "distance_m": 9}),
     ]
     rejection = StepResult(
-        call_index=2,
-        plan_step=2,
-        skill="walk",
-        params=dict(plan[1].params),
+        ref=StepRef(call_index=2, plan_step=2, skill="walk", params=dict(plan[1].params)),
         outcome="rejected",
         error_code="bounds",
         error_message="parameter 'direction' for skill walk must be one of forward, backward, left, right, got 'up'",
@@ -302,10 +287,7 @@ def test_truncation_keeps_last_k(registry):
 def test_stderr_never_leaks(registry):
     sr = StepResult(
         dispatch=dispatched(1),
-        call_index=1,
-        plan_step=1,
-        skill="walk",
-        params={"direction": "forward", "distance_m": 1.0},
+        ref=StepRef(call_index=1, plan_step=1, skill="walk", params={"direction": "forward", "distance_m": 1.0}),
         outcome="malformed",
         error_message="no valid response line",
         stderr_tail="SECRET",
@@ -319,10 +301,7 @@ def test_stderr_never_leaks(registry):
 def test_previous_task_and_posture(registry, update_golden):
     last = StepResult(
         dispatch=dispatched(2),
-        call_index=1,
-        plan_step=2,
-        skill="sit",
-        params={},
+        ref=StepRef(call_index=1, plan_step=2, skill="sit", params={}),
         outcome="ok",
         response=response("sit", posture="sitting"),
     )

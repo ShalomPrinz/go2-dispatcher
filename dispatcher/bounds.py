@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .budget import MotionBudget
-from .models import Plan, PlanStep, StepResult
+from .models import Plan, PlanStep, StepRef, StepResult
 from .registry import ParamSpec, Registry
 
 # StepResult.error_message limit (dispatcher/docs/run-log.md, dispatcher/docs/loop-and-context.md)
@@ -147,10 +147,7 @@ def precheck(plan: Plan, stop_at: int, registry: Registry, budget: MotionBudget,
         if violations:
             return PrecheckResult(
                 rejection=StepResult(
-                    call_index=call_index,
-                    plan_step=i,
-                    skill=step.skill,
-                    params=dict(step.params),
+                    ref=StepRef(call_index=call_index, plan_step=i, skill=step.skill, params=dict(step.params)),
                     outcome="rejected",
                     error_code=BOUNDS_ERROR_CODE,
                     error_message=cut_message("; ".join(violations)),
@@ -166,10 +163,7 @@ def precheck(plan: Plan, stop_at: int, registry: Registry, budget: MotionBudget,
         if kind is not None:
             return PrecheckResult(
                 rejection=StepResult(
-                    call_index=call_index,
-                    plan_step=i,
-                    skill=step.skill,
-                    params=dict(filled),
+                    ref=StepRef(call_index=call_index, plan_step=i, skill=step.skill, params=dict(filled)),
                     outcome="motion_budget_exceeded",
                     error_code=BUDGET_ERROR_CODE,
                     error_message=cut_message(sim.exceeded_message(kind, cost)),

@@ -25,6 +25,7 @@ from .models import (
     LLMUnavailable,
     PlanStep,
     StepDispatch,
+    StepRef,
     StepResult,
     StopMoveResult,
     TaskOutcome,
@@ -307,7 +308,7 @@ class Dispatcher:
             lf = t.last_failure
             return {
                 "n": t.failures,
-                "skill": lf.skill if lf else "",
+                "skill": lf.ref.skill if lf else "",
                 "error_message": (lf.error_message or lf.outcome) if lf else "",
             }
         if outcome == "CALL_BUDGET_EXHAUSTED":
@@ -449,7 +450,12 @@ class Dispatcher:
                 self._record(t, rej)
                 t.remaining = list(enumerate(plan.steps, start=1))
                 t.remaining_tag = "abandoned"
-                t.notice_args = {"n": rej.plan_step, "skill": rej.skill, "outcome": rej.outcome, "f": t.failures}
+                t.notice_args = {
+                    "n": rej.ref.plan_step,
+                    "skill": rej.ref.skill,
+                    "outcome": rej.outcome,
+                    "f": t.failures,
+                }
                 if t.failures >= loop.max_failures:
                     return self._end(t, "FAILURE_BUDGET_EXHAUSTED")
                 t.return_reason = "failure"
@@ -495,10 +501,11 @@ class Dispatcher:
             motion_cost=desc.policy.motion_cost(params),
             fault=fault,
         )
+        ref = StepRef(call_index=t.llm_calls, plan_step=i, skill=step.skill, params=params)
         t.budget.charge(dispatch.motion_cost)
 
         self._set_phase("step")
-        t.log.step_start(dispatch, call_index=t.llm_calls, plan_step=i, skill=step.skill, params=params)
+        t.log.step_start(ref, dispatch)
         try:
             ex = self.executor.run(
                 desc,
@@ -513,14 +520,7 @@ class Dispatcher:
 
         exec_fields = {k: v for k, v in ex if k not in ("interrupt_cause", "stop_move")}  # the rest maps 1:1
         exec_fields["error_message"] = cut_message(ex.error_message) if ex.error_message else None
-        sr = StepResult(
-            **exec_fields,
-            call_index=t.llm_calls,
-            plan_step=i,
-            skill=step.skill,
-            params=params,
-            dispatch=dispatch,
-        )
+        sr = StepResult(ref=ref, dispatch=dispatch, **exec_fields)
         self._record(t, sr, ex.stop_move)
 
         if sr.outcome == "interrupted":
@@ -529,6 +529,6 @@ class Dispatcher:
         if sr.outcome in FAILURE_OUTCOMES:
             t.remaining = [(j, s) for j, s in enumerate(steps, start=1) if j > i]
             t.remaining_tag = "abandoned"
-            t.notice_args = {"n": i, "skill": sr.skill, "outcome": sr.outcome, "f": t.failures}
+            t.notice_args = {"n": i, "skill": sr.ref.skill, "outcome": sr.outcome, "f": t.failures}
             return True
         return False

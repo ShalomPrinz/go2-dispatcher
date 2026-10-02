@@ -8,7 +8,7 @@ import pytest
 
 from dispatcher.bounds import ERROR_MESSAGE_MAX, check_step, cut_message, precheck
 from dispatcher.budget import MotionBudget
-from dispatcher.models import Plan, PlanStep
+from dispatcher.models import Plan, PlanStep, StepRef
 from dispatcher.registry import ParamSpec, Registry, SkillDescriptor
 from skills.result import MotionCost, SkillPolicy
 from tests.helpers import REPO_ROOT
@@ -163,8 +163,8 @@ def test_precheck_bounds_violation_last_step(registry):
     r = res.rejection
     assert res.filled == []
     assert r is not None
-    assert (r.dispatch, r.call_index, r.plan_step, r.skill) == (None, 2, 3, "walk")
-    assert r.params == raw
+    assert r.dispatch is None
+    assert r.ref == StepRef(call_index=2, plan_step=3, skill="walk", params=raw)
     assert (r.outcome, r.error_code) == ("rejected", "bounds")
     assert r.error_message == "parameter 'distance_m' for skill walk is 99, outside 0.1 to 3"
     assert r.duration_ms == 0.0
@@ -185,8 +185,8 @@ def test_precheck_motion_budget_crossing(registry):
     res = precheck(plan, 2, registry, budget, call_index=1)
     r = res.rejection
     assert res.filled == []
-    assert (r.plan_step, r.outcome, r.error_code) == (2, "motion_budget_exceeded", "motion_budget_exceeded")
-    assert r.params == {"direction": "backward", "distance_m": 1.0}
+    assert (r.ref.plan_step, r.outcome, r.error_code) == (2, "motion_budget_exceeded", "motion_budget_exceeded")
+    assert r.ref.params == {"direction": "backward", "distance_m": 1.0}
     assert r.error_message == ("this step needs 1 m of travel but only 0.5 m remain for this task")
     assert budget.used_distance_m == 0.0  # simulated on a copy
 
@@ -215,7 +215,7 @@ def test_precheck_after_stop_at_bounds_checked_not_budget_checked(registry):
         step("walk", direction="forward", distance_m=1.5), step("walk", direction="sideways"), replan_after=1
     )
     r = precheck(bad, 1, registry, budget, call_index=1).rejection
-    assert (r.plan_step, r.outcome) == (2, "rejected")
+    assert (r.ref.plan_step, r.outcome) == (2, "rejected")
 
 
 def test_precheck_ok_fills_every_step(registry):

@@ -210,7 +210,7 @@ def test_bounds_rejection(tmp_path, registry):
     o = r.run()
     assert r.executor.runs == []
     assert o.failures == 1
-    assert o.steps[0].outcome == "rejected" and o.steps[0].plan_step == 3
+    assert o.steps[0].outcome == "rejected" and o.steps[0].ref.plan_step == 3
     user = r.user(1)
     for line in (
         "1. walk(direction=forward, distance_m=0.5) [abandoned]",
@@ -226,7 +226,7 @@ def test_motion_budget_rejection(tmp_path, registry):
     o = r.run()
     assert r.executor.runs == []
     rej = o.steps[0]
-    assert (rej.outcome, rej.plan_step) == ("motion_budget_exceeded", 2)
+    assert (rej.outcome, rej.ref.plan_step) == ("motion_budget_exceeded", 2)
     assert "travel" in rej.error_message and "0.5" in rej.error_message
     assert o.failures == 1
 
