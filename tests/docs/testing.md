@@ -72,9 +72,9 @@ The plugin's autouse fixture `_block_network` makes the default suite offline by
 ANTHROPIC_API_KEY=sk-ant-... uv run pytest --run-live -s tests/integration/test_live_llm.py
 ```
 
-It runs the task "turn left 90 degrees, then tell me if you see a chair" on the stub with `stub.detections = {chair = "center:near"}`. It passes if the task ends `DONE`, the message mentions the chair, and the run log has no `plan_invalid` or `horizon_rejection` record. With `-s`, it prints the run log path.
+It runs the task "turn left 90 degrees, then tell me if you see a chair" on the stub with `stub.detections = {chair = "center:near"}`. It passes if the task ends `DONE`, the message mentions the chair, and the run log has no `plan_invalid` record (which includes horizon rejections; [run-log.md](../../dispatcher/docs/run-log.md)). With `-s`, it prints the run log path.
 
-It uses the default LLM settings (`claude-sonnet-5-5`, `thinking = "between_tools"`, `tool_choice` auto, no `temperature`; see [llm.md](../../dispatcher/docs/llm.md#the-request)). **It has not been run live yet**; running it is the pending check of the request parameters ([roadmap.md](../../docs/roadmap.md#pending-human-work)).
+It uses the default LLM settings ([llm.md](../../dispatcher/docs/llm.md#the-request)). **It has not been run live yet**; running it is the pending check of the request parameters ([roadmap.md](../../docs/roadmap.md#pending-human-work)).
 
 ## Helpers
 
@@ -107,7 +107,7 @@ The stub fault kinds `error`, `hang`, `crash` and `garbage` ([skills.md](../../s
 
 ## Golden files
 
-`dispatcher/tests/golden/catalog.txt` is the exact catalog for the five skills (no trailing newline). The `context_*.txt` files are exact user messages: first call, after a checkpoint, after a failure, after a rejection, with a previous task, and a schema retry. `fixed_texts.txt` renders every fixed text in `prompts.py` with example arguments, one labelled section each: every operator message with and without the StopMove warning, every notice, the motion-budget message, the rejection section, the transport texts, `help_text("stub")` and both system blocks for horizon 5. Any change to the wording in `prompts.py`, the renderer, or a `SKILL.md` changes them. Run `uv run pytest --update-golden`, review the diff, and remember that changing the prompt surface changes the registry hash and makes runs incomparable across the change ([skills.md](../../skills/docs/skills.md#catalog-and-registry-hash)). The fixed texts must stay identical across experimental conditions ([loop-and-context.md](../../dispatcher/docs/loop-and-context.md)).
+`dispatcher/tests/golden/` holds the exact catalog (`catalog.txt`), the exact user messages for each context case (`context_*.txt`) and every fixed text in `prompts.py` rendered with example arguments (`fixed_texts.txt`). Any change to the wording in `prompts.py`, the renderer, or a `SKILL.md` changes them. Run `uv run pytest --update-golden`, review the diff, and remember that changing the prompt surface changes the registry hash and makes runs incomparable across the change ([skills.md](../../skills/docs/skills.md#catalog-and-registry-hash)). The fixed texts must stay identical across experimental conditions ([loop-and-context.md](../../dispatcher/docs/loop-and-context.md)).
 
 ## Robot checks
 
