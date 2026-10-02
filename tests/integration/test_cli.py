@@ -35,34 +35,35 @@ def cfg_path(tmp_path):
         '[log]\ndir = "runs"\n'
         '[robot]\nnetwork_interface = "eth0"\n'
         '[stub]\nstate_file = "runs/.stub_state.json"\ntime_scale = 0.01\n',
-        encoding="utf-8")
+        encoding="utf-8",
+    )
     return p
 
 
 def cli_env(script=None):
     env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
-    env["PYTHONPATH"] = os.pathsep.join(
-        [str(HELPERS_DIR)] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else []))
+    env["PYTHONPATH"] = os.pathsep.join([str(HELPERS_DIR)] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else []))
     env["GO2_TEST_PLANNER"] = "planner_factory:factory"
     env["GO2_TEST_SCRIPT"] = json.dumps(script or [])
     return env
 
 
 def argv(cfg_path, *args):
-    return [sys.executable, "-m", "dispatcher.transports.cli", "--config", str(cfg_path),
-            *args]
+    return [sys.executable, "-m", "dispatcher.transports.cli", "--config", str(cfg_path), *args]
 
 
 def cli(cfg_path, *args, script=None, timeout=30):
-    return subprocess.run(argv(cfg_path, *args), env=cli_env(script), cwd=cfg_path.parent,
-                          capture_output=True, text=True, timeout=timeout)
+    return subprocess.run(
+        argv(cfg_path, *args), env=cli_env(script), cwd=cfg_path.parent, capture_output=True, text=True, timeout=timeout
+    )
 
 
 def test_catalog(cfg_path):
     env = cli_env()
     env.pop("GO2_TEST_PLANNER")
-    proc = subprocess.run(argv(cfg_path, "catalog"), env=env, cwd=cfg_path.parent,
-                          capture_output=True, text=True, timeout=30)
+    proc = subprocess.run(
+        argv(cfg_path, "catalog"), env=env, cwd=cfg_path.parent, capture_output=True, text=True, timeout=30
+    )
     assert proc.returncode == 0, proc.stderr
     assert Registry.load(REPO_ROOT / "skills" / "catalog").catalog_text() in proc.stdout
     assert re.search(r"^Registry hash: [0-9a-f]{16}$", proc.stdout, re.M)
@@ -79,8 +80,7 @@ def test_reset_stub(cfg_path):
 def test_cli_does_not_import_anthropic():
     """`anthropic` is imported lazily (dispatcher/docs/llm.md); the CLI starts fast without it."""
     code = "import sys, dispatcher.transports.cli; print('anthropic' in sys.modules)"
-    proc = subprocess.run([sys.executable, "-c", code], cwd=REPO_ROOT, capture_output=True,
-                          text=True, timeout=30)
+    proc = subprocess.run([sys.executable, "-c", code], cwd=REPO_ROOT, capture_output=True, text=True, timeout=30)
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.strip() == "False"
 
@@ -116,9 +116,14 @@ def test_fault_with_real_backend(cfg_path):
 
 def test_second_run_is_locked_out_then_sigint_stops(cfg_path):
     log_dir = cfg_path.parent / "runs"
-    first = subprocess.Popen(argv(cfg_path, "--fault", "1:hang", "run", "turn left"),
-                             env=cli_env([PLAN_TURN]), cwd=cfg_path.parent,
-                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    first = subprocess.Popen(
+        argv(cfg_path, "--fault", "1:hang", "run", "turn left"),
+        env=cli_env([PLAN_TURN]),
+        cwd=cfg_path.parent,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
     try:
         deadline = time.monotonic() + WAIT_LOCK_S
         while not any(log_dir.glob("*.jsonl")) and time.monotonic() < deadline:

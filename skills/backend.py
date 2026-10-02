@@ -63,8 +63,10 @@ def backend_name() -> str:
 def _impl() -> ModuleType:
     if backend_name() == "real":
         from skills import real
+
         return real
     from skills import stub
+
     return stub
 
 
@@ -87,6 +89,7 @@ def sleep(seconds: float) -> None:
     """Real: time.sleep(seconds); stub: time.sleep(seconds * time_scale)."""
     if backend_name() == "stub":
         from skills import stub
+
         stub.sleep(seconds)
     else:
         time.sleep(seconds)

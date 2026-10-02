@@ -191,8 +191,7 @@ class StubDetector:
         if found is None:
             return DetectResult(found=False)
         position, closeness = found.split(":", 1)
-        return DetectResult(found=True, position=position, closeness=closeness,
-                            confidence=DETECT_CONFIDENCE)
+        return DetectResult(found=True, position=position, closeness=closeness, confidence=DETECT_CONFIDENCE)
 
 
 def get_sport_client() -> StubSportClient:

@@ -16,8 +16,8 @@ DIRECTION_VECTORS = {"forward": (1, 0), "backward": (-1, 0), "left": (0, 1), "ri
 
 class WalkPolicy(SkillPolicy):
     name = "walk"
-    BASE_S = 10.0     # process start + SDK init + state samples (tunable)
-    FACTOR = 1.5      # safety factor on commanded motion time (tunable)
+    BASE_S = 10.0  # process start + SDK init + state samples (tunable)
+    FACTOR = 1.5  # safety factor on commanded motion time (tunable)
 
     def timeout_s(self, p):
         return self.BASE_S + self.FACTOR * p["distance_m"] / VELOCITY_MPS
@@ -34,7 +34,8 @@ def body(params: dict):
     distance_m = motion.require_number(params, "distance_m")
     sx, sy = DIRECTION_VECTORS[direction]
     status, obs, code, msg, timing = motion.move_loop(
-        sx * VELOCITY_MPS, sy * VELOCITY_MPS, 0.0, distance_m / VELOCITY_MPS, CMD_PERIOD_S)
+        sx * VELOCITY_MPS, sy * VELOCITY_MPS, 0.0, distance_m / VELOCITY_MPS, CMD_PERIOD_S
+    )
     return status, {"direction": direction, "distance_m": distance_m, **obs}, code, msg, timing
 
 

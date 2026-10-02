@@ -38,15 +38,18 @@ def render_fixed_texts() -> str:
     """Every fixed text from prompts.py, rendered with example arguments and labelled."""
     parts: list[tuple[str, str]] = []
     for code in ALL_OUTCOMES:
-        parts.append((f"operator_message {code}",
-                      prompts.operator_message(code, **OUTCOME_ARGS[code])))
-        parts.append((f"operator_message {code} stop_move_failed",
-                      prompts.operator_message(code, stop_move_failed=True,
-                                               **OUTCOME_ARGS[code])))
+        parts.append((f"operator_message {code}", prompts.operator_message(code, **OUTCOME_ARGS[code])))
+        parts.append(
+            (
+                f"operator_message {code} stop_move_failed",
+                prompts.operator_message(code, stop_move_failed=True, **OUTCOME_ARGS[code]),
+            )
+        )
     for reason in prompts.NOTICES:
         parts.append((f"notice {reason}", prompts.notice(reason, **NOTICE_ARGS[reason])))
-    parts.append(("motion budget message", prompts.MOTION_BUDGET_MESSAGE.format(
-        need=1.5, unit="m", kind="travel", left=0.5)))
+    parts.append(
+        ("motion budget message", prompts.MOTION_BUDGET_MESSAGE.format(need=1.5, unit="m", kind="travel", left=0.5))
+    )
     parts.append(("rejection_section", prompts.rejection_section(["a bad\nthing", "b"])))
     for name in ("BUSY", "STOPPING", "NOTHING_RUNNING", "WORKING", "EMPTY_TASK"):
         parts.append((name, getattr(prompts, name)))

@@ -58,8 +58,7 @@ def sdk(monkeypatch):
 # --- move_loop -----------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("stop, suffix", [(0, ""), (5, "; StopMove returned 5")],
-                         ids=["stop_ok", "stop_fails"])
+@pytest.mark.parametrize("stop, suffix", [(0, ""), (5, "; StopMove returned 5")], ids=["stop_ok", "stop_fails"])
 def test_move_fails_mid_loop(sdk, stop, suffix):
     client = FakeClient(move=[0, 0, 7], stop=stop)
     sdk(client)
@@ -104,8 +103,7 @@ def test_orphaned_breaks_and_stops(sdk, monkeypatch):
 def test_single_action_failure_skips_settle(sdk):
     sleeps = sdk(FakeClient(stand_down=3))
     status, obs, code, msg, _ = motion.single_action("StandDown", 2.0)
-    assert (status, obs, code, msg) == ("error", {"sdk_ret": 3}, "sdk_error",
-                                        "StandDown returned 3")
+    assert (status, obs, code, msg) == ("error", {"sdk_ret": 3}, "sdk_error", "StandDown returned 3")
     assert sleeps == []
 
 
@@ -129,11 +127,14 @@ def run_stop_move(sdk, monkeypatch):
     def run(argv, client, state=None):
         sdk(client)
         if isinstance(state, BaseException):
+
             def sample():
                 raise state
         else:
+
             def sample():
                 return state or {"posture": "standing"}
+
         monkeypatch.setattr(backend, "sample_state", sample)
         monkeypatch.setattr(result, "capture_stdout", lambda: None)
         monkeypatch.setattr(sys, "argv", ["stop_move", *argv])
@@ -160,8 +161,7 @@ def test_stop_move_invalid_params_still_stops(run_stop_move):
 
 def test_stop_move_sdk_error(run_stop_move):
     out = run_stop_move(["{}"], FakeClient(stop=9))
-    assert (out["status"], out["error_code"], out["error_message"]) == (
-        "error", "sdk_error", "StopMove returned 9")
+    assert (out["status"], out["error_code"], out["error_message"]) == ("error", "sdk_error", "StopMove returned 9")
 
 
 def test_stop_move_state_error_keeps_ok(run_stop_move):

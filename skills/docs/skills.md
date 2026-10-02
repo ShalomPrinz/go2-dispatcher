@@ -171,10 +171,11 @@ Each skill module defines `class <Name>Policy(SkillPolicy)` and `POLICY = <Name>
 ```python
 class SkillPolicy:
     name: str = ""
-    context_observations: tuple[str, ...] = ()   # observation keys shown to the LLM on ok
+    context_observations: tuple[str, ...] = ()  # observation keys shown to the LLM on ok
+
     def timeout_s(self, params: dict) -> float: ...
-    def motion_cost(self, params: dict) -> MotionCost:   # default: zero
-        return MotionCost()                              # MotionCost(distance_m, rotation_deg)
+    def motion_cost(self, params: dict) -> MotionCost:  # default: zero
+        return MotionCost()  # MotionCost(distance_m, rotation_deg)
 ```
 
 `params` are the filled, checked params. Every number is a class attribute, tunable in one place:
@@ -251,21 +252,27 @@ Example: a `stand` skill (recommended before experiments, see [roadmap.md](../..
 
    SKILL = "stand"
 
+
    class StandPolicy(SkillPolicy):
        name = "stand"
-       TIMEOUT_S = 15.0   # tunable
-       SETTLE_S = 3.0     # tunable
+       TIMEOUT_S = 15.0  # tunable
+       SETTLE_S = 3.0  # tunable
+
        def timeout_s(self, p):
            return self.TIMEOUT_S
 
+
    POLICY = StandPolicy()
+
 
    def body(params: dict):
        # returns (status, observations, error_code, error_message, timing)
        return motion.single_action("StandUp", StandPolicy.SETTLE_S)
 
+
    def main() -> None:
        result.run_skill(SKILL, body)
+
 
    if __name__ == "__main__":
        main()

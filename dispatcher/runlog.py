@@ -11,7 +11,7 @@ from typing import Any, TextIO
 from .clock import Clock, MonotonicClock
 
 INDEX_FILE = "index.jsonl"
-FILE_TIME_FORMAT = "%Y%m%dT%H%M%S"     # local time at task start (dispatcher/docs/run-log.md)
+FILE_TIME_FORMAT = "%Y%m%dT%H%M%S"  # local time at task start (dispatcher/docs/run-log.md)
 RUN_ID_PREFIX_LEN = 8
 ENVELOPE_KEYS = frozenset({"ts", "t_mono_ms", "session_id", "run_id", "seq", "type"})
 
@@ -28,8 +28,7 @@ class RunLog:
     """One task's log file. ``write`` is thread-safe (``stop_requested`` comes from the
     transport thread) and flushes every line, so a crash leaves a usable partial log."""
 
-    def __init__(self, path: Path, *, session_id: str, run_id: str, t_start_mono: float,
-                 clock: Clock):
+    def __init__(self, path: Path, *, session_id: str, run_id: str, t_start_mono: float, clock: Clock):
         self.path = Path(path)
         self._session_id = session_id
         self._run_id = run_id
@@ -76,8 +75,13 @@ class RunLogFactory:
         """``clock`` is the clock ``t_start_mono`` was read from (default: monotonic)."""
         self.log_dir.mkdir(parents=True, exist_ok=True)
         name = f"{datetime.now().strftime(FILE_TIME_FORMAT)}_{run_id[:RUN_ID_PREFIX_LEN]}.jsonl"
-        return RunLog(self.log_dir / name, session_id=self.session_id, run_id=run_id,
-                      t_start_mono=t_start_mono, clock=clock or MonotonicClock())
+        return RunLog(
+            self.log_dir / name,
+            session_id=self.session_id,
+            run_id=run_id,
+            t_start_mono=t_start_mono,
+            clock=clock or MonotonicClock(),
+        )
 
     def append_index(self, row: dict) -> None:
         with self._index_lock:

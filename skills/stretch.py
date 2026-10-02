@@ -11,7 +11,7 @@ SKILL = "stretch"
 class StretchPolicy(SkillPolicy):
     name = "stretch"
     TIMEOUT_S = 20.0  # (tunable)
-    SETTLE_S = 6.0    # wait after Stretch so state_after is sampled at rest (tunable, skills/docs/robot.md)
+    SETTLE_S = 6.0  # wait after Stretch so state_after is sampled at rest (tunable, skills/docs/robot.md)
 
     def timeout_s(self, p):
         return self.TIMEOUT_S

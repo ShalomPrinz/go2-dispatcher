@@ -26,9 +26,16 @@ GOOD_INPUT = {"status": "PLAN", "steps": [{"skill": "sit", "params": {}}]}
 
 
 def message(content, stop_reason="tool_use", usage=USAGE):
-    return {"id": "msg_01", "type": "message", "role": "assistant", "model": "m",
-            "content": content, "stop_reason": stop_reason, "stop_sequence": None,
-            "usage": usage}
+    return {
+        "id": "msg_01",
+        "type": "message",
+        "role": "assistant",
+        "model": "m",
+        "content": content,
+        "stop_reason": stop_reason,
+        "stop_sequence": None,
+        "usage": usage,
+    }
 
 
 def tool_use(inp, name=TOOL_NAME, id_="toolu_1"):
@@ -36,8 +43,7 @@ def tool_use(inp, name=TOOL_NAME, id_="toolu_1"):
 
 
 def ok(body=None):
-    return httpx.Response(200, json=body or message([tool_use(GOOD_INPUT)]),
-                          headers={"request-id": "req_123"})
+    return httpx.Response(200, json=body or message([tool_use(GOOD_INPUT)]), headers={"request-id": "req_123"})
 
 
 class Harness:
@@ -52,9 +58,9 @@ class Harness:
         self.wait_result = wait_result
         cfg = make_config(tmp_path, llm=llm or {})
         transport = httpx.MockTransport(self._handle)
-        self.planner = AnthropicPlanner("test-key", cfg.llm, H,
-                                        http_client=httpx.Client(transport=transport),
-                                        wait=self._wait)
+        self.planner = AnthropicPlanner(
+            "test-key", cfg.llm, H, http_client=httpx.Client(transport=transport), wait=self._wait
+        )
 
     def _handle(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -69,10 +75,15 @@ class Harness:
         return self.wait_result
 
     def plan(self, remaining=1000.0):
-        return self.planner.plan(system=SYSTEM, user=USER, tool_schema=plan_tool_schema(H),
-                                 call_index=7, remaining_s=lambda: remaining,
-                                 stop_event=self.stop_event,
-                                 on_infra_retry=self.retries.append)
+        return self.planner.plan(
+            system=SYSTEM,
+            user=USER,
+            tool_schema=plan_tool_schema(H),
+            call_index=7,
+            remaining_s=lambda: remaining,
+            stop_event=self.stop_event,
+            on_infra_retry=self.retries.append,
+        )
 
 
 def test_request_body(tmp_path):
@@ -84,8 +95,7 @@ def test_request_body(tmp_path):
     body = json.loads(req.content)
     assert body["tool_choice"] == {"type": "auto"}
     assert body["thinking"] == {"type": "between_tools"}
-    assert body["system"] == [{"type": "text", "text": SYSTEM[0]},
-                              {"type": "text", "text": SYSTEM[1]}]
+    assert body["system"] == [{"type": "text", "text": SYSTEM[0]}, {"type": "text", "text": SYSTEM[1]}]
     assert body["messages"] == [{"role": "user", "content": USER}]
     assert body["tools"] == [plan_tool_schema(H)]
     assert "strict" not in json.dumps(body)
@@ -112,17 +122,22 @@ def test_valid_tool_use_parsed(tmp_path):
     assert r.attempts == 1
     assert r.stop_reason == "tool_use"
     assert r.response_id == "msg_01" and r.request_id == "req_123"
-    assert r.content == [{"type": "tool_use", "id": "toolu_1", "name": TOOL_NAME,
-                          "input": GOOD_INPUT, **{k: v for k, v in r.content[0].items()
-                                                  if k not in ("type", "id", "name", "input")}}]
+    assert r.content == [
+        {
+            "type": "tool_use",
+            "id": "toolu_1",
+            "name": TOOL_NAME,
+            "input": GOOD_INPUT,
+            **{k: v for k, v in r.content[0].items() if k not in ("type", "id", "name", "input")},
+        }
+    ]
     assert r.latency_ms >= 0 and r.total_ms >= r.latency_ms
     assert h.retries == [] and h.sleeps == []
 
 
 def test_first_submit_plan_block_used(tmp_path):
     second = {"status": "DONE", "steps": [], "message": "x"}
-    body = message([{"type": "text", "text": "thinking aloud"},
-                    tool_use(GOOD_INPUT), tool_use(second, id_="toolu_2")])
+    body = message([{"type": "text", "text": "thinking aloud"}, tool_use(GOOD_INPUT), tool_use(second, id_="toolu_2")])
     r = Harness(tmp_path, [ok(body)]).plan()
     assert r.plan.status == "PLAN" and len(r.content) == 3
 
@@ -143,8 +158,7 @@ def test_text_only_reply_is_no_tool_call(tmp_path):
 
 
 def test_thinking_block_before_tool_use(tmp_path):
-    body = message([{"type": "thinking", "thinking": "", "signature": "sig"},
-                    tool_use(GOOD_INPUT)])
+    body = message([{"type": "thinking", "thinking": "", "signature": "sig"}, tool_use(GOOD_INPUT)])
     r = Harness(tmp_path, [ok(body)]).plan()
     assert r.errors == [] and r.rejection_kind == "none"
     assert r.plan is not None and r.plan.steps[0].skill == "sit"
@@ -165,8 +179,7 @@ def test_529_then_200(tmp_path):
     assert h.sleeps == [1.0]
     assert len(h.retries) == 1
     rec = h.retries[0]
-    assert set(rec) == {"call_index", "attempt", "error_type", "status_code",
-                        "attempt_latency_ms", "sleep_s"}
+    assert set(rec) == {"call_index", "attempt", "error_type", "status_code", "attempt_latency_ms", "sleep_s"}
     assert rec["call_index"] == 7 and rec["attempt"] == 1
     assert rec["status_code"] == 529 and rec["sleep_s"] == 1.0
 
@@ -257,7 +270,7 @@ def test_stop_set_before_attempt(tmp_path):
 def test_backoff_longer_than_remaining(tmp_path):
     h = Harness(tmp_path, [httpx.Response(529, json={}), ok()])
     with pytest.raises(LLMInterrupted) as ei:
-        h.plan(remaining=1.0)                 # sleep 1.0 >= remaining 1.0
+        h.plan(remaining=1.0)  # sleep 1.0 >= remaining 1.0
     assert ei.value.cause == "task_time_limit" and h.retries == [] and h.sleeps == []
 
 

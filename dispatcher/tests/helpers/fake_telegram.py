@@ -23,4 +23,3 @@ def fake_context(**bot_data: Any) -> SimpleNamespace:
 def replies(update: SimpleNamespace) -> list[str]:
     """Texts passed to ``reply_text``, in order."""
     return [c.args[0] for c in update.effective_message.reply_text.await_args_list]
-

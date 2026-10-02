@@ -11,7 +11,7 @@ SKILL = "sit"
 class SitPolicy(SkillPolicy):
     name = "sit"
     TIMEOUT_S = 15.0  # (tunable)
-    SETTLE_S = 3.0    # wait after StandDown so state_after is sampled at rest (tunable, skills/docs/robot.md)
+    SETTLE_S = 3.0  # wait after StandDown so state_after is sampled at rest (tunable, skills/docs/robot.md)
 
     def timeout_s(self, p):
         return self.TIMEOUT_S

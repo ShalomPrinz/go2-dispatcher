@@ -71,8 +71,7 @@ def _watchdog(parent_pid: int) -> None:
     while os.getppid() == parent_pid:
         time.sleep(WATCHDOG_POLL_S)
     ORPHANED = True
-    print(f"orphan watchdog: parent {parent_pid} is gone; exiting in {ORPHAN_GRACE_S:g}s",
-          file=sys.stderr, flush=True)
+    print(f"orphan watchdog: parent {parent_pid} is gone; exiting in {ORPHAN_GRACE_S:g}s", file=sys.stderr, flush=True)
     time.sleep(ORPHAN_GRACE_S)
     os._exit(ORPHAN_EXIT_CODE)
 
@@ -92,8 +91,7 @@ def start_orphan_watchdog() -> None:
         print(f"orphan watchdog: ignoring invalid {PARENT_PID_ENV}={raw!r}", file=sys.stderr)
         return
     _watchdog_started = True
-    threading.Thread(target=_watchdog, args=(parent_pid,), name="orphan-watchdog",
-                     daemon=True).start()
+    threading.Thread(target=_watchdog, args=(parent_pid,), name="orphan-watchdog", daemon=True).start()
 
 
 # --- response -----------------------------------------------------------------
@@ -104,8 +102,18 @@ def one_line(text: str, limit: int = ERROR_MESSAGE_MAX_CHARS) -> str:
     return " ".join(str(text).split())[:limit]
 
 
-def build_response(skill, status, *, observations=None, error_code=None, error_message=None,
-                   state_before=None, state_after=None, state_error=None, timing=None) -> dict:
+def build_response(
+    skill,
+    status,
+    *,
+    observations=None,
+    error_code=None,
+    error_message=None,
+    state_before=None,
+    state_after=None,
+    state_error=None,
+    timing=None,
+) -> dict:
     """Pure function returning the SkillResponse dict (schema_version=1).
     status == "error" requires error_code and error_message (ValueError otherwise).
     error_message: newlines replaced by spaces, collapsed, cut to 300 chars."""
@@ -136,14 +144,18 @@ def emit(skill, status, **kwargs) -> NoReturn:
     Write line + "\\n" to the saved stdout fd, os.fsync it, then os._exit(0 if ok else 1).
     os._exit is required: DDS/SDK threads can hang normal interpreter shutdown."""
     try:
-        line = json.dumps(build_response(skill, status, **kwargs), ensure_ascii=False,
-                          separators=(",", ":"), allow_nan=False)
+        line = json.dumps(
+            build_response(skill, status, **kwargs), ensure_ascii=False, separators=(",", ":"), allow_nan=False
+        )
     except Exception as e:  # a bug in the skill: still emit one valid line
         traceback.print_exc(file=sys.stderr)
         status = "error"
         code, message = error_from_exception(e)
-        line = json.dumps(build_response(skill, status, error_code=code, error_message=message),
-                          ensure_ascii=False, separators=(",", ":"))
+        line = json.dumps(
+            build_response(skill, status, error_code=code, error_message=message),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
     for stream in (sys.stdout, sys.stderr):
         try:
             stream.flush()
@@ -250,6 +262,14 @@ def run_skill(skill: str, body: Body, *, sample_state: bool = True) -> NoReturn:
     if sample_state:
         timing["state_ms"] = round(state_s * 1000.0, 3)
     timing["total_ms"] = ms_since(t0)
-    emit(skill, status, observations=obs, error_code=code, error_message=msg,
-         state_before=state_before, state_after=state_after,
-         state_error="; ".join(state_errors) or None, timing=timing)
+    emit(
+        skill,
+        status,
+        observations=obs,
+        error_code=code,
+        error_message=msg,
+        state_before=state_before,
+        state_after=state_after,
+        state_error="; ".join(state_errors) or None,
+        timing=timing,
+    )

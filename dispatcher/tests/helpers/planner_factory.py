@@ -10,7 +10,7 @@ import os
 
 try:
     from .planner import ScriptedPlanner
-except ImportError:          # imported as a top-level module (dispatcher/tests/helpers on PYTHONPATH)
+except ImportError:  # imported as a top-level module (dispatcher/tests/helpers on PYTHONPATH)
     from planner import ScriptedPlanner  # type: ignore[no-redef]
 
 SCRIPT_ENV = "GO2_TEST_SCRIPT"

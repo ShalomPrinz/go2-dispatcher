@@ -45,11 +45,8 @@ def test_timeout_exceeds_motion_at_max_params(name):
 
 
 def test_motion_costs():
-    assert walk.POLICY.motion_cost({"direction": "forward", "distance_m": 1.5}) == \
-        MotionCost(distance_m=1.5)
-    assert turn.POLICY.motion_cost({"direction": "left", "angle_deg": 90}) == \
-        MotionCost(rotation_deg=90)
+    assert walk.POLICY.motion_cost({"direction": "forward", "distance_m": 1.5}) == MotionCost(distance_m=1.5)
+    assert turn.POLICY.motion_cost({"direction": "left", "angle_deg": 90}) == MotionCost(rotation_deg=90)
     for mod in (sit, stretch, detect_object):
         assert mod.POLICY.motion_cost({}) == MotionCost()
-    assert detect_object.POLICY.context_observations == (
-        "object_found", "position", "closeness", "confidence")
+    assert detect_object.POLICY.context_observations == ("object_found", "position", "closeness", "confidence")

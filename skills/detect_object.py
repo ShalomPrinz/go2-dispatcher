@@ -28,8 +28,7 @@ POLICY = DetectObjectPolicy()
 
 
 def unsupported_message(target: str) -> str:
-    close = difflib.get_close_matches(target, COCO_CLASSES, n=SUGGESTIONS_N,
-                                      cutoff=SUGGESTIONS_CUTOFF)
+    close = difflib.get_close_matches(target, COCO_CLASSES, n=SUGGESTIONS_N, cutoff=SUGGESTIONS_CUTOFF)
     if close:
         return f"'{target}' is not a detectable object. Closest supported: {', '.join(close)}."
     return f"'{target}' is not a detectable object."
@@ -55,8 +54,11 @@ def body(params: dict):
     timing["exec_ms"] = result.ms_since(t)
     obs["object_found"] = bool(found.found)
     if found.found:
-        obs.update(position=found.position, closeness=found.closeness,
-                   confidence=round(float(found.confidence), CONFIDENCE_DECIMALS))
+        obs.update(
+            position=found.position,
+            closeness=found.closeness,
+            confidence=round(float(found.confidence), CONFIDENCE_DECIMALS),
+        )
     return "ok", obs, None, None, timing
 
 

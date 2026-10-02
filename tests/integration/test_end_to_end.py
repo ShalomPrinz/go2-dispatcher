@@ -34,9 +34,14 @@ def build(tmp_path, registry, items, **cfg_over):
     cfg = make_config(tmp_path, **cfg_over)
     stub.write_posture(cfg.stub.initial_posture, cfg.stub.state_file)
     planner = ScriptedPlanner(items)
-    d = Dispatcher(cfg, registry, planner, Executor(cfg, cfg.base_dir),
-                   RunLogFactory(cfg.log.dir, session_id="e2e"),
-                   initial_posture=cfg.stub.initial_posture)
+    d = Dispatcher(
+        cfg,
+        registry,
+        planner,
+        Executor(cfg, cfg.base_dir),
+        RunLogFactory(cfg.log.dir, session_id="e2e"),
+        initial_posture=cfg.stub.initial_posture,
+    )
     return d, planner, cfg
 
 
@@ -46,10 +51,12 @@ def read_jsonl(path):
 
 
 def test_turn_then_detect(tmp_path, registry):
-    d, _, cfg = build(tmp_path, registry,
-                      [Plan(status="PLAN", steps=[TURN, DETECT]),
-                       Plan(status="DONE", message="I see a chair.")],
-                      stub={"detections": {"chair": "center:near"}})
+    d, _, cfg = build(
+        tmp_path,
+        registry,
+        [Plan(status="PLAN", steps=[TURN, DETECT]), Plan(status="DONE", message="I see a chair.")],
+        stub={"detections": {"chair": "center:near"}},
+    )
     o = d.run_task("turn left then look for a chair", source="test")
     assert o.outcome == "DONE", o.message
     assert [s.outcome for s in o.steps] == ["ok", "ok"]
@@ -72,10 +79,12 @@ def test_turn_then_detect(tmp_path, registry):
 
 
 def test_fault_at_step_two(tmp_path, registry):
-    d, planner, _ = build(tmp_path, registry,
-                          [Plan(status="PLAN", steps=[TURN, TURN]),
-                           Plan(status="DONE", message="done anyway")],
-                          stub={"faults": [{"step": 2, "kind": "error"}]})
+    d, planner, _ = build(
+        tmp_path,
+        registry,
+        [Plan(status="PLAN", steps=[TURN, TURN]), Plan(status="DONE", message="done anyway")],
+        stub={"faults": [{"step": 2, "kind": "error"}]},
+    )
     o = d.run_task("turn twice", source="test")
     assert o.outcome == "DONE"
     assert [s.outcome for s in o.steps] == ["ok", "error"]
@@ -85,8 +94,9 @@ def test_fault_at_step_two(tmp_path, registry):
 
 
 def test_stop_during_hang(tmp_path, registry):
-    d, _, _ = build(tmp_path, registry, [Plan(status="PLAN", steps=[TURN])],
-                    stub={"faults": [{"step": 1, "kind": "hang"}]})
+    d, _, _ = build(
+        tmp_path, registry, [Plan(status="PLAN", steps=[TURN])], stub={"faults": [{"step": 1, "kind": "hang"}]}
+    )
     timer = threading.Timer(STOP_AFTER_S, d.request_stop, args=("test",))
     t0 = time.monotonic()
     timer.start()

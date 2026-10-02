@@ -23,7 +23,7 @@ from ..registry import Registry, registry_hash
 from . import build_dispatcher, format_outcome, load_config_and_env
 
 SOURCE = "cli"
-JOIN_POLL_S = 0.2                    # main thread join period, so signals are handled (docs/running.md)
+JOIN_POLL_S = 0.2  # main thread join period, so signals are handled (docs/running.md)
 EXIT_OK = 0
 EXIT_FAIL = 1
 EXIT_USAGE = 2
@@ -40,16 +40,19 @@ BATCH_TASK_LINE = "Task {i}: {task}"
 
 
 def _parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="go2",
-                                description="Go2 LLM dispatcher command line.")
+    p = argparse.ArgumentParser(prog="go2", description="Go2 LLM dispatcher command line.")
     p.add_argument("--config", type=Path, default=None, help="config file (default ./config.toml)")
     p.add_argument("--backend", choices=("stub", "real"), help="override robot.backend")
     p.add_argument("--horizon", type=int, help="override loop.planning_horizon")
-    p.add_argument("--fault", action="append", metavar="STEP:KIND",
-                   help="inject a stub fault at dispatched step STEP (repeatable; "
-                        "replaces stub.faults)")
-    p.add_argument("--reset-stub", action="store_true",
-                   help="reset the stub state file to stub.initial_posture and exit")
+    p.add_argument(
+        "--fault",
+        action="append",
+        metavar="STEP:KIND",
+        help="inject a stub fault at dispatched step STEP (repeatable; replaces stub.faults)",
+    )
+    p.add_argument(
+        "--reset-stub", action="store_true", help="reset the stub state file to stub.initial_posture and exit"
+    )
     sub = p.add_subparsers(dest="command", metavar="COMMAND")
     run = sub.add_parser("run", help="run one task")
     run.add_argument("task", metavar="TASK")
@@ -57,8 +60,7 @@ def _parser() -> argparse.ArgumentParser:
     batch.add_argument("tasks_file", type=Path, metavar="TASKS_FILE")
     sub.add_parser("catalog", help="print system text, catalog, tool schema and registry hash")
     sub.add_parser("state", help="read the robot state and print it as JSON")
-    bot = sub.add_parser("bot", add_help=False,
-                         help="run the Telegram bot (go2 bot [--config PATH]; docs/running.md)")
+    bot = sub.add_parser("bot", add_help=False, help="run the Telegram bot (go2 bot [--config PATH]; docs/running.md)")
     bot.add_argument("bot_args", nargs=argparse.REMAINDER)
     return p
 
@@ -119,7 +121,7 @@ def cmd_state(cfg) -> int:
 
 def cmd_reset_stub(cfg) -> int:
     if cfg.robot.backend != "stub":
-        print("--reset-stub needs robot.backend = \"stub\".", file=sys.stderr)
+        print('--reset-stub needs robot.backend = "stub".', file=sys.stderr)
         return EXIT_USAGE
     process_lock.acquire(cfg.log.dir)
     stub.write_posture(cfg.stub.initial_posture, cfg.stub.state_file)
@@ -194,8 +196,7 @@ def cmd_run(cfg, task: str) -> int:
 def read_tasks(path: Path) -> list[str]:
     """Non-blank lines that do not start with ``#``, stripped."""
     lines = path.read_text(encoding="utf-8").splitlines()
-    return [ln.strip() for ln in lines
-            if ln.strip() and not ln.strip().startswith(COMMENT_PREFIX)]
+    return [ln.strip() for ln in lines if ln.strip() and not ln.strip().startswith(COMMENT_PREFIX)]
 
 
 def cmd_batch(cfg, tasks_file: Path) -> int:
@@ -224,6 +225,7 @@ def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] == ["bot"]:
         from . import telegram_bot  # lazy: keeps the Telegram library out of other commands
+
         return telegram_bot.main(argv[1:])
     parser = _parser()
     args = parser.parse_args(argv)

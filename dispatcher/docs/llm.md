@@ -15,15 +15,14 @@ An alternative LLM layer (Jev, a "TypeSafe AI" decision model) is under consider
 `AnthropicPlanner.plan()` sends exactly this (one request per attempt):
 
 ```python
-client = anthropic.Anthropic(api_key=api_key, max_retries=0)      # own retries, below
+client = anthropic.Anthropic(api_key=api_key, max_retries=0)  # own retries, below
 client.with_options(timeout=min(llm.request_timeout_s, remaining_task_s)).messages.create(
-    model=llm.model,                       # "claude-sonnet-5-5"
-    max_tokens=llm.max_tokens,             # 2048
-    system=[{"type": "text", "text": system_text},
-            {"type": "text", "text": "## Skills\n" + catalog}],
-    tools=[submit_plan_definition],        # the only tool; no "strict"
+    model=llm.model,  # "claude-sonnet-5-5"
+    max_tokens=llm.max_tokens,  # 2048
+    system=[{"type": "text", "text": system_text}, {"type": "text", "text": "## Skills\n" + catalog}],
+    tools=[submit_plan_definition],  # the only tool; no "strict"
     tool_choice={"type": "auto"},
-    thinking={"type": llm.thinking},       # "between_tools"
+    thinking={"type": llm.thinking},  # "between_tools"
     messages=[{"role": "user", "content": user_message}],
 )
 ```

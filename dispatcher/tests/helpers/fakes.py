@@ -33,11 +33,17 @@ def state(posture: str) -> RobotState:
     return RobotState(t=time.time(), backend="stub", posture=posture)
 
 
-def exec_result(outcome: str = "ok", *, skill: str = "walk",
-                observations: dict | None = None, posture: str | None = None,
-                error_code: str | None = None, error_message: str | None = None,
-                interrupt_cause: str | None = None,
-                stop_move: StopMoveResult | None = None) -> ExecResult:
+def exec_result(
+    outcome: str = "ok",
+    *,
+    skill: str = "walk",
+    observations: dict | None = None,
+    posture: str | None = None,
+    error_code: str | None = None,
+    error_message: str | None = None,
+    interrupt_cause: str | None = None,
+    stop_move: StopMoveResult | None = None,
+) -> ExecResult:
     """An ``ExecResult``. ``ok``/``error`` carry a response (with ``state_after`` if
     ``posture`` is given); other outcomes carry none."""
     response = None
@@ -46,24 +52,33 @@ def exec_result(outcome: str = "ok", *, skill: str = "walk",
             error_code = error_code or "sdk_error"
             error_message = error_message or "Move returned 1"
         response = SkillResponse(
-            schema_version=1, skill=skill, status=outcome, observations=observations or {},
+            schema_version=1,
+            skill=skill,
+            status=outcome,
+            observations=observations or {},
             error={"code": error_code, "message": error_message} if outcome == "error" else None,
-            state_after=state(posture) if posture else None)
+            state_after=state(posture) if posture else None,
+        )
     elif outcome != "ok" and error_code is None:
         error_code, error_message = outcome, error_message or f"step {outcome}"
-    return ExecResult(outcome=outcome, interrupt_cause=interrupt_cause, response=response,
-                      exit_code=0, pid=12345, duration_ms=1.0, error_code=error_code,
-                      error_message=error_message, stop_move=stop_move)
+    return ExecResult(
+        outcome=outcome,
+        interrupt_cause=interrupt_cause,
+        response=response,
+        exit_code=0,
+        pid=12345,
+        duration_ms=1.0,
+        error_code=error_code,
+        error_message=error_message,
+        stop_move=stop_move,
+    )
 
 
-def stop_move_result(reason: str = "operator", *, ok: bool = True,
-                     posture: str | None = None) -> StopMoveResult:
+def stop_move_result(reason: str = "operator", *, ok: bool = True, posture: str | None = None) -> StopMoveResult:
     response = None
     if posture is not None:
-        response = SkillResponse(schema_version=1, skill="stop_move", status="ok",
-                                 state_after=state(posture))
-    return StopMoveResult(ok=ok, reason=reason, duration_ms=1.0, exit_code=0 if ok else 1,
-                          response=response)
+        response = SkillResponse(schema_version=1, skill="stop_move", status="ok", state_after=state(posture))
+    return StopMoveResult(ok=ok, reason=reason, duration_ms=1.0, exit_code=0 if ok else 1, response=response)
 
 
 ScriptItem = ExecResult | BaseException | Callable[[dict], ExecResult]
@@ -83,9 +98,14 @@ class FakeExecutor:
     ``on_kill(cause)`` runs on every ``kill_current``.
     """
 
-    def __init__(self, results: Sequence[ScriptItem] = (), *, stop_move_ok: bool = True,
-                 stop_move_posture: str | None = None,
-                 on_kill: Callable[[str], None] | None = None):
+    def __init__(
+        self,
+        results: Sequence[ScriptItem] = (),
+        *,
+        stop_move_ok: bool = True,
+        stop_move_posture: str | None = None,
+        on_kill: Callable[[str], None] | None = None,
+    ):
         self.results = list(results)
         self.stop_move_ok = stop_move_ok
         self.stop_move_posture = stop_move_posture
@@ -94,15 +114,21 @@ class FakeExecutor:
         self.kills: list[str] = []
         self.stop_moves: list[str] = []
 
-    def run(self, skill, params: dict, *, fault, timeout_s: float, remaining_task_s: float,
-            stop_event: threading.Event) -> ExecResult:
-        call = {"skill": skill.name, "params": params, "fault": fault, "timeout_s": timeout_s,
-                "remaining_task_s": remaining_task_s, "stop_event": stop_event}
+    def run(
+        self, skill, params: dict, *, fault, timeout_s: float, remaining_task_s: float, stop_event: threading.Event
+    ) -> ExecResult:
+        call = {
+            "skill": skill.name,
+            "params": params,
+            "fault": fault,
+            "timeout_s": timeout_s,
+            "remaining_task_s": remaining_task_s,
+            "stop_event": stop_event,
+        }
         n = len(self.runs)
         self.runs.append(call)
         if n >= len(self.results):
-            raise AssertionError(f"FakeExecutor.run called {n + 1} times; "
-                                 f"only {len(self.results)} results scripted")
+            raise AssertionError(f"FakeExecutor.run called {n + 1} times; only {len(self.results)} results scripted")
         item = self.results[n]
         if isinstance(item, BaseException):
             raise item

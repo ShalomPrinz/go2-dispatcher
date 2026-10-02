@@ -66,8 +66,7 @@ def call(handler, update, context):
 
 def test_unauthorised_user_ignored(cfg):
     d = mock_dispatcher()
-    for handler, text in ((on_text, "walk forward"), (on_text, "stop"), (on_stop, "/stop"),
-                          (on_start, "/start")):
+    for handler, text in ((on_text, "walk forward"), (on_text, "stop"), (on_stop, "/stop"), (on_start, "/start")):
         u = fake_update(text, user_id=7)
         call(handler, u, fake_context(dispatcher=d, cfg=cfg))
         assert replies(u) == []
@@ -79,9 +78,11 @@ def test_missing_user_or_message_ignored(cfg):
     u = fake_update("walk", user_id=None)
     call(on_text, u, fake_context(dispatcher=d, cfg=cfg))
     assert replies(u) == []
-    call(on_text, SimpleNamespace(effective_user=SimpleNamespace(id=USER),
-                                  effective_message=None),
-         fake_context(dispatcher=d, cfg=cfg))
+    call(
+        on_text,
+        SimpleNamespace(effective_user=SimpleNamespace(id=USER), effective_message=None),
+        fake_context(dispatcher=d, cfg=cfg),
+    )
     assert d.mock_calls == []
 
 
@@ -91,8 +92,7 @@ def test_start_replies_help(cfg):
     assert replies(u) == [prompts.help_text(cfg.robot.backend)]
 
 
-@pytest.mark.parametrize("handler,text", [(on_text, "stop"), (on_text, "  Stop "),
-                                          (on_stop, "/stop")])
+@pytest.mark.parametrize("handler,text", [(on_text, "stop"), (on_text, "  Stop "), (on_stop, "/stop")])
 def test_stop_while_idle(cfg, handler, text):
     d = mock_dispatcher(stop="idle")
     u = fake_update(text, USER)
@@ -146,11 +146,16 @@ def test_handler_exception_replies_error(cfg, capsys):
 
 def test_normal_task(cfg, registry):
     turn = PlanStep(skill="turn", params={"direction": "left", "angle_deg": 90})
-    planner = ScriptedPlanner([Plan(status="PLAN", steps=[turn]),
-                               Plan(status="DONE", message="Turned left.")])
-    d = Dispatcher(cfg, registry, planner, FakeExecutor([exec_result("ok", skill="turn")]),
-                   RunLogFactory(cfg.log.dir, session_id="s1"), clock=FakeClock(),
-                   initial_posture="standing")
+    planner = ScriptedPlanner([Plan(status="PLAN", steps=[turn]), Plan(status="DONE", message="Turned left.")])
+    d = Dispatcher(
+        cfg,
+        registry,
+        planner,
+        FakeExecutor([exec_result("ok", skill="turn")]),
+        RunLogFactory(cfg.log.dir, session_id="s1"),
+        clock=FakeClock(),
+        initial_posture="standing",
+    )
     u = fake_update("  turn left  ", USER)
     call(on_text, u, fake_context(dispatcher=d, cfg=cfg))
     got = replies(u)
@@ -227,7 +232,7 @@ def test_stop_signal_kills_task_before_ptb_waits_for_handlers(cfg, registry, mon
     async def noop(*args, **kwargs):
         return None
 
-    async def bot_initialize(self):            # instead of getMe over the network
+    async def bot_initialize(self):  # instead of getMe over the network
         self._bot_user = User(id=1, is_bot=True, first_name="bot", username="test_bot")
 
     sent: list[str] = []
@@ -241,15 +246,22 @@ def test_stop_signal_kills_task_before_ptb_waits_for_handlers(cfg, registry, mon
     monkeypatch.setattr(Updater, "start_polling", noop)
     monkeypatch.setattr(telegram_bot, "format_outcome", lambda outcome, reg: "formatted")
 
-    release_after_s = 5.0              # old behaviour: the task only ends at this timeout
+    release_after_s = 5.0  # old behaviour: the task only ends at this timeout
     d = _BlockingDispatcher(registry, release_after_s)
     app = build_application(d, cfg, TOKEN)
-    update = Update.de_json({
-        "update_id": 1,
-        "message": {"message_id": 1, "date": 0, "text": "walk forward",
-                    "chat": {"id": USER, "type": "private"},
-                    "from": {"id": USER, "is_bot": False, "first_name": "Op"}},
-    }, app.bot)
+    update = Update.de_json(
+        {
+            "update_id": 1,
+            "message": {
+                "message_id": 1,
+                "date": 0,
+                "text": "walk forward",
+                "chat": {"id": USER, "type": "private"},
+                "from": {"id": USER, "is_bot": False, "first_name": "Op"},
+            },
+        },
+        app.bot,
+    )
     app.update_queue.put_nowait(update)
 
     def send_signal():
@@ -262,6 +274,6 @@ def test_stop_signal_kills_task_before_ptb_waits_for_handlers(cfg, registry, mon
     elapsed = time.monotonic() - t0
 
     assert d.events[:2] == ["request_stop:shutdown", "task_stopped"]
-    assert d.events[-1] == "shutdown"          # post_stop backstop still runs
+    assert d.events[-1] == "shutdown"  # post_stop backstop still runs
     assert elapsed < release_after_s
     assert sent == [prompts.WORKING, "formatted"]

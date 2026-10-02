@@ -43,9 +43,14 @@ def test_malformed_test_planner_exits_2(tmp_path, no_planner_env):
 
 def test_no_planner_ends_task_llm_error(tmp_path, no_planner_env):
     cfg = make_config(tmp_path)
-    d = Dispatcher(cfg, Registry.load(REPO_ROOT / "skills" / "catalog"), make_planner(cfg, need_llm=False),
-                   FakeExecutor(), RunLogFactory(cfg.log.dir, session_id="s1"),
-                   initial_posture="standing")
+    d = Dispatcher(
+        cfg,
+        Registry.load(REPO_ROOT / "skills" / "catalog"),
+        make_planner(cfg, need_llm=False),
+        FakeExecutor(),
+        RunLogFactory(cfg.log.dir, session_id="s1"),
+        initial_posture="standing",
+    )
     o = d.run_task("sit down", source="test")
     assert o.outcome == "LLM_ERROR"
     assert NO_PLANNER_DETAIL in o.message

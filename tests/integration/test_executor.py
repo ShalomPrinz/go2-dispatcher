@@ -37,11 +37,25 @@ def registry():
     return Registry.load(REPO_ROOT / "skills" / "catalog")
 
 
-def run(executor, registry, skill="turn", params=TURN, *, fault=None,
-        timeout_s=LONG_TIMEOUT_S, remaining_task_s=LONG_REMAINING_S, stop_event=None):
-    return executor.run(registry.get(skill), params, fault=fault, timeout_s=timeout_s,
-                        remaining_task_s=remaining_task_s,
-                        stop_event=stop_event or threading.Event())
+def run(
+    executor,
+    registry,
+    skill="turn",
+    params=TURN,
+    *,
+    fault=None,
+    timeout_s=LONG_TIMEOUT_S,
+    remaining_task_s=LONG_REMAINING_S,
+    stop_event=None,
+):
+    return executor.run(
+        registry.get(skill),
+        params,
+        fault=fault,
+        timeout_s=timeout_s,
+        remaining_task_s=remaining_task_s,
+        stop_event=stop_event or threading.Event(),
+    )
 
 
 def assert_group_gone(pid):
@@ -80,10 +94,17 @@ def test_fault_garbage(executor, registry):
 
 def test_wrong_skill_name_is_malformed(executor, registry):
     d = registry.get("turn")
-    other = SkillDescriptor(name="walk", entrypoint=d.entrypoint, description=d.description,
-                            params=d.params, policy=d.policy)
-    res = executor.run(other, TURN, fault=None, timeout_s=LONG_TIMEOUT_S,
-                       remaining_task_s=LONG_REMAINING_S, stop_event=threading.Event())
+    other = SkillDescriptor(
+        name="walk", entrypoint=d.entrypoint, description=d.description, params=d.params, policy=d.policy
+    )
+    res = executor.run(
+        other,
+        TURN,
+        fault=None,
+        timeout_s=LONG_TIMEOUT_S,
+        remaining_task_s=LONG_REMAINING_S,
+        stop_event=threading.Event(),
+    )
     assert res.outcome == "malformed"
 
 
@@ -100,7 +121,7 @@ def test_hang_timeout(executor, registry):
 
 
 def test_kill_current_operator(executor, registry):
-    assert executor.kill_current("operator") is False      # nothing running
+    assert executor.kill_current("operator") is False  # nothing running
     killed = []
     timer = threading.Timer(0.5, lambda: killed.append(executor.kill_current("operator")))
     timer.start()
@@ -143,12 +164,18 @@ def test_shutdown_cause(executor, registry):
 def test_child_env_has_no_secrets(executor, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-secret")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "tg-secret")
-    monkeypatch.setenv("GO2_STUB_FAULT", "crash")            # must not leak either
+    monkeypatch.setenv("GO2_STUB_FAULT", "crash")  # must not leak either
     monkeypatch.setenv("PYTHONPATH", str(REPO_ROOT / "dispatcher" / "tests" / "helpers"))
-    desc = SkillDescriptor(name="env_dump", entrypoint="skill_modules.env_dump",
-                           description="dump env keys", params={}, policy=ENV_DUMP_POLICY)
-    res = executor.run(desc, {}, fault=None, timeout_s=LONG_TIMEOUT_S,
-                       remaining_task_s=LONG_REMAINING_S, stop_event=threading.Event())
+    desc = SkillDescriptor(
+        name="env_dump",
+        entrypoint="skill_modules.env_dump",
+        description="dump env keys",
+        params={},
+        policy=ENV_DUMP_POLICY,
+    )
+    res = executor.run(
+        desc, {}, fault=None, timeout_s=LONG_TIMEOUT_S, remaining_task_s=LONG_REMAINING_S, stop_event=threading.Event()
+    )
     assert res.outcome == "ok", res
     keys = res.response.observations["env_keys"]
     assert "ANTHROPIC_API_KEY" not in keys and "TELEGRAM_BOT_TOKEN" not in keys
@@ -169,7 +196,7 @@ def test_stop_move_direct(executor):
     res = executor.stop_move(reason="internal_error")
     assert res.ok and res.reason == "internal_error" and res.exit_code == 0
     assert res.response.skill == "stop_move"
-    assert executor.kill_current("operator") is False       # never registered as current
+    assert executor.kill_current("operator") is False  # never registered as current
 
 
 def test_stop_move_never_raises(executor, monkeypatch):

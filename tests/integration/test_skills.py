@@ -25,6 +25,8 @@ VALID = {
     "detect_object": {"target": "chair"},
 }
 SKILLS = list(VALID)
+
+
 def state_file(tmp_path):
     return tmp_path / "stub_state.json"
 
@@ -98,13 +100,17 @@ policies = {n: getattr(m, "POLICY", None) and m.POLICY.name for n, m in mods.ite
 print(json.dumps({"modules": names, "heavy": heavy, "out": buf.getvalue(),
                   "policies": policies}))
 """
-    proc = subprocess.run([sys.executable, "-c", code], cwd=REPO_ROOT, capture_output=True,
-                          text=True, timeout=30, env={k: v for k, v in os.environ.items()
-                                                      if not k.startswith("GO2_")})
+    proc = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={k: v for k, v in os.environ.items() if not k.startswith("GO2_")},
+    )
     assert proc.returncode == 0, proc.stderr
     out = json.loads(proc.stdout.strip().splitlines()[-1])
-    assert {"real", "stub", "result", "backend", "motion", "stop_move", "read_state",
-            *SKILLS} <= set(out["modules"])
+    assert {"real", "stub", "result", "backend", "motion", "stop_move", "read_state", *SKILLS} <= set(out["modules"])
     assert out["heavy"] == [] and out["out"] == "" and proc.stderr == ""
     for n in SKILLS:
         assert out["policies"][n] == n
@@ -115,14 +121,12 @@ print(json.dumps({"modules": names, "heavy": heavy, "out": buf.getvalue(),
 
 def test_walk_observations(tmp_path):
     resp = run_ok("walk", {"direction": "backward", "distance_m": 0.3}, stub_env(tmp_path))
-    assert resp.observations == {"direction": "backward", "distance_m": 0.3,
-                                 "duration_s": 1.0, "sdk_ret": 0}
+    assert resp.observations == {"direction": "backward", "distance_m": 0.3, "duration_s": 1.0, "sdk_ret": 0}
 
 
 def test_turn_observations(tmp_path):
     resp = run_ok("turn", {"direction": "right", "angle_deg": 90}, stub_env(tmp_path))
-    assert resp.observations == {"direction": "right", "angle_deg": 90.0,
-                                 "duration_s": 1.6, "sdk_ret": 0}
+    assert resp.observations == {"direction": "right", "angle_deg": 90.0, "duration_s": 1.6, "sdk_ret": 0}
 
 
 # --- stub behaviour -----------------------------------------------------------------
@@ -162,8 +166,13 @@ def test_stretch_while_sitting_fails(tmp_path):
 def test_detect_found(tmp_path):
     env = stub_env(tmp_path, detections={"chair": "left:far"})
     resp = run_ok("detect_object", {"target": "  Chair "}, env)
-    assert resp.observations == {"target": "chair", "object_found": True,
-                                 "position": "left", "closeness": "far", "confidence": 0.9}
+    assert resp.observations == {
+        "target": "chair",
+        "object_found": True,
+        "position": "left",
+        "closeness": "far",
+        "confidence": 0.9,
+    }
 
 
 def test_detect_not_found_is_ok(tmp_path):
@@ -223,15 +232,23 @@ def test_orphan_watchdog_exits(tmp_path):
     env = stub_env(tmp_path, fault="hang", GO2_PARENT_PID=str(os.getppid() or 1))
     assert int(env["GO2_PARENT_PID"]) != os.getpid()
     t0 = time.monotonic()
-    proc = subprocess.run([sys.executable, "-m", "skills.walk", json.dumps(VALID["walk"])],
-                          env=env, cwd=REPO_ROOT, capture_output=True, text=True, timeout=10)
+    proc = subprocess.run(
+        [sys.executable, "-m", "skills.walk", json.dumps(VALID["walk"])],
+        env=env,
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
     assert time.monotonic() - t0 < 3.0
     assert proc.returncode == 137
     assert proc.stdout == ""
 
 
-@pytest.mark.parametrize("name,params", [("walk", {"direction": "left", "distance_m": 3.0}),
-                                         ("turn", {"direction": "right", "angle_deg": 180})])
+@pytest.mark.parametrize(
+    "name,params",
+    [("walk", {"direction": "left", "distance_m": 3.0}), ("turn", {"direction": "right", "angle_deg": 180})],
+)
 def test_orphaned_motion_loop_breaks_and_stops(tmp_path, name, params):
     env = stub_env(tmp_path, GO2_STUB_TIME_SCALE="1", GO2_PARENT_PID=str(os.getppid() or 1))
     t0 = time.monotonic()

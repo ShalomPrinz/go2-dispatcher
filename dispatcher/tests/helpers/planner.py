@@ -29,8 +29,7 @@ class ScriptedPlanner:
     or raising. Calling more times than scripted raises ``AssertionError``.
     """
 
-    def __init__(self, items: Sequence[Plan | dict | BaseException],
-                 on_call: Callable[[int], None] | None = None):
+    def __init__(self, items: Sequence[Plan | dict | BaseException], on_call: Callable[[int], None] | None = None):
         self.items = list(items)
         self.on_call = on_call
         self.calls: list[dict[str, Any]] = []
@@ -39,17 +38,30 @@ class ScriptedPlanner:
     def remaining(self) -> int:
         return len(self.items) - len(self.calls)
 
-    def plan(self, *, system: list[str], user: str, tool_schema: dict, call_index: int,
-             remaining_s: Callable[[], float], stop_event: threading.Event,
-             on_infra_retry: Callable[[dict], None]) -> LLMResult:
-        kwargs = {"system": system, "user": user, "tool_schema": tool_schema,
-                  "call_index": call_index, "remaining_s": remaining_s,
-                  "stop_event": stop_event, "on_infra_retry": on_infra_retry}
+    def plan(
+        self,
+        *,
+        system: list[str],
+        user: str,
+        tool_schema: dict,
+        call_index: int,
+        remaining_s: Callable[[], float],
+        stop_event: threading.Event,
+        on_infra_retry: Callable[[dict], None],
+    ) -> LLMResult:
+        kwargs = {
+            "system": system,
+            "user": user,
+            "tool_schema": tool_schema,
+            "call_index": call_index,
+            "remaining_s": remaining_s,
+            "stop_event": stop_event,
+            "on_infra_retry": on_infra_retry,
+        }
         n = len(self.calls)
         self.calls.append(kwargs)
         if n >= len(self.items):
-            raise AssertionError(f"ScriptedPlanner called {n + 1} times; "
-                                 f"only {len(self.items)} replies scripted")
+            raise AssertionError(f"ScriptedPlanner called {n + 1} times; only {len(self.items)} replies scripted")
         item = self.items[n]
         if self.on_call is not None:
             self.on_call(call_index)
@@ -62,8 +74,7 @@ class ScriptedPlanner:
             horizon_exceeded, kind = False, "none"
         elif isinstance(item, dict):
             tool_input = item
-            plan, errors, horizon_exceeded, kind = validate_tool_input(
-                item, _horizon_of(tool_schema))
+            plan, errors, horizon_exceeded, kind = validate_tool_input(item, _horizon_of(tool_schema))
         else:
             raise TypeError(f"unsupported scripted item: {item!r}")
         return LLMResult(
@@ -74,8 +85,7 @@ class ScriptedPlanner:
             horizon_exceeded=horizon_exceeded,
             usage=dict(SCRIPTED_USAGE),
             stop_reason="tool_use",
-            content=[{"type": "tool_use", "id": f"toolu_scripted_{n + 1}",
-                      "name": TOOL_NAME, "input": tool_input}],
+            content=[{"type": "tool_use", "id": f"toolu_scripted_{n + 1}", "name": TOOL_NAME, "input": tool_input}],
             latency_ms=0.0,
             total_ms=0.0,
             attempts=1,

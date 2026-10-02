@@ -29,8 +29,15 @@ GOOD_PARAMS = """params:
 """
 
 
-def write_skill(root: Path, folder: str, frontmatter: str, *, name: str | None = None,
-                entrypoint: str = GOOD_ENTRY, raw: bool = False) -> Path:
+def write_skill(
+    root: Path,
+    folder: str,
+    frontmatter: str,
+    *,
+    name: str | None = None,
+    entrypoint: str = GOOD_ENTRY,
+    raw: bool = False,
+) -> Path:
     """Write ``root/folder/SKILL.md``. Unless ``raw``, name/entrypoint/description are prepended."""
     d = root / folder
     d.mkdir(parents=True, exist_ok=True)
@@ -38,9 +45,7 @@ def write_skill(root: Path, folder: str, frontmatter: str, *, name: str | None =
     if raw:
         text = frontmatter
     else:
-        head = (f"name: {name if name is not None else folder}\n"
-                f"entrypoint: {entrypoint}\n"
-                "description: A demo skill.\n")
+        head = f"name: {name if name is not None else folder}\nentrypoint: {entrypoint}\ndescription: A demo skill.\n"
         text = f"---\n{head}{frontmatter}---\n\n# body\n"
     path.write_text(text, encoding="utf-8")
     return path
@@ -96,7 +101,10 @@ def test_registry_hash_stable_and_horizon_sensitive():
 
 
 def test_catalog_type_phrases(tmp_path):
-    write_skill(tmp_path, "demo", """params:
+    write_skill(
+        tmp_path,
+        "demo",
+        """params:
   a:
     type: integer
     min: 1
@@ -124,7 +132,8 @@ def test_catalog_type_phrases(tmp_path):
     max: 10
     default: 3
     description: F.
-""")
+""",
+    )
     assert Registry.load(tmp_path).catalog_text() == (
         "demo: A demo skill.\n"
         "  - a (required): integer, at least 1 steps. A.\n"
@@ -163,14 +172,17 @@ def test_missing_skills_dir(tmp_path):
         Registry.load(tmp_path / "absent")
 
 
-@pytest.mark.parametrize("text", [
-    "# no frontmatter\n",
-    "",
-    "---\nname: demo\n",                       # not closed
-    "---\nname: [unclosed\n---\n",             # invalid YAML
-    "---\n- a\n- b\n---\n",                     # not a mapping
-    "---\n---\n",                               # empty
-])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "# no frontmatter\n",
+        "",
+        "---\nname: demo\n",  # not closed
+        "---\nname: [unclosed\n---\n",  # invalid YAML
+        "---\n- a\n- b\n---\n",  # not a mapping
+        "---\n---\n",  # empty
+    ],
+)
 def test_missing_or_invalid_frontmatter(tmp_path, text):
     path = write_skill(tmp_path, "demo", text, raw=True)
     assert_registry_error(tmp_path, path)
@@ -183,8 +195,11 @@ def test_unknown_key(tmp_path):
 
 @pytest.mark.parametrize("missing", ["name", "entrypoint", "description"])
 def test_missing_required_key(tmp_path, missing):
-    lines = {"name": "name: demo", "entrypoint": f"entrypoint: {GOOD_ENTRY}",
-             "description": "description: A demo skill."}
+    lines = {
+        "name": "name: demo",
+        "entrypoint": f"entrypoint: {GOOD_ENTRY}",
+        "description": "description: A demo skill.",
+    }
     del lines[missing]
     path = write_skill(tmp_path, "demo", "---\n" + "\n".join(lines.values()) + "\n---\n", raw=True)
     assert_registry_error(tmp_path, path, missing)
@@ -200,39 +215,45 @@ def test_name_bad_pattern(tmp_path):
     assert_registry_error(tmp_path, path)
 
 
-@pytest.mark.parametrize("params", [
-    "params: [a, b]\n",                                                     # not a mapping
-    "params:\n  x: 3\n",                                                    # spec not a mapping
-    "params:\n  x:\n    description: X.\n",                                 # missing type
-    "params:\n  x:\n    type: number\n",                                    # missing description
-    "params:\n  x:\n    type: float\n    description: X.\n",                # bad type
-    "params:\n  x:\n    type: number\n    description: X.\n    color: red\n",  # unknown key
-    "params:\n  x:\n    type: enum\n    description: X.\n",                 # enum without values
-    "params:\n  x:\n    type: enum\n    values: []\n    description: X.\n",  # empty values
-    "params:\n  x:\n    type: enum\n    values: [Left]\n    description: X.\n",  # not lowercase
-    "params:\n  x:\n    type: enum\n    values: [1, 2]\n    description: X.\n",  # not strings
-    "params:\n  x:\n    type: string\n    values: [a]\n    description: X.\n",  # values on non-enum
-    "params:\n  x:\n    type: string\n    min: 1\n    description: X.\n",   # min on string
-    "params:\n  x:\n    type: enum\n    values: [a]\n    unit: m\n    description: X.\n",  # unit on enum
-    "params:\n  x:\n    type: number\n    min: low\n    description: X.\n",  # non-numeric min
-    "params:\n  x:\n    type: number\n    min: 5\n    max: 1\n    description: X.\n",  # min > max
-    "params:\n  Bad-Name:\n    type: number\n    description: X.\n",        # bad param name
-])
+@pytest.mark.parametrize(
+    "params",
+    [
+        "params: [a, b]\n",  # not a mapping
+        "params:\n  x: 3\n",  # spec not a mapping
+        "params:\n  x:\n    description: X.\n",  # missing type
+        "params:\n  x:\n    type: number\n",  # missing description
+        "params:\n  x:\n    type: float\n    description: X.\n",  # bad type
+        "params:\n  x:\n    type: number\n    description: X.\n    color: red\n",  # unknown key
+        "params:\n  x:\n    type: enum\n    description: X.\n",  # enum without values
+        "params:\n  x:\n    type: enum\n    values: []\n    description: X.\n",  # empty values
+        "params:\n  x:\n    type: enum\n    values: [Left]\n    description: X.\n",  # not lowercase
+        "params:\n  x:\n    type: enum\n    values: [1, 2]\n    description: X.\n",  # not strings
+        "params:\n  x:\n    type: string\n    values: [a]\n    description: X.\n",  # values on non-enum
+        "params:\n  x:\n    type: string\n    min: 1\n    description: X.\n",  # min on string
+        "params:\n  x:\n    type: enum\n    values: [a]\n    unit: m\n    description: X.\n",  # unit on enum
+        "params:\n  x:\n    type: number\n    min: low\n    description: X.\n",  # non-numeric min
+        "params:\n  x:\n    type: number\n    min: 5\n    max: 1\n    description: X.\n",  # min > max
+        "params:\n  Bad-Name:\n    type: number\n    description: X.\n",  # bad param name
+    ],
+)
 def test_invalid_param_spec(tmp_path, params):
     path = write_skill(tmp_path, "demo", params)
     assert_registry_error(tmp_path, path)
 
 
-@pytest.mark.parametrize("spec", [
-    "type: number\n    min: 1\n    max: 5\n    default: 9",      # above max
-    "type: number\n    min: 1\n    default: 0",                  # below min
-    "type: number\n    default: fast",                           # wrong type
-    "type: number\n    default: true",                           # bool is not a number
-    "type: integer\n    default: 2.5",                           # not an integer
-    "type: enum\n    values: [a, b]\n    default: c",            # not a value
-    "type: string\n    default: ''",                             # empty string
-    "type: string\n    default: null",                           # null
-])
+@pytest.mark.parametrize(
+    "spec",
+    [
+        "type: number\n    min: 1\n    max: 5\n    default: 9",  # above max
+        "type: number\n    min: 1\n    default: 0",  # below min
+        "type: number\n    default: fast",  # wrong type
+        "type: number\n    default: true",  # bool is not a number
+        "type: integer\n    default: 2.5",  # not an integer
+        "type: enum\n    values: [a, b]\n    default: c",  # not a value
+        "type: string\n    default: ''",  # empty string
+        "type: string\n    default: null",  # null
+    ],
+)
 def test_default_failing_its_own_checks(tmp_path, spec):
     path = write_skill(tmp_path, "demo", f"params:\n  x:\n    {spec}\n    description: X.\n")
     assert_registry_error(tmp_path, path, "default")

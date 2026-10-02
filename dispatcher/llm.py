@@ -23,17 +23,24 @@ if TYPE_CHECKING:
 # call the API (dispatcher/docs/llm.md).
 
 __all__ = [
-    "TOOL_NAME", "TOOL_REQUIRED", "STEP_REQUIRED", "plan_tool_schema",
-    "LLMResult", "PlannerClient", "AnthropicPlanner",
-    "RETRYABLE_STATUS_CODES", "RETRY_AFTER_CAP_S",
-    "ERR_MAX_TOKENS", "ERR_NO_TOOL_CALL",
+    "TOOL_NAME",
+    "TOOL_REQUIRED",
+    "STEP_REQUIRED",
+    "plan_tool_schema",
+    "LLMResult",
+    "PlannerClient",
+    "AnthropicPlanner",
+    "RETRYABLE_STATUS_CODES",
+    "RETRY_AFTER_CAP_S",
+    "ERR_MAX_TOKENS",
+    "ERR_NO_TOOL_CALL",
 ]
 
 TOOL_NAME = "submit_plan"
 TOOL_REQUIRED = ["status", "steps"]
 STEP_REQUIRED = ["skill", "params"]
 
-RETRYABLE_STATUS_CODES = frozenset({408, 409, 429})   # plus every status >= 500
+RETRYABLE_STATUS_CODES = frozenset({408, 409, 429})  # plus every status >= 500
 RETRY_AFTER_CAP_S = 30.0
 
 ERR_MAX_TOKENS = "reply was cut off; keep the plan shorter"
@@ -57,7 +64,7 @@ def plan_tool_schema(horizon: int) -> dict:
                     "type": "string",
                     "enum": ["PLAN", "DONE", "ABORT"],
                     "description": "PLAN: run the steps. DONE: task complete, no steps. "
-                                   "ABORT: cannot or should not be done, no steps.",
+                    "ABORT: cannot or should not be done, no steps.",
                 },
                 "steps": {
                     "type": "array",
@@ -66,10 +73,8 @@ def plan_tool_schema(horizon: int) -> dict:
                     "items": {
                         "type": "object",
                         "properties": {
-                            "skill": {"type": "string",
-                                      "description": "Skill name from the skill list."},
-                            "params": {"type": "object",
-                                       "description": "Parameter values for this skill."},
+                            "skill": {"type": "string", "description": "Skill name from the skill list."},
+                            "params": {"type": "object", "description": "Parameter values for this skill."},
                         },
                         "required": list(STEP_REQUIRED),
                         "additionalProperties": False,
@@ -78,13 +83,11 @@ def plan_tool_schema(horizon: int) -> dict:
                 "replan_after": {
                     "type": "integer",
                     "minimum": 1,
-                    "description": "Optional. Stop after this step number and call again "
-                                   "before running the rest.",
+                    "description": "Optional. Stop after this step number and call again before running the rest.",
                 },
                 "message": {
                     "type": "string",
-                    "description": "Required for DONE and ABORT: text for the operator. "
-                                   "Optional for PLAN.",
+                    "description": "Required for DONE and ABORT: text for the operator. Optional for PLAN.",
                 },
             },
             "required": list(TOOL_REQUIRED),
@@ -98,24 +101,32 @@ def plan_tool_schema(horizon: int) -> dict:
 
 class LLMResult(BaseModel):
     plan: Plan | None
-    tool_input: Any | None               # raw tool input as received
-    errors: list[str]                    # empty iff plan is valid
+    tool_input: Any | None  # raw tool input as received
+    errors: list[str]  # empty iff plan is valid
     rejection_kind: RejectionKind
     horizon_exceeded: bool
-    usage: dict                          # response.usage.model_dump(), verbatim
+    usage: dict  # response.usage.model_dump(), verbatim
     stop_reason: str | None
-    content: list[dict]                  # all response content blocks, model_dump()
-    latency_ms: float                    # successful attempt only
-    total_ms: float                      # whole plan() call, incl. failed attempts and backoff
-    attempts: int                        # 1 + infra retries
+    content: list[dict]  # all response content blocks, model_dump()
+    latency_ms: float  # successful attempt only
+    total_ms: float  # whole plan() call, incl. failed attempts and backoff
+    attempts: int  # 1 + infra retries
     response_id: str | None
     request_id: str | None
 
 
 class PlannerClient(Protocol):
-    def plan(self, *, system: list[str], user: str, tool_schema: dict, call_index: int,
-             remaining_s: Callable[[], float], stop_event: threading.Event,
-             on_infra_retry: Callable[[dict], None]) -> LLMResult: ...
+    def plan(
+        self,
+        *,
+        system: list[str],
+        user: str,
+        tool_schema: dict,
+        call_index: int,
+        remaining_s: Callable[[], float],
+        stop_event: threading.Event,
+        on_infra_retry: Callable[[dict], None],
+    ) -> LLMResult: ...
 
 
 def _default_wait(ev: threading.Event, s: float) -> bool:
@@ -140,7 +151,7 @@ def _retry_after_s(e: Exception) -> float | None:
 def _is_retryable(e: anthropic.APIError) -> bool:
     import anthropic
 
-    if isinstance(e, anthropic.APIConnectionError):     # includes APITimeoutError
+    if isinstance(e, anthropic.APIConnectionError):  # includes APITimeoutError
         return True
     if isinstance(e, anthropic.APIStatusError):
         return e.status_code in RETRYABLE_STATUS_CODES or e.status_code >= 500
@@ -150,20 +161,33 @@ def _is_retryable(e: anthropic.APIError) -> bool:
 class AnthropicPlanner:
     """PlannerClient over the Anthropic Messages API, with its own infra retries (dispatcher/docs/llm.md)."""
 
-    def __init__(self, api_key: str, llm_cfg: LLMConfig, horizon: int, *,
-                 http_client: httpx2.Client | None = None,
-                 wait: Callable[[threading.Event, float], bool] = _default_wait):
+    def __init__(
+        self,
+        api_key: str,
+        llm_cfg: LLMConfig,
+        horizon: int,
+        *,
+        http_client: httpx2.Client | None = None,
+        wait: Callable[[threading.Event, float], bool] = _default_wait,
+    ):
         self._cfg = llm_cfg
         self._horizon = horizon
         self._wait = wait
         import anthropic
 
-        self._client = anthropic.Anthropic(api_key=api_key, max_retries=0,
-                                           http_client=http_client)
+        self._client = anthropic.Anthropic(api_key=api_key, max_retries=0, http_client=http_client)
 
-    def plan(self, *, system: list[str], user: str, tool_schema: dict, call_index: int,
-             remaining_s: Callable[[], float], stop_event: threading.Event,
-             on_infra_retry: Callable[[dict], None]) -> LLMResult:
+    def plan(
+        self,
+        *,
+        system: list[str],
+        user: str,
+        tool_schema: dict,
+        call_index: int,
+        remaining_s: Callable[[], float],
+        stop_event: threading.Event,
+        on_infra_retry: Callable[[dict], None],
+    ) -> LLMResult:
         import anthropic
 
         cfg = self._cfg
@@ -181,8 +205,7 @@ class AnthropicPlanner:
                 resp = self._client.with_options(timeout=attempt_timeout_s).messages.create(
                     model=cfg.model,
                     max_tokens=cfg.max_tokens,
-                    system=[{"type": "text", "text": system[0]},
-                            {"type": "text", "text": system[1]}],
+                    system=[{"type": "text", "text": system[0]}, {"type": "text", "text": system[1]}],
                     tools=[tool_schema],
                     tool_choice={"type": "auto"},
                     thinking={"type": cfg.thinking},
@@ -192,22 +215,23 @@ class AnthropicPlanner:
                 attempt_latency_ms = (time.monotonic() - t_attempt) * 1000.0
                 status_code = getattr(e, "status_code", None)
                 if not _is_retryable(e) or retries >= cfg.infra_max_retries:
-                    raise LLMUnavailable(
-                        f"{type(e).__name__} {status_code or ''}".strip()) from e
+                    raise LLMUnavailable(f"{type(e).__name__} {status_code or ''}".strip()) from e
                 sleep_s = cfg.infra_backoff_s[retries]
                 retry_after = _retry_after_s(e)
                 if retry_after is not None:
                     sleep_s = min(max(sleep_s, retry_after), RETRY_AFTER_CAP_S)
                 if sleep_s >= remaining_s():
                     raise LLMInterrupted("task_time_limit") from e
-                on_infra_retry({
-                    "call_index": call_index,
-                    "attempt": retries + 1,
-                    "error_type": type(e).__name__,
-                    "status_code": status_code,
-                    "attempt_latency_ms": attempt_latency_ms,
-                    "sleep_s": sleep_s,
-                })
+                on_infra_retry(
+                    {
+                        "call_index": call_index,
+                        "attempt": retries + 1,
+                        "error_type": type(e).__name__,
+                        "status_code": status_code,
+                        "attempt_latency_ms": attempt_latency_ms,
+                        "sleep_s": sleep_s,
+                    }
+                )
                 if self._wait(stop_event, sleep_s):
                     raise LLMInterrupted("operator") from e
                 retries += 1
@@ -215,16 +239,14 @@ class AnthropicPlanner:
             latency_ms = (time.monotonic() - t_attempt) * 1000.0
             break
 
-        return self._result(resp, latency_ms=latency_ms,
-                            total_ms=(time.monotonic() - t_start) * 1000.0,
-                            attempts=retries + 1)
+        return self._result(
+            resp, latency_ms=latency_ms, total_ms=(time.monotonic() - t_start) * 1000.0, attempts=retries + 1
+        )
 
-    def _result(self, resp: Any, *, latency_ms: float, total_ms: float,
-                attempts: int) -> LLMResult:
+    def _result(self, resp: Any, *, latency_ms: float, total_ms: float, attempts: int) -> LLMResult:
         """Response handling (dispatcher/docs/llm.md). Thinking and text blocks are skipped when choosing the
         tool_use block; all blocks are kept in ``content``."""
-        block = next((b for b in resp.content
-                      if b.type == "tool_use" and b.name == TOOL_NAME), None)
+        block = next((b for b in resp.content if b.type == "tool_use" and b.name == TOOL_NAME), None)
         tool_input = block.input if block is not None else None
         plan: Plan | None = None
         horizon_exceeded = False

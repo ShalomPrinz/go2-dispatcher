@@ -17,8 +17,8 @@ DIRECTION_SIGN = {"left": 1, "right": -1}
 
 class TurnPolicy(SkillPolicy):
     name = "turn"
-    BASE_S = 10.0     # process start + SDK init + state samples (tunable)
-    FACTOR = 1.5      # safety factor on commanded motion time (tunable)
+    BASE_S = 10.0  # process start + SDK init + state samples (tunable)
+    FACTOR = 1.5  # safety factor on commanded motion time (tunable)
 
     def timeout_s(self, p):
         return self.BASE_S + self.FACTOR * math.radians(p["angle_deg"]) / YAW_RATE_RPS
@@ -34,8 +34,8 @@ def body(params: dict):
     direction = motion.require_enum(params, "direction", DIRECTIONS)
     angle_deg = motion.require_number(params, "angle_deg")
     status, obs, code, msg, timing = motion.move_loop(
-        0.0, 0.0, DIRECTION_SIGN[direction] * YAW_RATE_RPS,
-        math.radians(angle_deg) / YAW_RATE_RPS, CMD_PERIOD_S)
+        0.0, 0.0, DIRECTION_SIGN[direction] * YAW_RATE_RPS, math.radians(angle_deg) / YAW_RATE_RPS, CMD_PERIOD_S
+    )
     return status, {"direction": direction, "angle_deg": angle_deg, **obs}, code, msg, timing
 
 

@@ -22,14 +22,22 @@ from ..registry import Registry
 from ..render import render_step
 from ..runlog import RunLogFactory
 
-__all__ = ["load_config_and_env", "build_dispatcher", "format_outcome", "make_planner",
-           "initial_posture", "API_KEY_ENV", "TEST_PLANNER_ENV", "OUTCOME_MAX_CHARS",
-           "OMITTED_LINES"]
+__all__ = [
+    "load_config_and_env",
+    "build_dispatcher",
+    "format_outcome",
+    "make_planner",
+    "initial_posture",
+    "API_KEY_ENV",
+    "TEST_PLANNER_ENV",
+    "OUTCOME_MAX_CHARS",
+    "OMITTED_LINES",
+]
 
 API_KEY_ENV = "ANTHROPIC_API_KEY"
-TEST_PLANNER_ENV = "GO2_TEST_PLANNER"          # "module:factory" (tests only)
+TEST_PLANNER_ENV = "GO2_TEST_PLANNER"  # "module:factory" (tests only)
 MISSING_API_KEY = f"Missing {API_KEY_ENV}."
-OUTCOME_MAX_CHARS = 4000                         # Telegram's limit is 4096 (docs/running.md)
+OUTCOME_MAX_CHARS = 4000  # Telegram's limit is 4096 (docs/running.md)
 OMITTED_LINES = "({n} earlier lines omitted)"
 NO_PLANNER_DETAIL = "no planner configured"
 
@@ -42,9 +50,17 @@ def _exit2(message: str) -> None:
 class _NoPlanner:
     """Planner for ``need_llm=False``: every call ends the task as LLM_ERROR."""
 
-    def plan(self, *, system: list[str], user: str, tool_schema: dict, call_index: int,
-             remaining_s: Callable[[], float], stop_event: threading.Event,
-             on_infra_retry: Callable[[dict], None]) -> LLMResult:
+    def plan(
+        self,
+        *,
+        system: list[str],
+        user: str,
+        tool_schema: dict,
+        call_index: int,
+        remaining_s: Callable[[], float],
+        stop_event: threading.Event,
+        on_infra_retry: Callable[[dict], None],
+    ) -> LLMResult:
         raise LLMUnavailable(NO_PLANNER_DETAIL)
 
 
@@ -82,8 +98,9 @@ def initial_posture(cfg: Config, executor: Executor, *, reset: bool) -> str:
     return state.posture
 
 
-def build_dispatcher(cfg: Config, *, need_llm: bool, reset_stub: bool,
-                     planner: PlannerClient | None = None) -> Dispatcher:
+def build_dispatcher(
+    cfg: Config, *, need_llm: bool, reset_stub: bool, planner: PlannerClient | None = None
+) -> Dispatcher:
     """Lock, registry, stub reset, planner, executor, run log factory (docs/running.md)."""
     process_lock.acquire(cfg.log.dir)
     try:
@@ -96,9 +113,14 @@ def build_dispatcher(cfg: Config, *, need_llm: bool, reset_stub: bool,
         planner = make_planner(cfg, need_llm=need_llm)
     executor = Executor(cfg, cfg.base_dir)
     posture = initial_posture(cfg, executor, reset=reset_stub)
-    dispatcher = Dispatcher(cfg, registry, planner, executor,
-                            RunLogFactory(cfg.log.dir, session_id=uuid.uuid4().hex),
-                            initial_posture=posture)
+    dispatcher = Dispatcher(
+        cfg,
+        registry,
+        planner,
+        executor,
+        RunLogFactory(cfg.log.dir, session_id=uuid.uuid4().hex),
+        initial_posture=posture,
+    )
     atexit.register(dispatcher.shutdown, 0)
     return dispatcher
 
@@ -107,8 +129,7 @@ def format_outcome(outcome: TaskOutcome, registry: Registry) -> str:
     """Plain-text outcome for the operator (docs/running.md); oldest step lines are dropped if the
     whole text would exceed ``OUTCOME_MAX_CHARS``."""
     dispatched = sum(1 for s in outcome.steps if s.index is not None)
-    head = [f"{outcome.outcome}: {outcome.message}",
-            f"Steps: {dispatched} run, {outcome.failures} failed"]
+    head = [f"{outcome.outcome}: {outcome.message}", f"Steps: {dispatched} run, {outcome.failures} failed"]
     steps = [render_step(s, registry, numbered=True) for s in outcome.steps]
     text = "\n".join(head + steps)
     dropped = 0

@@ -52,15 +52,22 @@ def done(message="all done"):
 
 
 class Rig:
-    def __init__(self, tmp_path, registry, items, results=(), *, on_call=None,
-                 executor=None, posture="standing", **cfg):
+    def __init__(
+        self, tmp_path, registry, items, results=(), *, on_call=None, executor=None, posture="standing", **cfg
+    ):
         self.cfg = make_config(tmp_path, **cfg)
         self.planner = ScriptedPlanner(items, on_call=on_call)
         self.executor = executor or FakeExecutor(results)
         self.clock = FakeClock()
-        self.d = Dispatcher(self.cfg, registry, self.planner, self.executor,
-                            RunLogFactory(self.cfg.log.dir, session_id="s1"),
-                            clock=self.clock, initial_posture=posture)
+        self.d = Dispatcher(
+            self.cfg,
+            registry,
+            self.planner,
+            self.executor,
+            RunLogFactory(self.cfg.log.dir, session_id="s1"),
+            clock=self.clock,
+            initial_posture=posture,
+        )
 
     def run(self, task="do the thing"):
         return self.d.run_task(task, source="test")
@@ -102,9 +109,9 @@ def test_abort_with_question(tmp_path, registry):
 
 
 def test_checkpoint(tmp_path, registry):
-    r = Rig(tmp_path, registry,
-            [plan(walk(), turn(), detect(), replan_after=1), plan(turn()), done()],
-            [exec_result()] * 2)
+    r = Rig(
+        tmp_path, registry, [plan(walk(), turn(), detect(), replan_after=1), plan(turn()), done()], [exec_result()] * 2
+    )
     o = r.run()
     assert o.outcome == "DONE"
     user = r.user(1)
@@ -115,8 +122,12 @@ def test_checkpoint(tmp_path, registry):
 
 
 def test_failure_abandons_rest(tmp_path, registry):
-    r = Rig(tmp_path, registry, [plan(walk(), turn(), detect()), done()],
-            [exec_result(), exec_result("error", skill="turn")])
+    r = Rig(
+        tmp_path,
+        registry,
+        [plan(walk(), turn(), detect()), done()],
+        [exec_result(), exec_result("error", skill="turn")],
+    )
     o = r.run()
     assert len(r.executor.runs) == 2
     assert o.failures == 1
@@ -127,8 +138,7 @@ def test_failure_abandons_rest(tmp_path, registry):
 
 
 def test_failure_budget(tmp_path, registry):
-    r = Rig(tmp_path, registry, [plan(walk())] * 3, [exec_result("error")] * 3,
-            loop={"max_failures": 3})
+    r = Rig(tmp_path, registry, [plan(walk())] * 3, [exec_result("error")] * 3, loop={"max_failures": 3})
     o = r.run()
     assert o.outcome == "FAILURE_BUDGET_EXHAUSTED"
     assert len(r.planner.calls) == 3
@@ -144,8 +154,7 @@ def test_checkpoints_never_count(tmp_path, registry):
 
 
 def test_call_budget(tmp_path, registry):
-    r = Rig(tmp_path, registry, [plan(walk(0.2))] * 4, [exec_result()] * 4,
-            loop={"max_llm_calls": 4})
+    r = Rig(tmp_path, registry, [plan(walk(0.2))] * 4, [exec_result()] * 4, loop={"max_llm_calls": 4})
     o = r.run()
     assert o.outcome == "CALL_BUDGET_EXHAUSTED"
     assert len(r.planner.calls) == 4 and o.llm_calls == 4
@@ -174,8 +183,7 @@ def test_schema_retry_failure(tmp_path, registry):
 
 def test_horizon_rejection(tmp_path, registry):
     too_long = {"status": "PLAN", "steps": [walk().model_dump()] * 3}
-    r = Rig(tmp_path, registry, [too_long, plan(turn()), done()], [exec_result()],
-            loop={"planning_horizon": 2})
+    r = Rig(tmp_path, registry, [too_long, plan(turn()), done()], [exec_result()], loop={"planning_horizon": 2})
     o = r.run()
     assert o.outcome == "DONE"
     hr = records(o, "horizon_rejection")
@@ -191,16 +199,17 @@ def test_bounds_rejection(tmp_path, registry):
     assert o.failures == 1
     assert o.steps[0].outcome == "rejected" and o.steps[0].plan_step == 3
     user = r.user(1)
-    for line in ("1. walk(direction=forward, distance_m=0.5) [abandoned]",
-                 "2. turn(direction=left, angle_deg=90) [abandoned]",
-                 "3. walk(direction=forward, distance_m=99) [abandoned]"):
+    for line in (
+        "1. walk(direction=forward, distance_m=0.5) [abandoned]",
+        "2. turn(direction=left, angle_deg=90) [abandoned]",
+        "3. walk(direction=forward, distance_m=99) [abandoned]",
+    ):
         assert line in user
     assert "- rejected before running: walk(" in user
 
 
 def test_motion_budget_rejection(tmp_path, registry):
-    r = Rig(tmp_path, registry, [plan(walk(1.5), walk(1.0)), done()],
-            motion_budget={"max_distance_m": 2})
+    r = Rig(tmp_path, registry, [plan(walk(1.5), walk(1.0)), done()], motion_budget={"max_distance_m": 2})
     o = r.run()
     assert r.executor.runs == []
     rej = o.steps[0]
@@ -233,8 +242,9 @@ def test_llm_interrupted_operator(tmp_path, registry):
 
 
 def test_stop_during_step(tmp_path, registry):
-    res = exec_result("interrupted", interrupt_cause="operator",
-                      stop_move=stop_move_result("operator", posture="standing"))
+    res = exec_result(
+        "interrupted", interrupt_cause="operator", stop_move=stop_move_result("operator", posture="standing")
+    )
     r = Rig(tmp_path, registry, [plan(walk(), turn())], [res])
     o = r.run()
     assert o.outcome == "STOPPED"
@@ -296,6 +306,7 @@ def _blocking_step(entered: threading.Event, release: threading.Event):
         entered.set()
         release.wait(WAIT_S)
         return exec_result()
+
     return step
 
 
@@ -403,8 +414,12 @@ def test_previous_task(tmp_path, registry):
 def test_posture(tmp_path, registry):
     sit = PlanStep(skill="sit", params={})
     timeout = exec_result("timeout", stop_move=stop_move_result("step_timeout"))
-    r = Rig(tmp_path, registry, [plan(sit), done(), plan(walk()), done()],
-            [exec_result(skill="sit", posture="sitting"), timeout])
+    r = Rig(
+        tmp_path,
+        registry,
+        [plan(sit), done(), plan(walk()), done()],
+        [exec_result(skill="sit", posture="sitting"), timeout],
+    )
     r.run("sit down")
     assert "Posture: sitting" in r.user(1)
     r.run("walk")
@@ -418,8 +433,7 @@ def test_stop_move_failure_warns(tmp_path, registry):
         call["stop_event"].set()
         return exec_result()
 
-    r = Rig(tmp_path, registry, [plan(walk(), turn())],
-            executor=FakeExecutor([step1], stop_move_ok=False))
+    r = Rig(tmp_path, registry, [plan(walk(), turn())], executor=FakeExecutor([step1], stop_move_ok=False))
     o = r.run()
     assert o.outcome == "STOPPED"
     assert o.stop_move_failed is True
@@ -427,8 +441,13 @@ def test_stop_move_failure_warns(tmp_path, registry):
 
 
 def test_fault_lookup(tmp_path, registry):
-    r = Rig(tmp_path, registry, [plan(walk(), turn(), detect()), done()], [exec_result()] * 3,
-            stub={"faults": [{"step": 2, "kind": "error"}]})
+    r = Rig(
+        tmp_path,
+        registry,
+        [plan(walk(), turn(), detect()), done()],
+        [exec_result()] * 3,
+        stub={"faults": [{"step": 2, "kind": "error"}]},
+    )
     r.run()
     assert [c["fault"] for c in r.executor.runs] == [None, "error", None]
 
@@ -478,8 +497,7 @@ def test_stop_during_schema_retry_call(tmp_path, registry):
         if call_index == 2:
             planner_ref["p"].calls[-1]["stop_event"].set()
 
-    r = Rig(tmp_path, registry, [{"status": "PLAN", "steps": []}, plan(walk())],
-            on_call=on_call)
+    r = Rig(tmp_path, registry, [{"status": "PLAN", "steps": []}, plan(walk())], on_call=on_call)
     planner_ref["p"] = r.planner
     o = r.run()
     assert o.outcome == "STOPPED"
@@ -501,8 +519,7 @@ def test_dispatcher_stop_move_updates_posture(tmp_path, registry):
         call["stop_event"].set()
         return exec_result()
 
-    r = Rig(tmp_path, registry, [plan(walk(), turn())],
-            executor=FakeExecutor([step1], stop_move_posture="sitting"))
+    r = Rig(tmp_path, registry, [plan(walk(), turn())], executor=FakeExecutor([step1], stop_move_posture="sitting"))
     o = r.run()
     assert o.outcome == "STOPPED"
     assert r.d.posture == o.final_posture == "sitting"

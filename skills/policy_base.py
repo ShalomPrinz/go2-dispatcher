@@ -16,7 +16,7 @@ class SkillPolicy:
     """Per-skill dispatcher policy. Every number is a class attribute (skills/docs/skills.md)."""
 
     name: str = ""
-    context_observations: tuple[str, ...] = ()   # observation keys shown to the LLM on ok
+    context_observations: tuple[str, ...] = ()  # observation keys shown to the LLM on ok
 
     def timeout_s(self, params: dict) -> float:
         raise NotImplementedError

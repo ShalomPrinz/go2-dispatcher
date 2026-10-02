@@ -10,10 +10,14 @@ from skills import result
 from skills.result import build_response
 
 
-@pytest.mark.parametrize("kwargs", [
-    {"error_message": "boom"},
-    {"error_code": "sdk_error"},
-], ids=["missing_code", "missing_message"])
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"error_message": "boom"},
+        {"error_code": "sdk_error"},
+    ],
+    ids=["missing_code", "missing_message"],
+)
 def test_error_without_code_or_message_raises(kwargs):
     with pytest.raises(ValueError):
         build_response("walk", "error", **kwargs)

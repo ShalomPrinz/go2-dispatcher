@@ -24,9 +24,9 @@ STOP_MOVE_MODULE = "skills.stop_move"
 READ_STATE_MODULE = "skills.read_state"
 UTILITY_SKILL_NAMES = {STOP_MOVE_MODULE: "stop_move", READ_STATE_MODULE: "read_state"}
 
-POLL_INTERVAL_S = 0.05          # wait-loop poll period (docs/safety.md)
-READER_JOIN_TIMEOUT_S = 2.0     # join timeout per reader thread (docs/safety.md)
-STDERR_TAIL_CHARS = 2000        # stderr kept for the log (skills/docs/skills.md)
+POLL_INTERVAL_S = 0.05  # wait-loop poll period (docs/safety.md)
+READER_JOIN_TIMEOUT_S = 2.0  # join timeout per reader thread (docs/safety.md)
+STDERR_TAIL_CHARS = 2000  # stderr kept for the log (skills/docs/skills.md)
 
 InterruptCause = Literal["operator", "task_time_limit", "shutdown"]
 KillCause = Literal["operator", "task_time_limit", "shutdown", "step_timeout"]
@@ -128,26 +128,36 @@ class Executor:
 
     def _env(self, fault: str | None) -> dict[str, str]:
         env = {k: v for k, v in os.environ.items() if k not in SECRET_ENV and k != FAULT_ENV}
-        env.update({
-            "PYTHONUNBUFFERED": "1",
-            "GO2_BACKEND": self.cfg.robot.backend,
-            "GO2_IFACE": self.cfg.robot.network_interface,
-            "GO2_YOLO_WEIGHTS": str(self.cfg.robot.yolo_weights),
-            "GO2_STUB_STATE_FILE": str(self.cfg.stub.state_file),
-            "GO2_STUB_TIME_SCALE": repr(self.cfg.stub.time_scale),
-            "GO2_STUB_DETECTIONS": json.dumps(self.cfg.stub.detections),
-            "GO2_PARENT_PID": str(os.getpid()),
-        })
+        env.update(
+            {
+                "PYTHONUNBUFFERED": "1",
+                "GO2_BACKEND": self.cfg.robot.backend,
+                "GO2_IFACE": self.cfg.robot.network_interface,
+                "GO2_YOLO_WEIGHTS": str(self.cfg.robot.yolo_weights),
+                "GO2_STUB_STATE_FILE": str(self.cfg.stub.state_file),
+                "GO2_STUB_TIME_SCALE": repr(self.cfg.stub.time_scale),
+                "GO2_STUB_DETECTIONS": json.dumps(self.cfg.stub.detections),
+                "GO2_PARENT_PID": str(os.getpid()),
+            }
+        )
         if fault:
             env[FAULT_ENV] = fault
         return env
 
     def _popen(self, module: str, params: dict, env: dict[str, str]) -> subprocess.Popen:
         argv = [sys.executable, "-m", module, json.dumps(params)]
-        return subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE, text=True, encoding="utf-8",
-                                errors="replace", cwd=self.base_dir, env=env,
-                                start_new_session=True)
+        return subprocess.Popen(
+            argv,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            cwd=self.base_dir,
+            env=env,
+            start_new_session=True,
+        )
 
     # --- kill (docs/safety.md) --------------------------------------------------------------
 
@@ -171,9 +181,16 @@ class Executor:
 
     # --- run (skills/docs/skills.md, docs/safety.md) -----------------------------------------------------------
 
-    def run(self, skill: SkillDescriptor, params: dict, *, fault: str | None,
-            timeout_s: float, remaining_task_s: float,
-            stop_event: threading.Event) -> ExecResult:
+    def run(
+        self,
+        skill: SkillDescriptor,
+        params: dict,
+        *,
+        fault: str | None,
+        timeout_s: float,
+        remaining_task_s: float,
+        stop_event: threading.Event,
+    ) -> ExecResult:
         t0 = time.monotonic()
         proc = self._popen(skill.entrypoint, params, self._env(fault))
         readers = _Readers(proc)
@@ -201,8 +218,9 @@ class Executor:
         duration_ms = _ms(t0)
 
         response = _parse_response(readers.stdout, skill.name)
-        common = dict(exit_code=rc, pid=proc.pid, duration_ms=duration_ms,
-                      stderr_tail=readers.stderr_tail, response=response)
+        common = dict(
+            exit_code=rc, pid=proc.pid, duration_ms=duration_ms, stderr_tail=readers.stderr_tail, response=response
+        )
 
         if cause is not None:
             outcome, code, template = _KILL_OUTCOMES[cause]
@@ -210,24 +228,29 @@ class Executor:
             return ExecResult(
                 outcome=outcome,
                 interrupt_cause=None if cause == "step_timeout" else cause,
-                error_code=code, error_message=template.format(timeout_s=timeout_s),
-                stop_move=stop, **common)
+                error_code=code,
+                error_message=template.format(timeout_s=timeout_s),
+                stop_move=stop,
+                **common,
+            )
 
         if response is None:
             return ExecResult(
-                outcome="malformed", error_code="malformed",
+                outcome="malformed",
+                error_code="malformed",
                 error_message=f"skill process exited with code {rc} without a valid response",
-                **common)
+                **common,
+            )
         return ExecResult(
             outcome=response.status,
             error_code=response.error.code if response.error else None,
             error_message=response.error.message if response.error else None,
-            **common)
+            **common,
+        )
 
     # --- utilities (docs/safety.md) ------------------------------------------------------------
 
-    def _run_utility(self, module: str, timeout_s: float
-                     ) -> tuple[int | None, SkillResponse | None, str | None, float]:
+    def _run_utility(self, module: str, timeout_s: float) -> tuple[int | None, SkillResponse | None, str | None, float]:
         """Run a utility (never registered as current). Returns
         (exit_code, response, stderr_tail, duration_ms)."""
         t0 = time.monotonic()
@@ -246,16 +269,19 @@ class Executor:
         """Never raises: any failure is returned as ``ok=False`` with the error in stderr_tail."""
         t0 = time.monotonic()
         try:
-            rc, response, tail, duration_ms = self._run_utility(
-                STOP_MOVE_MODULE, self.cfg.robot.stop_move_timeout_s)
+            rc, response, tail, duration_ms = self._run_utility(STOP_MOVE_MODULE, self.cfg.robot.stop_move_timeout_s)
         except Exception as e:  # noqa: BLE001 - the stop path must not raise (docs/safety.md)
-            return StopMoveResult(ok=False, reason=reason, duration_ms=_ms(t0),
-                                  stderr_tail=f"{type(e).__name__}: {e}"[-STDERR_TAIL_CHARS:])
+            return StopMoveResult(
+                ok=False,
+                reason=reason,
+                duration_ms=_ms(t0),
+                stderr_tail=f"{type(e).__name__}: {e}"[-STDERR_TAIL_CHARS:],
+            )
         ok = response is not None and response.status == "ok"
-        return StopMoveResult(ok=ok, reason=reason, duration_ms=duration_ms,
-                              exit_code=rc, response=response, stderr_tail=tail)
+        return StopMoveResult(
+            ok=ok, reason=reason, duration_ms=duration_ms, exit_code=rc, response=response, stderr_tail=tail
+        )
 
     def read_state(self) -> RobotState | None:
-        _, response, _, _ = self._run_utility(READ_STATE_MODULE,
-                                              self.cfg.robot.read_state_timeout_s)
+        _, response, _, _ = self._run_utility(READ_STATE_MODULE, self.cfg.robot.read_state_timeout_s)
         return response.state_after if response is not None else None

@@ -13,16 +13,40 @@ from .budget import (
 from .models import TaskOutcomeCode
 
 __all__ = [
-    "SYSTEM_TEMPLATE", "SKILLS_HEADER", "system_text", "system_blocks",
-    "SECTION_PREVIOUS_TASK", "SECTION_ROBOT", "SECTION_TASK", "SECTION_BUDGET",
-    "SECTION_EXECUTED", "SECTION_REMAINING", "SECTION_NOTICE", "SECTION_SEPARATOR",
-    "NONE", "NOTHING_YET", "OMITTED_ENTRIES",
-    "PREVIOUS_TASK_TEMPLATE", "POSTURE_TEMPLATE", "BUDGET_TEMPLATE",
-    "NOTICES", "notice",
-    "REJECTION_HEADER", "REJECTION_FOOTER", "rejection_section",
+    "SYSTEM_TEMPLATE",
+    "SKILLS_HEADER",
+    "system_text",
+    "system_blocks",
+    "SECTION_PREVIOUS_TASK",
+    "SECTION_ROBOT",
+    "SECTION_TASK",
+    "SECTION_BUDGET",
+    "SECTION_EXECUTED",
+    "SECTION_REMAINING",
+    "SECTION_NOTICE",
+    "SECTION_SEPARATOR",
+    "NONE",
+    "NOTHING_YET",
+    "OMITTED_ENTRIES",
+    "PREVIOUS_TASK_TEMPLATE",
+    "POSTURE_TEMPLATE",
+    "BUDGET_TEMPLATE",
+    "NOTICES",
+    "notice",
+    "REJECTION_HEADER",
+    "REJECTION_FOOTER",
+    "rejection_section",
     "MOTION_BUDGET_MESSAGE",
-    "OPERATOR_MESSAGES", "STOP_MOVE_WARNING", "operator_message",
-    "BUSY", "STOPPING", "NOTHING_RUNNING", "WORKING", "EMPTY_TASK", "HELP", "help_text",
+    "OPERATOR_MESSAGES",
+    "STOP_MOVE_WARNING",
+    "operator_message",
+    "BUSY",
+    "STOPPING",
+    "NOTHING_RUNNING",
+    "WORKING",
+    "EMPTY_TASK",
+    "HELP",
+    "help_text",
 ]
 
 # --- System (S1, S2), dispatcher/docs/loop-and-context.md ---------------------------------------------------
@@ -73,12 +97,7 @@ NONE = "(none)"
 NOTHING_YET = "(nothing yet)"
 OMITTED_ENTRIES = "({n} earlier entries omitted)"
 
-PREVIOUS_TASK_TEMPLATE = (
-    "Task: {task}\n"
-    "Outcome: {outcome}\n"
-    "Message: {message}\n"
-    "Last step: {last_step}"
-)
+PREVIOUS_TASK_TEMPLATE = "Task: {task}\nOutcome: {outcome}\nMessage: {message}\nLast step: {last_step}"
 POSTURE_TEMPLATE = "Posture: {posture}"
 BUDGET_TEMPLATE = (
     "Travel: {travel_used} of {travel_max} m used\n"
@@ -91,14 +110,20 @@ BUDGET_TEMPLATE = (
 
 NOTICES: dict[str, str] = {
     "initial": NONE,
-    "plan_complete": ("Your previous plan ran to completion. Return DONE with a message if the "
-                      "task is complete; otherwise plan the next steps."),
-    "checkpoint": ("You asked to review results after step {n} of your previous plan. Its "
-                   "remaining steps are listed under \"Remaining plan\"; include them again if "
-                   "you still want them."),
-    "failure": ("Your previous plan failed at step {n} ({skill}): {outcome}. This is failure "
-                "{f} of {max_failures}. Revise the plan to avoid that failure, or return ABORT "
-                "with a message if the task cannot be done."),
+    "plan_complete": (
+        "Your previous plan ran to completion. Return DONE with a message if the "
+        "task is complete; otherwise plan the next steps."
+    ),
+    "checkpoint": (
+        "You asked to review results after step {n} of your previous plan. Its "
+        'remaining steps are listed under "Remaining plan"; include them again if '
+        "you still want them."
+    ),
+    "failure": (
+        "Your previous plan failed at step {n} ({skill}): {outcome}. This is failure "
+        "{f} of {max_failures}. Revise the plan to avoid that failure, or return ABORT "
+        "with a message if the task cannot be done."
+    ),
 }
 
 
@@ -126,12 +151,13 @@ OPERATOR_MESSAGES: dict[str, str] = {
     "DONE": "{message}",
     "ABORTED": "{message}",
     "STOPPED": "Stopped on request. A stop command was sent to the robot.",
-    "TIME_LIMIT_EXCEEDED": ("Stopped: the task exceeded its {limit:g}s time limit. "
-                            "A stop command was sent to the robot."),
-    "FAILURE_BUDGET_EXHAUSTED": ("Stopped: the robot failed {n} times while trying this task. "
-                                 "Last failure: {skill}: {error_message}"),
-    "CALL_BUDGET_EXHAUSTED": ("Stopped: the task reached the limit of {n} planning calls "
-                              "without finishing."),
+    "TIME_LIMIT_EXCEEDED": (
+        "Stopped: the task exceeded its {limit:g}s time limit. A stop command was sent to the robot."
+    ),
+    "FAILURE_BUDGET_EXHAUSTED": (
+        "Stopped: the robot failed {n} times while trying this task. Last failure: {skill}: {error_message}"
+    ),
+    "CALL_BUDGET_EXHAUSTED": ("Stopped: the task reached the limit of {n} planning calls without finishing."),
     "LLM_INVALID": "Stopped: the model returned an invalid plan twice.",
     "LLM_ERROR": "Stopped: the model could not be reached ({detail}).",
     "INTERNAL_ERROR": "Stopped: internal error ({exception_type}). See run log {run_id}.",
@@ -139,8 +165,7 @@ OPERATOR_MESSAGES: dict[str, str] = {
 STOP_MOVE_WARNING = " WARNING: the stop command to the robot failed. Stop the robot manually."
 
 
-def operator_message(outcome: TaskOutcomeCode, *, stop_move_failed: bool = False,
-                     **args: Any) -> str:
+def operator_message(outcome: TaskOutcomeCode, *, stop_move_failed: bool = False, **args: Any) -> str:
     """Operator text for ``outcome``. Arguments by outcome: DONE/ABORTED ``message``;
     TIME_LIMIT_EXCEEDED ``limit``; FAILURE_BUDGET_EXHAUSTED ``n``, ``skill``,
     ``error_message``; CALL_BUDGET_EXHAUSTED ``n``; LLM_ERROR ``detail``;
@@ -156,8 +181,7 @@ STOPPING = "Stopping."
 NOTHING_RUNNING = "Nothing is running."
 WORKING = "Working on it."
 EMPTY_TASK = "Send a task, for example: walk forward one metre."
-HELP = ('I control the Go2 robot. Send a task in plain words. Send "stop" to stop the '
-        'current task. Backend: {backend}.')
+HELP = 'I control the Go2 robot. Send a task in plain words. Send "stop" to stop the current task. Backend: {backend}.'
 
 
 def help_text(backend: str) -> str:

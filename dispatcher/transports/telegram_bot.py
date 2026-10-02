@@ -29,20 +29,32 @@ from ..dispatcher import Dispatcher
 from ..models import BusyError
 from . import build_dispatcher, format_outcome, load_config_and_env
 
-__all__ = ["build_application", "on_start", "on_stop", "on_text", "on_post_init",
-           "on_post_stop", "on_stop_signal", "main", "TOKEN_ENV", "SOURCE", "STOP_WORD",
-           "SHUTDOWN_EXTRA_S", "STOP_SIGNALS", "SHUTDOWN_SOURCE"]
+__all__ = [
+    "build_application",
+    "on_start",
+    "on_stop",
+    "on_text",
+    "on_post_init",
+    "on_post_stop",
+    "on_stop_signal",
+    "main",
+    "TOKEN_ENV",
+    "SOURCE",
+    "STOP_WORD",
+    "SHUTDOWN_EXTRA_S",
+    "STOP_SIGNALS",
+    "SHUTDOWN_SOURCE",
+]
 
 SOURCE = "telegram"
 TOKEN_ENV = "TELEGRAM_BOT_TOKEN"
-STOP_WORD = "stop"                   # matched after strip().lower() (docs/safety.md)
-SHUTDOWN_EXTRA_S = 5.0               # post_stop waits stop_move_timeout_s + this (docs/running.md)
-SHUTDOWN_SOURCE = "shutdown"         # request_stop source on SIGINT/SIGTERM (as shutdown())
+STOP_WORD = "stop"  # matched after strip().lower() (docs/safety.md)
+SHUTDOWN_EXTRA_S = 5.0  # post_stop waits stop_move_timeout_s + this (docs/running.md)
+SHUTDOWN_SOURCE = "shutdown"  # request_stop source on SIGINT/SIGTERM (as shutdown())
 STOP_SIGNALS = (signal.SIGINT, signal.SIGTERM)
 _STOPPING_KEY = "stop_signal_received"
 MISSING_TOKEN = f"Missing {TOKEN_ENV}."
-NO_ALLOWED_USERS_WARNING = ("Warning: telegram.allowed_user_ids is empty; "
-                            "the bot will answer nobody.")
+NO_ALLOWED_USERS_WARNING = "Warning: telegram.allowed_user_ids is empty; the bot will answer nobody."
 UNAUTHORISED_WARNING = "Warning: ignoring Telegram message from unauthorised user {user_id}."
 ERROR_REPLY = "Error: {exception_type}"
 
@@ -81,8 +93,7 @@ def _guarded(fn: Callable[[Any, Any, Any], Awaitable[None]]) -> Handler:
 
 async def _stop(message: Any, context: Any) -> None:
     result = _dispatcher(context).request_stop(SOURCE)
-    await message.reply_text(prompts.STOPPING if result == "stopping"
-                             else prompts.NOTHING_RUNNING)
+    await message.reply_text(prompts.STOPPING if result == "stopping" else prompts.NOTHING_RUNNING)
 
 
 @_guarded
@@ -110,8 +121,7 @@ async def on_text(user: Any, message: Any, context: Any) -> None:
         return
     await message.reply_text(prompts.WORKING)
     try:
-        outcome = await asyncio.to_thread(dispatcher.run_task, text, source=SOURCE,
-                                          sender_id=str(user.id))
+        outcome = await asyncio.to_thread(dispatcher.run_task, text, source=SOURCE, sender_id=str(user.id))
     except BusyError:
         await message.reply_text(prompts.BUSY)
         return
@@ -143,17 +153,19 @@ async def on_post_stop(app: Application) -> None:
     """Backstop (docs/running.md): waits for / force-ends a task still running."""
     dispatcher: Dispatcher = app.bot_data["dispatcher"]
     cfg: Config = app.bot_data["cfg"]
-    await asyncio.to_thread(dispatcher.shutdown,
-                            cfg.robot.stop_move_timeout_s + SHUTDOWN_EXTRA_S)
+    await asyncio.to_thread(dispatcher.shutdown, cfg.robot.stop_move_timeout_s + SHUTDOWN_EXTRA_S)
 
 
 def build_application(dispatcher: Dispatcher, cfg: Config, token: str) -> Application:
-    app = (ApplicationBuilder().token(token)
-           .concurrent_updates(True)        # REQUIRED: otherwise "stop" cannot arrive during a task
-           .post_init(on_post_init)        # stop the task on SIGINT/SIGTERM first
-           .post_stop(on_post_stop)
-           .build())
-    msg = filters.UpdateType.MESSAGE        # new messages only; ignore edited messages
+    app = (
+        ApplicationBuilder()
+        .token(token)
+        .concurrent_updates(True)  # REQUIRED: otherwise "stop" cannot arrive during a task
+        .post_init(on_post_init)  # stop the task on SIGINT/SIGTERM first
+        .post_stop(on_post_stop)
+        .build()
+    )
+    msg = filters.UpdateType.MESSAGE  # new messages only; ignore edited messages
     app.add_handler(CommandHandler("start", on_start, filters=msg))
     app.add_handler(CommandHandler("stop", on_stop, filters=msg))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & msg, on_text))

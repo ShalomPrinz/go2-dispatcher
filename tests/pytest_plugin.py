@@ -6,12 +6,13 @@ import pytest
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
-    parser.addoption("--run-live", action="store_true", default=False,
-                     help="run live_llm tests (needs ANTHROPIC_API_KEY)")
-    parser.addoption("--run-robot", action="store_true", default=False,
-                     help="run robot tests (needs the real Go2)")
-    parser.addoption("--update-golden", action="store_true", default=False,
-                     help="rewrite golden files instead of comparing")
+    parser.addoption(
+        "--run-live", action="store_true", default=False, help="run live_llm tests (needs ANTHROPIC_API_KEY)"
+    )
+    parser.addoption("--run-robot", action="store_true", default=False, help="run robot tests (needs the real Go2)")
+    parser.addoption(
+        "--update-golden", action="store_true", default=False, help="rewrite golden files instead of comparing"
+    )
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:

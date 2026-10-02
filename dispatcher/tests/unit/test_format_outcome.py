@@ -16,19 +16,30 @@ def registry():
 
 
 def step(index, outcome="ok", msg=None):
-    return StepResult(index=index, call_index=1, plan_step=1, skill="sit", params={},
-                      outcome=outcome, error_message=msg)
+    return StepResult(
+        index=index, call_index=1, plan_step=1, skill="sit", params={}, outcome=outcome, error_message=msg
+    )
 
 
 def outcome(steps, failures=0):
-    return TaskOutcome(run_id="r", task="t", outcome="DONE", message="All done.", steps=steps,
-                       llm_calls=1, failures=failures, duration_ms=1.0,
-                       final_posture="standing", log_path="")
+    return TaskOutcome(
+        run_id="r",
+        task="t",
+        outcome="DONE",
+        message="All done.",
+        steps=steps,
+        llm_calls=1,
+        failures=failures,
+        duration_ms=1.0,
+        final_posture="standing",
+        log_path="",
+    )
 
 
 def test_basic(registry):
-    text = format_outcome(outcome([step(1), step(None, "rejected", "bad"),
-                                   step(2, "error", "boom")], failures=2), registry)
+    text = format_outcome(
+        outcome([step(1), step(None, "rejected", "bad"), step(2, "error", "boom")], failures=2), registry
+    )
     assert text.splitlines() == [
         "DONE: All done.",
         "Steps: 2 run, 2 failed",

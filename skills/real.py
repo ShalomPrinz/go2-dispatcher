@@ -70,10 +70,10 @@ class RealDetector:
     CAMERA_TIMEOUT_S = 3.0
     IMGSZ = 640
     CONF = 0.4
-    LEFT_MAX_X = 0.4       # box centre x fraction < this -> left
-    RIGHT_MIN_X = 0.6      # > this -> right, else center
-    NEAR_MIN_H = 0.6       # box height fraction > this -> near
-    MEDIUM_MIN_H = 0.3     # > this -> medium, else far
+    LEFT_MAX_X = 0.4  # box centre x fraction < this -> left
+    RIGHT_MIN_X = 0.6  # > this -> right, else center
+    NEAR_MIN_H = 0.6  # box height fraction > this -> near
+    MEDIUM_MIN_H = 0.3  # > this -> medium, else far
     CONFIDENCE_DECIMALS = 2
 
     def __init__(self) -> None:
@@ -130,8 +130,9 @@ class RealDetector:
         h = (y2 - y1) / height
         position = "left" if cx < self.LEFT_MAX_X else "right" if cx > self.RIGHT_MIN_X else "center"
         closeness = "near" if h > self.NEAR_MIN_H else "medium" if h > self.MEDIUM_MIN_H else "far"
-        return DetectResult(found=True, position=position, closeness=closeness,
-                            confidence=round(conf, self.CONFIDENCE_DECIMALS))
+        return DetectResult(
+            found=True, position=position, closeness=closeness, confidence=round(conf, self.CONFIDENCE_DECIMALS)
+        )
 
 
 def get_detector() -> RealDetector:
@@ -141,7 +142,7 @@ def get_detector() -> RealDetector:
 # --- state ------------------------------------------------------------------------
 
 _state_cond = threading.Condition()
-_latest: tuple[float, object] | None = None   # (local arrival monotonic, msg)
+_latest: tuple[float, object] | None = None  # (local arrival monotonic, msg)
 _subscriber = None
 
 

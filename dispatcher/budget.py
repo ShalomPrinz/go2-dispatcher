@@ -6,13 +6,12 @@ from typing import Literal
 
 from .policies import MotionCost
 
-BUDGET_EPSILON = 1e-9          # tolerance on the limit: exceeds when used + cost > max + epsilon
+BUDGET_EPSILON = 1e-9  # tolerance on the limit: exceeds when used + cost > max + epsilon
 # numbers in the motion-budget message are rounded to this (dispatcher/docs/loop-and-context.md)
 MESSAGE_DECIMALS = 2
 
 # Motion-budget message (dispatcher/docs/loop-and-context.md); kind -> unit
-MOTION_BUDGET_MESSAGE = ("this step needs {need:g} {unit} of {kind} "
-                         "but only {left:g} {unit} remain for this task")
+MOTION_BUDGET_MESSAGE = "this step needs {need:g} {unit} of {kind} but only {left:g} {unit} remain for this task"
 KIND_UNITS = {"travel": "m", "rotation": "deg"}
 
 BudgetKind = Literal["travel", "rotation"]
@@ -57,5 +56,8 @@ class MotionBudget:
         """
         need = cost.distance_m if kind == "travel" else cost.rotation_deg
         return MOTION_BUDGET_MESSAGE.format(
-            need=round(need, MESSAGE_DECIMALS), left=round(self.remaining(kind), MESSAGE_DECIMALS),
-            unit=KIND_UNITS[kind], kind=kind)
+            need=round(need, MESSAGE_DECIMALS),
+            left=round(self.remaining(kind), MESSAGE_DECIMALS),
+            unit=KIND_UNITS[kind],
+            kind=kind,
+        )

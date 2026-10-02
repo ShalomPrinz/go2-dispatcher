@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-POSTURE_SITTING_MAX_M = 0.15     # (tunable, skills/docs/robot.md)
-POSTURE_STANDING_MIN_M = 0.22    # (tunable, skills/docs/robot.md)
+POSTURE_SITTING_MAX_M = 0.15  # (tunable, skills/docs/robot.md)
+POSTURE_STANDING_MIN_M = 0.22  # (tunable, skills/docs/robot.md)
 
 
 def derive_posture(body_height: float | None, mode: int | None) -> str:

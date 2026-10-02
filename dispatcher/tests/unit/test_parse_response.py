@@ -12,17 +12,21 @@ from skills.result import build_response
 LINE = json.dumps(build_response("walk", "ok"))
 
 
-@pytest.mark.parametrize("stdout", [
-    "junk\n" + json.dumps(build_response("walk", "error", error_code="x", error_message="y"))
-    + "\n" + LINE,
-    LINE + "\n\n  \n",
-], ids=["last_line_wins", "trailing_blank_lines"])
+@pytest.mark.parametrize(
+    "stdout",
+    [
+        "junk\n" + json.dumps(build_response("walk", "error", error_code="x", error_message="y")) + "\n" + LINE,
+        LINE + "\n\n  \n",
+    ],
+    ids=["last_line_wins", "trailing_blank_lines"],
+)
 def test_parse_response_last_nonempty_line(stdout):
     r = _parse_response(stdout, "walk")
     assert r is not None and r.status == "ok"
 
 
-@pytest.mark.parametrize("stdout", ["", LINE + "\n{not json", LINE.replace("walk", "turn")],
-                         ids=["empty", "invalid_json", "other_skill"])
+@pytest.mark.parametrize(
+    "stdout", ["", LINE + "\n{not json", LINE.replace("walk", "turn")], ids=["empty", "invalid_json", "other_skill"]
+)
 def test_parse_response_none(stdout):
     assert _parse_response(stdout, "walk") is None

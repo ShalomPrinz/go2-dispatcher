@@ -71,7 +71,6 @@ def render_step(sr: StepResult, registry: Registry, *, numbered: bool) -> str:
     return f"{sr.index}. {body}" if numbered else body
 
 
-def render_remaining(plan_step: int, step: PlanStep, registry: Registry,
-                     tag: Literal["pending", "abandoned"]) -> str:
+def render_remaining(plan_step: int, step: PlanStep, registry: Registry, tag: Literal["pending", "abandoned"]) -> str:
     """A Remaining plan line (dispatcher/docs/loop-and-context.md); raw params."""
     return f"{plan_step}. {format_call(step.skill, step.params, registry)} [{tag}]"

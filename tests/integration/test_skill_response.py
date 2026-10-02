@@ -8,14 +8,18 @@ from pydantic import ValidationError
 from dispatcher.models import SkillResponse
 from skills.result import build_response
 
-STATE = {"t": 1.0, "backend": "stub", "posture": "standing", "body_height": 0.32,
-         "mode": None, "position": None}
+STATE = {"t": 1.0, "backend": "stub", "posture": "standing", "body_height": 0.32, "mode": None, "position": None}
 
 
 def test_ok_response_validates():
-    d = build_response("walk", "ok", observations={"sdk_ret": 0, "distance_m": 0.9},
-                       state_before=STATE, state_after=STATE,
-                       timing={"init_ms": 1, "exec_ms": 2.5, "state_ms": 3, "total_ms": 7})
+    d = build_response(
+        "walk",
+        "ok",
+        observations={"sdk_ret": 0, "distance_m": 0.9},
+        state_before=STATE,
+        state_after=STATE,
+        timing={"init_ms": 1, "exec_ms": 2.5, "state_ms": 3, "total_ms": 7},
+    )
     r = SkillResponse.model_validate(d)
     assert d["schema_version"] == 1
     assert r.status == "ok" and r.error is None
@@ -30,8 +34,13 @@ def test_minimal_ok_validates():
 
 
 def test_error_response_validates():
-    d = build_response("walk", "error", error_code="sdk_error", error_message="Move returned 1",
-                       state_error="before: StateUnavailable: x")
+    d = build_response(
+        "walk",
+        "error",
+        error_code="sdk_error",
+        error_message="Move returned 1",
+        state_error="before: StateUnavailable: x",
+    )
     r = SkillResponse.model_validate(d)
     assert r.error.code == "sdk_error" and r.error.message == "Move returned 1"
     assert r.state_error == "before: StateUnavailable: x"

@@ -34,8 +34,9 @@ def typed_registry() -> Registry:
         "label": ParamSpec(type="string", description="label", default="x"),
         "level": ParamSpec(type="number", description="level", max=5, default=1.0),
     }
-    return Registry({"count": SkillDescriptor(name="count", entrypoint="x", description="d",
-                                              params=params, policy=_NullPolicy())})
+    return Registry(
+        {"count": SkillDescriptor(name="count", entrypoint="x", description="d", params=params, policy=_NullPolicy())}
+    )
 
 
 def step(skill, **params):
@@ -81,8 +82,7 @@ def test_non_finite_number(registry):
 def test_huge_integer_is_violation_not_exception(registry, typed_registry):
     huge = 10**400
     _, v = check_step(step("walk", direction="forward", distance_m=huge), registry)
-    assert v == [f"parameter 'distance_m' for skill walk must be a finite number, "
-                 f"got {repr(huge)[:39]}…"]
+    assert v == [f"parameter 'distance_m' for skill walk must be a finite number, got {repr(huge)[:39]}…"]
     _, v = check_step(step("count", n=-huge), typed_registry)
     assert len(v) == 1 and v[0].startswith("parameter 'n' for skill count must be a finite number")
     plan = make_plan(step("walk", direction="forward", distance_m=huge))
@@ -191,15 +191,16 @@ def test_precheck_rejection_message_cut(registry):
 
 def test_precheck_motion_budget_crossing(registry):
     budget = MotionBudget(max_distance_m=2, max_rotation_deg=720)
-    plan = make_plan(step("walk", direction="forward", distance_m=1.5),
-                     step("walk", direction=" Backward", distance_m=1.0))
+    plan = make_plan(
+        step("walk", direction="forward", distance_m=1.5), step("walk", direction=" Backward", distance_m=1.0)
+    )
     res = precheck(plan, 2, registry, budget, call_index=1)
     r = res.rejection
     assert res.filled == []
     assert (r.plan_step, r.outcome, r.error_code) == (2, "motion_budget_exceeded", "motion_budget_exceeded")
     assert r.params == {"direction": "backward", "distance_m": 1.0}
     assert r.error_message == ("this step needs 1 m of travel but only 0.5 m remain for this task")
-    assert budget.used_distance_m == 0.0     # simulated on a copy
+    assert budget.used_distance_m == 0.0  # simulated on a copy
 
 
 def test_precheck_starts_from_current_usage(registry):
@@ -213,14 +214,18 @@ def test_precheck_starts_from_current_usage(registry):
 
 def test_precheck_after_stop_at_bounds_checked_not_budget_checked(registry):
     budget = MotionBudget(max_distance_m=2, max_rotation_deg=720)
-    plan = make_plan(step("walk", direction="forward", distance_m=1.5),
-                     step("walk", direction="forward", distance_m=1.5), replan_after=1)
+    plan = make_plan(
+        step("walk", direction="forward", distance_m=1.5),
+        step("walk", direction="forward", distance_m=1.5),
+        replan_after=1,
+    )
     res = precheck(plan, 1, registry, budget, call_index=1)
     assert res.rejection is None
     assert res.filled == [{"direction": "forward", "distance_m": 1.5}] * 2
 
-    bad = make_plan(step("walk", direction="forward", distance_m=1.5),
-                    step("walk", direction="sideways"), replan_after=1)
+    bad = make_plan(
+        step("walk", direction="forward", distance_m=1.5), step("walk", direction="sideways"), replan_after=1
+    )
     r = precheck(bad, 1, registry, budget, call_index=1).rejection
     assert (r.plan_step, r.outcome) == (2, "rejected")
 
@@ -264,7 +269,7 @@ def test_budget_travel_checked_first():
 def test_budget_boundary_allowed():
     b = MotionBudget(1.0, 90)
     for _ in range(10):
-        assert b.would_exceed(MotionCost(distance_m=0.1)) is None   # float sums within 1e-9
+        assert b.would_exceed(MotionCost(distance_m=0.1)) is None  # float sums within 1e-9
         b.charge(MotionCost(distance_m=0.1))
     assert b.would_exceed(MotionCost(distance_m=1e-6)) == "travel"
     assert MotionBudget(1, 90).would_exceed(MotionCost(rotation_deg=90)) is None
@@ -284,7 +289,8 @@ def test_budget_message_rounds_to_two_decimals():
     b = MotionBudget(1, 90)
     b.charge(MotionCost(distance_m=0.123456))
     assert b.exceeded_message("travel", MotionCost(distance_m=2.987)) == (
-        "this step needs 2.99 m of travel but only 0.88 m remain for this task")
+        "this step needs 2.99 m of travel but only 0.88 m remain for this task"
+    )
 
 
 def test_cut_message():

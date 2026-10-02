@@ -73,10 +73,7 @@ class LLMConfig(_Section):
     @model_validator(mode="after")
     def _enough_backoffs(self) -> LLMConfig:
         if len(self.infra_backoff_s) < self.infra_max_retries:
-            raise ValueError(
-                "infra_backoff_s must have at least infra_max_retries "
-                f"({self.infra_max_retries}) values"
-            )
+            raise ValueError(f"infra_backoff_s must have at least infra_max_retries ({self.infra_max_retries}) values")
         return self
 
 
@@ -124,9 +121,7 @@ class StubConfig(_Section):
             if name not in COCO_CLASSES:
                 raise ValueError(f"'{name}' is not a COCO class")
             if not DETECTION_VALUE_RE.match(where):
-                raise ValueError(
-                    f"value for '{name}' must match {DETECTION_VALUE_RE.pattern}, got '{where}'"
-                )
+                raise ValueError(f"value for '{name}' must match {DETECTION_VALUE_RE.pattern}, got '{where}'")
         return v
 
     @field_validator("faults")
@@ -168,9 +163,9 @@ class Config(_Section):
     def _real_backend_rules(self) -> Config:
         if self.robot.backend == "real":
             if not self.robot.network_interface.strip():
-                raise ValueError("robot.network_interface is required when robot.backend = \"real\"")
+                raise ValueError('robot.network_interface is required when robot.backend = "real"')
             if self.stub.faults:
-                raise ValueError("stub.faults must be empty when robot.backend = \"real\"")
+                raise ValueError('stub.faults must be empty when robot.backend = "real"')
         return self
 
 
@@ -209,9 +204,7 @@ def _resolve(p: Path, base_dir: Path) -> Path:
     return p if p.is_absolute() else (base_dir / p)
 
 
-def build_config(
-    data: dict[str, Any], base_dir: Path, overrides: dict[str, Any] | None = None
-) -> Config:
+def build_config(data: dict[str, Any], base_dir: Path, overrides: dict[str, Any] | None = None) -> Config:
     """Validate raw config data, resolve relative paths against ``base_dir``, create ``log.dir``."""
     base_dir = Path(base_dir).resolve()
     try:
@@ -230,9 +223,7 @@ def build_config(
     return cfg
 
 
-def load_config(
-    config_path: Path | str | None = None, overrides: dict[str, Any] | None = None
-) -> Config:
+def load_config(config_path: Path | str | None = None, overrides: dict[str, Any] | None = None) -> Config:
     """Load config (docs/configuration.md). ``None`` means the default ``./config.toml``; if that is
     missing, defaults are used with a one-line stderr warning. An explicit path
     that is missing raises ConfigError."""
@@ -271,7 +262,7 @@ def parse_env_text(text: str) -> dict[str, str]:
         if not line or line.startswith("#"):
             continue
         if line.startswith("export "):
-            line = line[len("export "):].lstrip()
+            line = line[len("export ") :].lstrip()
         key, sep, value = line.partition("=")
         key = key.strip()
         if not sep or not key:
@@ -306,9 +297,7 @@ def config_error_exit(message: str) -> NoReturn:
     raise SystemExit(2)
 
 
-def load_config_and_env(
-    config_path: Path | str | None, overrides: dict[str, Any] | None = None
-) -> Config:
+def load_config_and_env(config_path: Path | str | None, overrides: dict[str, Any] | None = None) -> Config:
     """Load config and the base-dir ``.env``. Config errors print
     ``Config error: <message>`` to stderr and exit with code 2 (docs/configuration.md)."""
     try:

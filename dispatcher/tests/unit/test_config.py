@@ -74,10 +74,12 @@ def test_relative_paths_resolve_against_config_folder(tmp_path, monkeypatch):
     sub = tmp_path / "conf"
     sub.mkdir()
     abs_weights = tmp_path / "w.pt"
-    write(sub / "config.toml",
-              f'[skills]\ndir = "myskills"\n[log]\ndir = "logs"\n'
-              f'[stub]\nstate_file = "st/state.json"\n'
-              f'[robot]\nyolo_weights = "{abs_weights}"\n')
+    write(
+        sub / "config.toml",
+        f'[skills]\ndir = "myskills"\n[log]\ndir = "logs"\n'
+        f'[stub]\nstate_file = "st/state.json"\n'
+        f'[robot]\nyolo_weights = "{abs_weights}"\n',
+    )
     monkeypatch.chdir(tmp_path)
     cfg = load_config(Path("conf/config.toml"))
     base = sub.resolve()
@@ -96,10 +98,15 @@ def test_overrides_dotted_keys(tmp_path):
 
 def test_fault_override_with_real_backend_is_error(tmp_path):
     with pytest.raises(ConfigError, match="faults"):
-        build_config({}, tmp_path, {
-            "robot.backend": "real", "robot.network_interface": "eth0",
-            "stub.faults": [{"step": 2, "kind": "hang"}],
-        })
+        build_config(
+            {},
+            tmp_path,
+            {
+                "robot.backend": "real",
+                "robot.network_interface": "eth0",
+                "stub.faults": [{"step": 2, "kind": "hang"}],
+            },
+        )
 
 
 def test_example_config_is_valid(tmp_path):
@@ -134,27 +141,28 @@ def test_fault_kinds_valid(tmp_path, kind):
     ok(tmp_path, {"stub": {"faults": [{"step": 1, "kind": kind}]}})
 
 
-@pytest.mark.parametrize("fault", [
-    {"step": 1, "kind": "explode"},
-    {"step": 0, "kind": "error"},
-    {"step": -1, "kind": "error"},
-    {"step": 1.0, "kind": "error"},
-    {"step": "1", "kind": "error"},
-    {"kind": "error"},
-    {"step": 1, "kind": "error", "extra": 1},
-])
+@pytest.mark.parametrize(
+    "fault",
+    [
+        {"step": 1, "kind": "explode"},
+        {"step": 0, "kind": "error"},
+        {"step": -1, "kind": "error"},
+        {"step": 1.0, "kind": "error"},
+        {"step": "1", "kind": "error"},
+        {"kind": "error"},
+        {"step": 1, "kind": "error", "extra": 1},
+    ],
+)
 def test_fault_invalid(tmp_path, fault):
     bad(tmp_path, {"stub": {"faults": [fault]}}, "stub.faults")
 
 
 def test_fault_steps_unique(tmp_path):
-    bad(tmp_path, {"stub": {"faults": [{"step": 2, "kind": "error"},
-                                       {"step": 2, "kind": "hang"}]}}, "unique")
+    bad(tmp_path, {"stub": {"faults": [{"step": 2, "kind": "error"}, {"step": 2, "kind": "hang"}]}}, "unique")
 
 
 def test_detections(tmp_path):
-    ok(tmp_path, {"stub": {"detections": {"chair": "center:near", "cell phone": "left:far",
-                                          "person": "right:medium"}}})
+    ok(tmp_path, {"stub": {"detections": {"chair": "center:near", "cell phone": "left:far", "person": "right:medium"}}})
     bad(tmp_path, {"stub": {"detections": {"phone": "left:far"}}}, "phone")
     bad(tmp_path, {"stub": {"detections": {"chair": "middle:near"}}}, "chair")
     bad(tmp_path, {"stub": {"detections": {"chair": "center:close"}}}, "chair")
@@ -166,10 +174,16 @@ def test_initial_posture(tmp_path):
     bad(tmp_path, {"stub": {"initial_posture": "unknown"}}, "initial_posture")
 
 
-@pytest.mark.parametrize("section,key", [
-    ("loop", "planning_horizon"), ("loop", "max_failures"), ("loop", "max_llm_calls"),
-    ("loop", "context_history_k"), ("llm", "max_tokens"),
-])
+@pytest.mark.parametrize(
+    "section,key",
+    [
+        ("loop", "planning_horizon"),
+        ("loop", "max_failures"),
+        ("loop", "max_llm_calls"),
+        ("loop", "context_history_k"),
+        ("llm", "max_tokens"),
+    ],
+)
 def test_integers_at_least_one(tmp_path, section, key):
     ok(tmp_path, {section: {key: 1}})
     bad(tmp_path, {section: {key: 0}}, f"{section}.{key}")
@@ -177,20 +191,29 @@ def test_integers_at_least_one(tmp_path, section, key):
     bad(tmp_path, {section: {key: True}}, f"{section}.{key}")
 
 
-@pytest.mark.parametrize("section,key", [
-    ("loop", "task_time_limit_s"), ("llm", "request_timeout_s"),
-    ("robot", "stop_move_timeout_s"), ("robot", "read_state_timeout_s"),
-    ("stub", "time_scale"),
-])
+@pytest.mark.parametrize(
+    "section,key",
+    [
+        ("loop", "task_time_limit_s"),
+        ("llm", "request_timeout_s"),
+        ("robot", "stop_move_timeout_s"),
+        ("robot", "read_state_timeout_s"),
+        ("stub", "time_scale"),
+    ],
+)
 def test_floats_positive(tmp_path, section, key):
     ok(tmp_path, {section: {key: 0.001}})
     bad(tmp_path, {section: {key: 0}}, f"{section}.{key}")
     bad(tmp_path, {section: {key: -1.0}}, f"{section}.{key}")
 
 
-@pytest.mark.parametrize("section,key", [
-    ("motion_budget", "max_distance_m"), ("motion_budget", "max_rotation_deg"),
-])
+@pytest.mark.parametrize(
+    "section,key",
+    [
+        ("motion_budget", "max_distance_m"),
+        ("motion_budget", "max_rotation_deg"),
+    ],
+)
 def test_floats_non_negative(tmp_path, section, key):
     ok(tmp_path, {section: {key: 0.0}})
     bad(tmp_path, {section: {key: -0.1}}, f"{section}.{key}")
@@ -216,8 +239,7 @@ def test_infra_retries(tmp_path):
     ok(tmp_path, {"llm": {"infra_max_retries": 0, "infra_backoff_s": []}})
     ok(tmp_path, {"llm": {"infra_max_retries": 1, "infra_backoff_s": [1.0, 2.0]}})
     bad(tmp_path, {"llm": {"infra_max_retries": -1}}, "infra_max_retries")
-    bad(tmp_path, {"llm": {"infra_max_retries": 3, "infra_backoff_s": [1.0, 4.0]}},
-        "infra_backoff_s")
+    bad(tmp_path, {"llm": {"infra_max_retries": 3, "infra_backoff_s": [1.0, 4.0]}}, "infra_backoff_s")
 
 
 def test_allowed_user_ids(tmp_path):
@@ -234,10 +256,10 @@ def test_env_parsing():
         "\n"
         "A=1\n"
         "export B=two\n"
-        "C=\"double quoted\"\n"
+        'C="double quoted"\n'
         "D='single quoted'\n"
         "E=\"mismatched'\n"
-        "F=\"\"\"x\"\"\"\n"
+        'F="""x"""\n'
         "  G = spaced  \n"
         "H=a=b\n"
         "I=$A\n"
@@ -252,7 +274,7 @@ def test_env_parsing():
         "C": "double quoted",
         "D": "single quoted",
         "E": "\"mismatched'",
-        "F": "\"\"x\"\"",
+        "F": '""x""',
         "G": "spaced",
         "H": "a=b",
         "I": "$A",

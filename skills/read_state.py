@@ -43,8 +43,7 @@ def main() -> None:
         code, msg = result.error_from_exception(e)
         status = "error"
     timing["total_ms"] = result.ms_since(t0)
-    result.emit(SKILL, status, error_code=code, error_message=msg,
-                state_after=state_after, timing=timing)
+    result.emit(SKILL, status, error_code=code, error_message=msg, state_after=state_after, timing=timing)
 
 
 if __name__ == "__main__":

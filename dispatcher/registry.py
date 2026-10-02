@@ -68,7 +68,7 @@ class SkillDescriptor:
     name: str
     entrypoint: str
     description: str
-    params: dict[str, ParamSpec]      # frontmatter order
+    params: dict[str, ParamSpec]  # frontmatter order
     policy: SkillPolicy
 
 
@@ -132,8 +132,11 @@ def _parse_param(path: Path, pname: Any, raw: Any) -> ParamSpec:
         if "values" not in raw:
             raise RegistryError(f"{where}: enum requires 'values'")
         vals = raw["values"]
-        if (not isinstance(vals, list) or not vals
-                or not all(isinstance(v, str) and v and v == v.strip().lower() for v in vals)):
+        if (
+            not isinstance(vals, list)
+            or not vals
+            or not all(isinstance(v, str) and v and v == v.strip().lower() for v in vals)
+        ):
             raise RegistryError(f"{where}: values must be a non-empty list of lowercase strings")
         if len(set(vals)) != len(vals):
             raise RegistryError(f"{where}: values must be unique")
@@ -162,12 +165,14 @@ def _parse_param(path: Path, pname: Any, raw: Any) -> ParamSpec:
     if default is not MISSING:
         _check_default(where, ptype, default, values, lo, hi)
 
-    return ParamSpec(type=ptype, description=raw["description"], values=values,
-                     min=lo, max=hi, default=default, unit=unit)
+    return ParamSpec(
+        type=ptype, description=raw["description"], values=values, min=lo, max=hi, default=default, unit=unit
+    )
 
 
-def _check_default(where: str, ptype: str, default: Any, values: tuple[str, ...] | None,
-                   lo: float | None, hi: float | None) -> None:
+def _check_default(
+    where: str, ptype: str, default: Any, values: tuple[str, ...] | None, lo: float | None, hi: float | None
+) -> None:
     if ptype == "number":
         ok = _is_number(default)
     elif ptype == "integer":
@@ -214,8 +219,7 @@ def _load_skill(folder: Path) -> SkillDescriptor:
     try:
         module = importlib.import_module(entrypoint)
     except Exception as e:  # any import failure makes the skill unusable
-        raise RegistryError(f"{path}: entrypoint '{entrypoint}' is not importable: "
-                            f"{type(e).__name__}: {e}") from None
+        raise RegistryError(f"{path}: entrypoint '{entrypoint}' is not importable: {type(e).__name__}: {e}") from None
     policy = getattr(module, "POLICY", None)
     if policy is None:
         raise RegistryError(f"{path}: module '{entrypoint}' has no POLICY")
@@ -224,8 +228,9 @@ def _load_skill(folder: Path) -> SkillDescriptor:
     if policy.name != name:
         raise RegistryError(f"{path}: POLICY.name '{policy.name}' does not match name '{name}'")
 
-    return SkillDescriptor(name=name, entrypoint=entrypoint, description=description.strip(),
-                           params=params, policy=policy)
+    return SkillDescriptor(
+        name=name, entrypoint=entrypoint, description=description.strip(), params=params, policy=policy
+    )
 
 
 # --- catalog ---------------------------------------------------------------------
@@ -279,7 +284,7 @@ class Registry:
         for folder in sorted(skills_dir.iterdir()):
             if not folder.is_dir() or not (folder / SKILL_FILE).is_file():
                 continue
-            desc = _load_skill(folder)   # name == folder name, so names are unique
+            desc = _load_skill(folder)  # name == folder name, so names are unique
             skills[desc.name] = desc
         if not skills:
             raise RegistryError(f"{skills_dir}: no skills found (no */{SKILL_FILE})")

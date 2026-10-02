@@ -26,8 +26,8 @@ def cut_message(text: str, limit: int = ERROR_MESSAGE_MAX) -> str:
 # --- step bounds -------------------------------------------------------------------
 
 _MISSING = object()
-_OVERFLOW = object()          # a number too large to convert to float (e.g. 10**400)
-REPR_MAX = 40                 # max chars of a bad value's repr in a violation
+_OVERFLOW = object()  # a number too large to convert to float (e.g. 10**400)
+REPR_MAX = 40  # max chars of a bad value's repr in a violation
 
 
 def _short_repr(value: Any) -> str:
@@ -117,8 +117,7 @@ def check_step(step: PlanStep, registry: Registry) -> tuple[dict | None, list[st
         value = _coerce(spec, raw[p])
         if value is _MISSING or value is _OVERFLOW:
             expected = "a finite number" if value is _OVERFLOW else _expected(spec)
-            violations.append(
-                f"parameter '{p}' for skill {s} must be {expected}, got {_short_repr(raw[p])}")
+            violations.append(f"parameter '{p}' for skill {s} must be {expected}, got {_short_repr(raw[p])}")
         else:
             typed[p] = value
 
@@ -133,7 +132,7 @@ def check_step(step: PlanStep, registry: Registry) -> tuple[dict | None, list[st
         return None, violations
 
     filled: dict[str, Any] = {}
-    for p, spec in desc.params.items():         # frontmatter order
+    for p, spec in desc.params.items():  # frontmatter order
         filled[p] = typed[p] if p in typed else spec.default
     return filled, []
 
@@ -144,21 +143,29 @@ def check_step(step: PlanStep, registry: Registry) -> tuple[dict | None, list[st
 @dataclass
 class PrecheckResult:
     rejection: StepResult | None
-    filled: list[dict] = field(default_factory=list)   # filled params for every plan step; empty if rejected
+    filled: list[dict] = field(default_factory=list)  # filled params for every plan step; empty if rejected
 
 
-def precheck(plan: Plan, stop_at: int, registry: Registry, budget: MotionBudget,
-             call_index: int) -> PrecheckResult:
+def precheck(plan: Plan, stop_at: int, registry: Registry, budget: MotionBudget, call_index: int) -> PrecheckResult:
     """Bounds-check every step; then simulate the motion budget over steps 1..stop_at on a
     copy of ``budget``. A plan either runs within limits or does not start (dispatcher/docs/loop-and-context.md)."""
     filled_all: list[dict] = []
     for i, step in enumerate(plan.steps, start=1):
         filled, violations = check_step(step, registry)
         if violations:
-            return PrecheckResult(rejection=StepResult(
-                index=None, call_index=call_index, plan_step=i, skill=step.skill,
-                params=dict(step.params), outcome="rejected", error_code=BOUNDS_ERROR_CODE,
-                error_message=cut_message("; ".join(violations))), filled=[])
+            return PrecheckResult(
+                rejection=StepResult(
+                    index=None,
+                    call_index=call_index,
+                    plan_step=i,
+                    skill=step.skill,
+                    params=dict(step.params),
+                    outcome="rejected",
+                    error_code=BOUNDS_ERROR_CODE,
+                    error_message=cut_message("; ".join(violations)),
+                ),
+                filled=[],
+            )
         filled_all.append(filled)
 
     sim = budget.copy()
@@ -166,10 +173,18 @@ def precheck(plan: Plan, stop_at: int, registry: Registry, budget: MotionBudget,
         cost = registry.get(step.skill).policy.motion_cost(filled)
         kind = sim.would_exceed(cost)
         if kind is not None:
-            return PrecheckResult(rejection=StepResult(
-                index=None, call_index=call_index, plan_step=i, skill=step.skill,
-                params=dict(filled), outcome="motion_budget_exceeded",
-                error_code=BUDGET_ERROR_CODE,
-                error_message=cut_message(sim.exceeded_message(kind, cost))), filled=[])
+            return PrecheckResult(
+                rejection=StepResult(
+                    index=None,
+                    call_index=call_index,
+                    plan_step=i,
+                    skill=step.skill,
+                    params=dict(filled),
+                    outcome="motion_budget_exceeded",
+                    error_code=BUDGET_ERROR_CODE,
+                    error_message=cut_message(sim.exceeded_message(kind, cost)),
+                ),
+                filled=[],
+            )
         sim.charge(cost)
     return PrecheckResult(rejection=None, filled=filled_all)

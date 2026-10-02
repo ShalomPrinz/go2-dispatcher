@@ -185,7 +185,7 @@ index = [json.loads(l) for l in (log_dir / "index.jsonl").open()]
 
 by_cond: dict[str, list[dict]] = {}
 for row in index:
-    by_cond.setdefault(f'{row["condition"]}/h{row["planning_horizon"]}', []).append(row)
+    by_cond.setdefault(f"{row['condition']}/h{row['planning_horizon']}", []).append(row)
 
 for cond, rows in sorted(by_cond.items()):
     n = len(rows)
@@ -203,12 +203,14 @@ for cond, rows in sorted(by_cond.items()):
                 horizon_rej += 1
             elif t == "step_result" and rec["index"] is not None and rec["response"]:
                 overhead.append(rec["duration_ms"] - rec["response"]["timing"]["total_ms"])
-    print(f"{cond}: {n} tasks, {done} DONE, "
-          f"mean in/out tokens {sum(r['input_tokens'] for r in rows)/n:.0f}/"
-          f"{sum(r['output_tokens'] for r in rows)/n:.0f}, "
-          f"mean calls {sum(r['llm_calls'] for r in rows)/n:.2f} {dict(reasons)}, "
-          f"horizon rejections {horizon_rej}/{responses}, "
-          f"mean process overhead {sum(overhead)/max(len(overhead),1):.0f} ms")
+    print(
+        f"{cond}: {n} tasks, {done} DONE, "
+        f"mean in/out tokens {sum(r['input_tokens'] for r in rows) / n:.0f}/"
+        f"{sum(r['output_tokens'] for r in rows) / n:.0f}, "
+        f"mean calls {sum(r['llm_calls'] for r in rows) / n:.2f} {dict(reasons)}, "
+        f"horizon rejections {horizon_rej}/{responses}, "
+        f"mean process overhead {sum(overhead) / max(len(overhead), 1):.0f} ms"
+    )
 ```
 
 ## Design decisions
