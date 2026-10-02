@@ -80,7 +80,7 @@ Every such reply is logged as its own `horizon_rejection` record (with the raw t
 The SDK's own retries are disabled (`max_retries=0`); `AnthropicPlanner` retries itself so that every retry is logged and bounded by the task's deadline.
 
 - **Retryable:** connection errors (including timeouts) and HTTP 408, 409, 429 and every status ≥ 500 (including 529 overloaded). Anything else (for example a 400) is not retried.
-- **Attempts:** up to `llm.infra_max_retries` (2) retries. Before retry *i*, sleep `llm.infra_backoff_s[i]` (`[1.0, 4.0]`). A numeric `retry-after` header can raise the sleep, capped at 30 s.
+- **Attempts:** up to `len(llm.infra_backoff_s)` (2) retries. Before retry *i*, sleep `llm.infra_backoff_s[i]` (`[1.0, 4.0]`). A numeric `retry-after` header can raise the sleep, capped at 30 s.
 - **Per-attempt timeout:** `min(llm.request_timeout_s, remaining task time)`.
 - **Stop and deadline:** before each attempt, a passed deadline raises an interrupt (task ends `TIME_LIMIT_EXCEEDED`) and a stop request raises one (task ends `STOPPED`). If the sleep would reach the deadline, the task ends `TIME_LIMIT_EXCEEDED` at once. The backoff sleep wakes on a stop request. A request already in flight is not cancelled; the stop takes effect when it returns.
 - **Exhausted or non-retryable:** the task ends `LLM_ERROR` with detail `{ErrorClass} {status}`.

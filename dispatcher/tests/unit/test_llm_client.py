@@ -275,7 +275,7 @@ def test_backoff_longer_than_remaining(tmp_path):
 
 
 def test_zero_infra_retries(tmp_path):
-    h = Harness(tmp_path, [httpx.Response(503, json={})], llm={"infra_max_retries": 0})
+    h = Harness(tmp_path, [httpx.Response(503, json={})], llm={"infra_backoff_s": []})
     with pytest.raises(LLMUnavailable):
         h.plan()
     assert len(h.requests) == 1

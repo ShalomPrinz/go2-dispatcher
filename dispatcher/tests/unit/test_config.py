@@ -236,10 +236,7 @@ def test_backoff_values_non_negative(tmp_path):
 
 
 def test_infra_retries(tmp_path):
-    ok(tmp_path, {"llm": {"infra_max_retries": 0, "infra_backoff_s": []}})
-    ok(tmp_path, {"llm": {"infra_max_retries": 1, "infra_backoff_s": [1.0, 2.0]}})
-    bad(tmp_path, {"llm": {"infra_max_retries": -1}}, "infra_max_retries")
-    bad(tmp_path, {"llm": {"infra_max_retries": 3, "infra_backoff_s": [1.0, 4.0]}}, "infra_backoff_s")
+    ok(tmp_path, {"llm": {"infra_backoff_s": []}})
 
 
 def test_allowed_user_ids(tmp_path):

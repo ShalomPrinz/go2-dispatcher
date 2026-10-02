@@ -284,7 +284,7 @@ class AnthropicPlanner:
             except anthropic.APIError as e:
                 attempt_latency_ms = (time.monotonic() - t_attempt) * 1000.0
                 status_code = getattr(e, "status_code", None)
-                if not _is_retryable(e) or retries >= cfg.infra_max_retries:
+                if not _is_retryable(e) or retries >= len(cfg.infra_backoff_s):
                     raise LLMUnavailable(f"{type(e).__name__} {status_code or ''}".strip()) from e
                 sleep_s = cfg.infra_backoff_s[retries]
                 retry_after = _retry_after_s(e)

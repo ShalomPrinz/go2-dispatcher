@@ -59,8 +59,7 @@ class LLMConfig(_Section):
     max_tokens: StrictInt = Field(2048, ge=1)
     thinking: Literal["between_tools", "adaptive"] = "between_tools"
     request_timeout_s: FiniteFloat = Field(60.0, gt=0)  # (tunable)
-    infra_max_retries: StrictInt = Field(2, ge=0)
-    infra_backoff_s: list[FiniteFloat] = [1.0, 4.0]
+    infra_backoff_s: list[FiniteFloat] = [1.0, 4.0]  # one sleep per retry; length = retry count
 
     @field_validator("infra_backoff_s")
     @classmethod
@@ -69,12 +68,6 @@ class LLMConfig(_Section):
             if x < 0:
                 raise ValueError("every value must be >= 0")
         return v
-
-    @model_validator(mode="after")
-    def _enough_backoffs(self) -> LLMConfig:
-        if len(self.infra_backoff_s) < self.infra_max_retries:
-            raise ValueError(f"infra_backoff_s must have at least infra_max_retries ({self.infra_max_retries}) values")
-        return self
 
 
 class LoopConfig(_Section):
