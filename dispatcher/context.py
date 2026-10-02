@@ -101,13 +101,13 @@ def render_step(sr: StepResult, registry: Registry, *, numbered: bool) -> str:
     """One line for a recorded step. ``numbered=False`` drops the ``{index}. `` prefix.
     Never includes stderr or tracebacks."""
     call = format_call(sr.skill, sr.params, registry)
-    if sr.outcome in NOT_DISPATCHED_OUTCOMES or sr.index is None:
+    if sr.outcome in NOT_DISPATCHED_OUTCOMES or sr.dispatch is None:
         return f"{NOT_DISPATCHED_PREFIX}{call} -> {_failure_text(sr)}"
     if sr.outcome == "ok":
         body = f"{call} -> ok{_observations(sr, registry)}"
     else:
         body = f"{call} -> {_failure_text(sr)}"
-    return f"{sr.index}. {body}" if numbered else body
+    return f"{sr.dispatch.index}. {body}" if numbered else body
 
 
 def render_remaining(plan_step: int, step: PlanStep, registry: Registry, tag: Literal["pending", "abandoned"]) -> str:

@@ -147,7 +147,6 @@ def precheck(plan: Plan, stop_at: int, registry: Registry, budget: MotionBudget,
         if violations:
             return PrecheckResult(
                 rejection=StepResult(
-                    index=None,
                     call_index=call_index,
                     plan_step=i,
                     skill=step.skill,
@@ -167,7 +166,6 @@ def precheck(plan: Plan, stop_at: int, registry: Registry, budget: MotionBudget,
         if kind is not None:
             return PrecheckResult(
                 rejection=StepResult(
-                    index=None,
                     call_index=call_index,
                     plan_step=i,
                     skill=step.skill,

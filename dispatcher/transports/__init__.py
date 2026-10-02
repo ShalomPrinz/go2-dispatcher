@@ -106,7 +106,7 @@ def build_dispatcher(cfg: Config, *, reset_stub: bool, planner: PlannerClient | 
 def format_outcome(outcome: TaskOutcome, registry: Registry) -> str:
     """Plain-text outcome for the operator (docs/running.md); oldest step lines are dropped if the
     whole text would exceed ``OUTCOME_MAX_CHARS``."""
-    dispatched = sum(1 for s in outcome.steps if s.index is not None)
+    dispatched = sum(1 for s in outcome.steps if s.dispatch is not None)
     head = [f"{outcome.outcome}: {outcome.message}", f"Steps: {dispatched} run, {outcome.failures} failed"]
     steps = [render_step(s, registry, numbered=True) for s in outcome.steps]
     text = "\n".join(head + steps)

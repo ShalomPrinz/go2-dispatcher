@@ -67,11 +67,11 @@ An invalid reply: `call_index`, `tool_input`, `rejection_kind` (`horizon` / `sch
 
 ### `step_start`
 
-`index` (task-wide dispatched count), `call_index`, `plan_step`, `skill`, `params` (filled), `timeout_s`, `motion_cost`, `fault`.
+`index` (task-wide dispatched count), `call_index`, `plan_step`, `skill`, `params` (filled), `timeout_s`, `motion_cost`, `fault`. The `index`, `timeout_s`, `motion_cost` and `fault` values are the step's `StepDispatch`, flattened; the same object appears nested as `step_result.dispatch`.
 
 ### `step_result`
 
-All `StepResult` fields at the top level: `index` (null if not dispatched), `call_index`, `plan_step`, `skill`, `params`, `outcome`, `error_code`, `error_message`, `response` (full `SkillResponse` with `state_before` / `state_after` / `timing`), `duration_ms`, `timeout_s`, `motion_cost`, `fault`, `exit_code`, `pid`, `stderr_tail`, `verification` (always `"unverified"`). It also adds `budget_used`, `failures` and `posture` **after** this step has been counted. It is written for both dispatched and rejected steps.
+All `StepResult` fields at the top level, with the dispatch fields nested under `dispatch` (null for a rejected step): `call_index`, `plan_step`, `skill`, `params`, `outcome`, `error_code`, `error_message`, `response` (full `SkillResponse` with `state_before` / `state_after` / `timing`), `duration_ms`, `dispatch` (an object with `index` (task-wide dispatched count), `timeout_s`, `motion_cost`, `fault`), `exit_code`, `pid`, `stderr_tail`, `verification` (always `"unverified"`). It also adds `budget_used`, `failures` and `posture` **after** this step has been counted. It is written for both dispatched and rejected steps.
 
 ### `stop_requested`
 
@@ -127,6 +127,7 @@ Group tasks by condition first: `condition`, `registry_hash` (the skill set and 
 
 - **Records are built only in `runlog.py`, by one named method per record type** (`RunLog.task_start`, `step_result`, `stop_move`, ...; the index row in `RunLogFactory.append_index`). The loop passes per-record data, mostly existing domain objects (`StepResult`, `StopMoveResult`, `LLMResult`, `TaskOutcome`), and never builds a record itself, so the record contract lives in one module. Each method writes exactly one record. The session-constant `task_start` fields (config, condition, prompt surface, registry hash, skills, versions, git commit) are collected once per process into `SessionInfo`. Rejected: one pydantic model per record type (`log.write(StepResultRecord(...))`), which only moves the long field lists into constructors.
 - **The prompt surface is owned by the dispatcher and only copied into the log.** `context.PromptSurface.build` builds the system blocks, catalog text, tool schema, registry hash and skill names once per process; the transport setup passes the same object to `Dispatcher` (which sends it) and to `SessionInfo.collect` (which copies it), and `go2 catalog` uses the same builder. `Dispatcher.__init__` raises `ValueError` unless the session's `system_text`, `catalog_text`, `tool_schema`, `registry_hash` and `skills` all equal the surface, so what is logged is what is sent. Rejected: the dispatcher reading the surface from the run-log session, which made the logger the owner of what the model is sent.
+- **A dispatched step's dispatch data is one `StepDispatch` held by `StepResult.dispatch`** (`index`, `timeout_s`, `motion_cost`, `fault`). The loop builds it once per dispatched step, passes it to `RunLog.step_start` and stores it on the step result; a rejected step has `dispatch = null`. Composition keeps the dispatched fields strictly typed (`index` and `timeout_s` are never null) and built in one place. Rejected: inheritance `StepResult(StepDispatch)`, which would force those fields optional because rejected steps are also `StepResult`s.
 - **One file per task plus an index.** A task is the unit of analysis; the index lets analysis select tasks by condition without parsing every file.
 - **Every line is flushed as it is written**, under a lock, so a crash leaves a usable partial log and lines from the transport thread never interleave.
 - **The exact prompt surface is logged with every task** (system text, catalog, tool schema, registry hash) and the exact user message with every call, so any call can be reconstructed and conditions can be told apart by hash.

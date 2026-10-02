@@ -163,7 +163,7 @@ def test_precheck_bounds_violation_last_step(registry):
     r = res.rejection
     assert res.filled == []
     assert r is not None
-    assert (r.index, r.call_index, r.plan_step, r.skill) == (None, 2, 3, "walk")
+    assert (r.dispatch, r.call_index, r.plan_step, r.skill) == (None, 2, 3, "walk")
     assert r.params == raw
     assert (r.outcome, r.error_code) == ("rejected", "bounds")
     assert r.error_message == "parameter 'distance_m' for skill walk is 99, outside 0.1 to 3"

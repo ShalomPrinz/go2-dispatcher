@@ -70,6 +70,9 @@ def test_turn_then_detect(tmp_path, registry):
     for t in ("task_start", "llm_request", "llm_response", "plan", "task_end"):
         assert t in types
     assert types.count("step_start") == 2 and types.count("step_result") == 2
+    starts = [r for r in recs if r["type"] == "step_start"]
+    results = [r for r in recs if r["type"] == "step_result"]
+    assert [r["dispatch"]["index"] for r in results] == [r["index"] for r in starts] == [1, 2]
     assert types[0] == "task_start" and types[-1] == "task_end"
     assert all(r["usage"] for r in recs if r["type"] == "llm_response")
     seqs = [r["seq"] for r in recs]
@@ -91,7 +94,7 @@ def test_fault_at_step_two(tmp_path, registry):
     o = d.run_task("turn twice", source="test")
     assert o.outcome == "DONE"
     assert [s.outcome for s in o.steps] == ["ok", "error"]
-    assert o.steps[1].fault == "error"
+    assert o.steps[1].dispatch.fault == "error"
     assert o.failures == 1
     assert "Your previous plan failed at step 2 (turn): error." in planner.calls[1]["user"]
 

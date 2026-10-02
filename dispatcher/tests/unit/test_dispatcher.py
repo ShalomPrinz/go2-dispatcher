@@ -103,7 +103,7 @@ def test_plan_then_done(tmp_path, registry):
     r = Rig(tmp_path, registry, [plan(walk(), turn(), detect()), done()], [exec_result()] * 3)
     o = r.run()
     assert o.outcome == "DONE"
-    assert [s.index for s in o.steps] == [1, 2, 3]
+    assert [s.dispatch.index for s in o.steps] == [1, 2, 3]
     assert o.llm_calls == 2
     assert reasons(o) == ["initial", "plan_complete"]
     assert prompts.NOTICES["plan_complete"] in r.user(1)

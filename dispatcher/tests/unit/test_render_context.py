@@ -20,6 +20,7 @@ from dispatcher.models import (
     RobotState,
     SkillError,
     SkillResponse,
+    StepDispatch,
     StepResult,
     TaskSummary,
 )
@@ -64,9 +65,13 @@ def response(skill: str, *, observations=None, error=None, posture=None) -> Skil
     )
 
 
+def dispatched(index: int) -> StepDispatch:
+    return StepDispatch(index=index, timeout_s=10.0, motion_cost=MotionCost())
+
+
 def ok_step(index, skill, params, *, plan_step=None, call_index=1, observations=None):
     return StepResult(
-        index=index,
+        dispatch=dispatched(index),
         call_index=call_index,
         plan_step=plan_step or index,
         skill=skill,
@@ -114,7 +119,6 @@ def test_format_value():
 
 def test_params_declared_order_then_extra(registry):
     sr = StepResult(
-        index=None,
         call_index=1,
         plan_step=1,
         skill="walk",
@@ -130,7 +134,6 @@ def test_params_declared_order_then_extra(registry):
 
 def test_unknown_skill_received_order(registry):
     sr = StepResult(
-        index=None,
         call_index=1,
         plan_step=2,
         skill="jump",
@@ -167,7 +170,7 @@ def test_ok_observations_only_context_keys(registry):
 def test_long_error_cut_to_200(registry):
     msg = "x" * 250
     sr = StepResult(
-        index=1,
+        dispatch=dispatched(1),
         call_index=1,
         plan_step=1,
         skill="sit",
@@ -225,7 +228,7 @@ def test_after_failure(registry, update_golden):
     steps = [
         ok_step(1, "turn", {"direction": "left", "angle_deg": 90}),
         StepResult(
-            index=2,
+            dispatch=dispatched(2),
             call_index=1,
             plan_step=2,
             skill="walk",
@@ -260,7 +263,6 @@ def test_after_rejection(registry, update_golden):
         PlanStep(skill="walk", params={"direction": "up", "distance_m": 9}),
     ]
     rejection = StepResult(
-        index=None,
         call_index=2,
         plan_step=2,
         skill="walk",
@@ -299,7 +301,7 @@ def test_truncation_keeps_last_k(registry):
 
 def test_stderr_never_leaks(registry):
     sr = StepResult(
-        index=1,
+        dispatch=dispatched(1),
         call_index=1,
         plan_step=1,
         skill="walk",
@@ -316,7 +318,7 @@ def test_stderr_never_leaks(registry):
 
 def test_previous_task_and_posture(registry, update_golden):
     last = StepResult(
-        index=2,
+        dispatch=dispatched(2),
         call_index=1,
         plan_step=2,
         skill="sit",

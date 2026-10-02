@@ -128,8 +128,16 @@ class StopMoveResult(_Model):
     stderr_tail: str | None = None
 
 
+class StepDispatch(_Model):
+    """What the dispatcher decided for a dispatched step; built once per step (dispatcher/docs/run-log.md)."""
+
+    index: StrictInt  # 1-based count of dispatched steps in the task
+    timeout_s: float
+    motion_cost: MotionCost  # stdlib dataclass; dumps as {distance_m, rotation_deg}
+    fault: str | None = None  # stub fault kind injected, if any
+
+
 class StepResult(_Model):
-    index: int | None  # 1-based count of dispatched steps in the task; None if not dispatched
     call_index: int  # LLM call that produced the plan (1-based)
     plan_step: int  # 1-based position within that plan
     skill: str
@@ -139,9 +147,7 @@ class StepResult(_Model):
     error_message: str | None = None  # one line, <= 200 chars, safe for LLM context
     response: SkillResponse | None = None
     duration_ms: float = 0.0  # wall clock around the subprocess; 0 if not dispatched
-    timeout_s: float | None = None
-    motion_cost: MotionCost = MotionCost()  # stdlib dataclass; dumps as {distance_m, rotation_deg}
-    fault: str | None = None  # stub fault kind injected, if any
+    dispatch: StepDispatch | None = None  # None if not dispatched (rejected)
     exit_code: int | None = None
     pid: int | None = None  # LOG ONLY
     stderr_tail: str | None = None  # last 2000 chars; LOG ONLY, never in context

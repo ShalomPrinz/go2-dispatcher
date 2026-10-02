@@ -10,7 +10,6 @@ import threading
 import time
 import traceback
 from collections.abc import Callable
-from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TextIO
@@ -18,13 +17,11 @@ from typing import TYPE_CHECKING, Any, TextIO
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
-    from skills.result import MotionCost
-
     from .budget import MotionBudget
     from .config import Config
     from .context import PromptSurface
     from .llm import LLMResult
-    from .models import Plan, StepResult, StopMoveResult, TaskOutcome, TaskSummary
+    from .models import Plan, StepDispatch, StepResult, StopMoveResult, TaskOutcome, TaskSummary
 
 INDEX_FILE = "index.jsonl"
 FILE_TIME_FORMAT = "%Y%m%dT%H%M%S"  # local time at task start (dispatcher/docs/run-log.md)
@@ -209,28 +206,16 @@ class RunLog:
             errors=res.errors,
         )
 
-    def step_start(
-        self,
-        *,
-        index: int,
-        call_index: int,
-        plan_step: int,
-        skill: str,
-        params: dict,
-        timeout_s: float,
-        cost: MotionCost,
-        fault: str | None,
-    ) -> None:
+    def step_start(self, dispatch: StepDispatch, *, call_index: int, plan_step: int, skill: str, params: dict) -> None:
+        d = dispatch.model_dump(mode="json")
         self._write(
             "step_start",
-            index=index,
+            index=d.pop("index"),
             call_index=call_index,
             plan_step=plan_step,
             skill=skill,
             params=params,
-            timeout_s=timeout_s,
-            motion_cost=asdict(cost),
-            fault=fault,
+            **d,
         )
 
     def step_result(self, sr: StepResult, *, budget: MotionBudget, failures: int, posture: str) -> None:
@@ -287,7 +272,7 @@ class NullLog(RunLog):
 
 
 def _dispatched(result: TaskOutcome) -> int:
-    return sum(1 for s in result.steps if s.index is not None)
+    return sum(1 for s in result.steps if s.dispatch is not None)
 
 
 class RunLogFactory:

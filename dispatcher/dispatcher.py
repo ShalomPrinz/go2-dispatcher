@@ -24,6 +24,7 @@ from .models import (
     LLMInterrupted,
     LLMUnavailable,
     PlanStep,
+    StepDispatch,
     StepResult,
     StopMoveResult,
     TaskOutcome,
@@ -205,14 +206,14 @@ class Dispatcher:
     def _record(self, t: _Task, sr: StepResult, stop: StopMoveResult | None = None) -> None:
         """Append a step, update posture and the StopMove flag, log it (and the StopMove of a killed step)."""
         t.steps.append(sr)
-        if sr.index is not None:
+        if sr.dispatch is not None:
             self._update_posture_from_step(sr, stop)
         if stop is not None and not stop.ok:
             t.stop_move_failed = True
         if sr.outcome in FAILURE_OUTCOMES:
             t.failures += 1
             t.last_failure = sr
-        if sr.index is None:
+        if sr.dispatch is None:
             t.rejections += 1
         t.log.step_result(sr, budget=t.budget, failures=t.failures, posture=self.posture)
         if stop is not None:
@@ -345,7 +346,7 @@ class Dispatcher:
             outcome, stop_move_failed=t.stop_move_failed, **self._operator_args(t, outcome, message, extra)
         )
         duration_ms = (self.clock() - t.t_start) * 1000.0
-        dispatched = [s for s in t.steps if s.index is not None]
+        dispatched = [s for s in t.steps if s.dispatch is not None]
         result = TaskOutcome(
             run_id=t.run_id,
             task=t.task,
@@ -484,31 +485,26 @@ class Dispatcher:
         """Dispatch plan step ``i``. Returns the task outcome if the task ended, else
         whether the step failed."""
         desc = self.registry.get(step.skill)
-        cost = desc.policy.motion_cost(params)
-        timeout = desc.policy.timeout_s(params)
         t.dispatched_count += 1
         fault = None
         if self.cfg.robot.backend == "stub":
             fault = next((f.kind for f in self.cfg.stub.faults if f.step == t.dispatched_count), None)
-        t.budget.charge(cost)
-
-        self._set_phase("step")
-        t.log.step_start(
+        dispatch = StepDispatch(
             index=t.dispatched_count,
-            call_index=t.llm_calls,
-            plan_step=i,
-            skill=step.skill,
-            params=params,
-            timeout_s=timeout,
-            cost=cost,
+            timeout_s=desc.policy.timeout_s(params),
+            motion_cost=desc.policy.motion_cost(params),
             fault=fault,
         )
+        t.budget.charge(dispatch.motion_cost)
+
+        self._set_phase("step")
+        t.log.step_start(dispatch, call_index=t.llm_calls, plan_step=i, skill=step.skill, params=params)
         try:
             ex = self.executor.run(
                 desc,
                 params,
-                fault=fault,
-                timeout_s=timeout,
+                fault=dispatch.fault,
+                timeout_s=dispatch.timeout_s,
                 remaining_task_s=self._remaining_s(t),
                 stop_event=self._stop_event,
             )
@@ -519,14 +515,11 @@ class Dispatcher:
         exec_fields["error_message"] = cut_message(ex.error_message) if ex.error_message else None
         sr = StepResult(
             **exec_fields,
-            index=t.dispatched_count,
             call_index=t.llm_calls,
             plan_step=i,
             skill=step.skill,
             params=params,
-            timeout_s=timeout,
-            motion_cost=cost,
-            fault=fault,
+            dispatch=dispatch,
         )
         self._record(t, sr, ex.stop_move)
 
