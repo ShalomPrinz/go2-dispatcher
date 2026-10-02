@@ -1,5 +1,5 @@
 """Shared skill helpers: the per-skill dispatcher policy, stdout capture, response building,
-emit, run_skill, orphan watchdog (skills/docs/skills.md). Standard library only."""
+emit, run_main and run_skill, orphan watchdog (skills/docs/skills.md). Standard library only."""
 
 from __future__ import annotations
 
@@ -246,54 +246,59 @@ def sample_state_safe(errors: list[str], label: str) -> tuple[dict | None, float
     return state, time.monotonic() - t
 
 
+def run_main(skill: str, body: Callable[[dict], None], *, watchdog: bool = True) -> NoReturn:
+    """Shared main() of skills and utilities: capture_stdout(), optional orphan watchdog, then
+    body(out), where out holds emit()'s keyword arguments plus "status" and body fills it in place,
+    so partial results survive an exception. An exception sets status=error with
+    error_response_fields(); timing["total_ms"] is added; then emit()."""
+    capture_stdout()
+    if watchdog:
+        start_orphan_watchdog()
+    t0 = time.monotonic()
+    out: dict = {"status": "error", "error_code": None, "error_message": None, "timing": {}}
+    try:
+        body(out)
+    except Exception as e:
+        out["status"] = "error"
+        if isinstance(e, InvalidParams):
+            out["error_code"], out["error_message"] = "invalid_params", str(e)
+        else:
+            out["error_code"], out["error_message"] = error_from_exception(e)
+            if out["error_code"] != "backend_not_configured":
+                traceback.print_exc(file=sys.stderr)
+    out["timing"]["total_ms"] = ms_since(t0)
+    emit(skill, out.pop("status"), **out)
+
+
 def run_skill(policy: SkillPolicy, body: Body, *, sample_state: bool = True) -> NoReturn:
-    """Standard main():
-    1. capture_stdout(); start_orphan_watchdog(); t0 = monotonic()
-    2. params = json.loads(argv[1]); must be a dict -> else emit error invalid_params
-    3. if sample_state: state_before = backend.sample_state() (exception -> state_error, continue)
-    4. status, obs, code, msg, timing = body(params)
-    5. if sample_state: state_after = backend.sample_state() (exception -> append to state_error)
-    6. timing["state_ms"] = total time spent in the two samples; timing["total_ms"] = since t0
-    7. emit(...)
-    Any exception from steps 2–5 is caught: status=error, code="exception",
+    """Standard main() of a skill, via run_main:
+    1. params = json.loads(argv[1]); must be a dict -> else error invalid_params
+    2. if sample_state: state_before = backend.sample_state() (exception -> state_error, continue)
+    3. status, obs, code, msg, timing = body(params)
+    4. if sample_state: state_after = backend.sample_state() (exception -> append to state_error)
+    5. timing["state_ms"] = total time spent in the two samples; timing["total_ms"] = since start
+    Any exception from steps 1-4 gives status=error, code="exception",
     message="<ExceptionType>: <first line of str(e)>"; the traceback goes to stderr.
     BackendNotConfigured maps to code "backend_not_configured"; InvalidParams to
     "invalid_params"."""
-    capture_stdout()
-    start_orphan_watchdog()
-    t0 = time.monotonic()
-    state_before = state_after = None
-    state_errors: list[str] = []
-    state_s = 0.0
-    timing: dict = {}
-    try:
-        params = parse_params()
-        if sample_state:
-            state_before, dt = sample_state_safe(state_errors, "before")
-            state_s += dt
-        status, obs, code, msg, timing = body(params)
-        timing = dict(timing or {})
-        if sample_state:
-            state_after, dt = sample_state_safe(state_errors, "after")
-            state_s += dt
-    except InvalidParams as e:
-        status, obs, code, msg = "error", {}, "invalid_params", str(e)
-    except Exception as e:
-        code, msg = error_from_exception(e)
-        if code != "backend_not_configured":
-            traceback.print_exc(file=sys.stderr)
-        status, obs = "error", {}
-    if sample_state:
-        timing["state_ms"] = round(state_s * 1000.0, 3)
-    timing["total_ms"] = ms_since(t0)
-    emit(
-        policy.name,
-        status,
-        observations=obs,
-        error_code=code,
-        error_message=msg,
-        state_before=state_before,
-        state_after=state_after,
-        state_error="; ".join(state_errors) or None,
-        timing=timing,
-    )
+
+    def main(out: dict) -> None:
+        state_errors: list[str] = []
+        state_s = 0.0
+        try:
+            params = parse_params()
+            if sample_state:
+                out["state_before"], dt = sample_state_safe(state_errors, "before")
+                state_s += dt
+            status, obs, code, msg, timing = body(params)
+            out["timing"] = dict(timing or {})
+            if sample_state:
+                out["state_after"], dt = sample_state_safe(state_errors, "after")
+                state_s += dt
+            out.update(status=status, observations=obs, error_code=code, error_message=msg)
+        finally:
+            out["state_error"] = "; ".join(state_errors) or None
+            if sample_state:
+                out["timing"]["state_ms"] = round(state_s * 1000.0, 3)
+
+    run_main(policy.name, main)

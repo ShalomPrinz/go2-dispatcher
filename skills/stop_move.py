@@ -8,9 +8,7 @@ argument is invalid (the response then reports invalid_params).
 from __future__ import annotations
 
 import os
-import sys
 import time
-import traceback
 
 from skills import backend, result
 
@@ -18,49 +16,32 @@ SKILL = "stop_move"
 SETTLE_S = 0.5
 
 
-def main() -> None:
-    result.capture_stdout()
+def body(out: dict) -> None:
     t0 = time.monotonic()
     os.environ.pop("GO2_STUB_FAULT", None)  # utilities ignore faults
-    timing: dict = {}
-    obs: dict = {}
-    state_after = None
-    state_errors: list[str] = []
     try:
+        result.parse_params()
         params_error = None
-        try:
-            result.parse_params()
-        except result.InvalidParams as e:
-            params_error = str(e)
-        client = backend.get_sport_client()
-        ret = client.StopMove()
-        timing["stop_call_ms"] = result.ms_since(t0)
-        obs["sdk_ret"] = ret
-        backend.sleep(SETTLE_S)
-        state_after, dt = result.sample_state_safe(state_errors, "after")
-        timing["state_ms"] = round(dt * 1000.0, 3)
-        if params_error is not None:
-            status, code, msg = "error", "invalid_params", params_error
-        elif ret == 0:
-            status, code, msg = "ok", None, None
-        else:
-            status, code, msg = "error", "sdk_error", f"StopMove returned {ret}"
-    except Exception as e:
-        if not isinstance(e, backend.BackendNotConfigured):
-            traceback.print_exc(file=sys.stderr)
-        code, msg = result.error_from_exception(e)
-        status = "error"
-    timing["total_ms"] = result.ms_since(t0)
-    result.emit(
-        SKILL,
-        status,
-        observations=obs,
-        error_code=code,
-        error_message=msg,
-        state_after=state_after,
-        state_error="; ".join(state_errors) or None,
-        timing=timing,
-    )
+    except result.InvalidParams as e:
+        params_error = e  # raised only after StopMove was sent
+    ret = backend.get_sport_client().StopMove()
+    out["timing"]["stop_call_ms"] = result.ms_since(t0)
+    out["observations"] = {"sdk_ret": ret}
+    backend.sleep(SETTLE_S)
+    state_errors: list[str] = []
+    out["state_after"], dt = result.sample_state_safe(state_errors, "after")
+    out["state_error"] = "; ".join(state_errors) or None
+    out["timing"]["state_ms"] = round(dt * 1000.0, 3)
+    if params_error is not None:
+        raise params_error
+    if ret == 0:
+        out["status"] = "ok"
+    else:
+        out.update(error_code="sdk_error", error_message=f"StopMove returned {ret}")
+
+
+def main() -> None:
+    result.run_main(SKILL, body, watchdog=False)
 
 
 if __name__ == "__main__":

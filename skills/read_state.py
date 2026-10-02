@@ -15,35 +15,25 @@ from skills import backend, result
 SKILL = "read_state"
 
 
-def main() -> None:
-    result.capture_stdout()
-    t0 = time.monotonic()
+def body(out: dict) -> None:
     os.environ.pop("GO2_STUB_FAULT", None)  # utilities ignore faults
-    timing: dict = {}
-    state_after = None
+    result.parse_params()
+    backend.backend_name()  # raises BackendNotConfigured
+    t = time.monotonic()
     try:
-        result.parse_params()
-        backend.backend_name()  # raises BackendNotConfigured
-        t = time.monotonic()
-        try:
-            state_after = backend.sample_state()
-            status, code, msg = "ok", None, None
-        except backend.BackendNotConfigured:
-            raise
-        except Exception as e:
-            traceback.print_exc(file=sys.stderr)
-            first = str(e).splitlines()[0] if str(e) else ""
-            status, code, msg = "error", "state_unavailable", f"{type(e).__name__}: {first}"
-        timing["state_ms"] = result.ms_since(t)
-    except result.InvalidParams as e:
-        status, code, msg = "error", "invalid_params", str(e)
+        out["state_after"] = backend.sample_state()
+        out["status"] = "ok"
+    except backend.BackendNotConfigured:
+        raise
     except Exception as e:
-        if not isinstance(e, backend.BackendNotConfigured):
-            traceback.print_exc(file=sys.stderr)
-        code, msg = result.error_from_exception(e)
-        status = "error"
-    timing["total_ms"] = result.ms_since(t0)
-    result.emit(SKILL, status, error_code=code, error_message=msg, state_after=state_after, timing=timing)
+        traceback.print_exc(file=sys.stderr)
+        first = str(e).splitlines()[0] if str(e) else ""
+        out.update(error_code="state_unavailable", error_message=f"{type(e).__name__}: {first}")
+    out["timing"]["state_ms"] = result.ms_since(t)
+
+
+def main() -> None:
+    result.run_main(SKILL, body, watchdog=False)
 
 
 if __name__ == "__main__":
