@@ -1,4 +1,24 @@
 {
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Bash(*--backend real*)",
+      "Bash(*--backend=real*)",
+      "Bash(*--run-robot*)"
+    ],
+    "ask": [
+      "Bash(*--run-live*)"
+    ],
+    "allow": [
+      "Bash(uv run pytest *)",
+      "Bash(uv run ruff *)",
+      "Bash(uv run go2 catalog*)",
+      "Bash(uv run go2 state*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)"
+    ]
+  },
   "hooks": {
     "Stop": [
       {

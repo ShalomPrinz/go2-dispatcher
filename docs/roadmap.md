@@ -83,6 +83,7 @@ Not scheduled.
 - **Continuous monitoring during a skill**: a watchdog that can abort mid-motion rather than only between steps.
 - **Independent batch tasks.** `batch` carries the previous task and posture across lines; experiments may need a reset per task (for example an `--independent` flag).
 - **Send the optional `PLAN` message to the operator** as progress. Currently it is logged only.
+- **Claude Code guard hooks** for the real backend: a fail-closed PreToolUse `Bash` hook blocking `--backend real` / `--run-robot` (permission patterns miss `sh -c` and path prefixes) and an `Edit|Write` hook blocking `backend = "real"` in tracked config ([safety.md](safety.md#design-decisions)).
 
 ## Open questions
 

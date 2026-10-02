@@ -10,6 +10,7 @@ Everything that limits or stops the robot. The dispatcher bounds what the LLM ca
 - After a `sit`, stand the robot up with the remote: no skill can stand it up ([robot.md](../skills/docs/robot.md)).
 - If an outcome ends with `WARNING: the stop command to the robot failed. Stop the robot manually.`, use the remote at once.
 - Do not raise `motion_budget.*`, the walk/turn ranges in `SKILL.md`, or the policy timeouts without recording the reason in the owning document.
+- Coding agents never run the real backend or robot tests. `.claude/settings.json` denies Claude Code commands containing `--backend real` or `--run-robot`, denies reading `.env`, and asks before `--run-live`.
 
 ## The stop path
 
@@ -94,4 +95,5 @@ If the dispatcher host loses power or the network drops, none of this helps. Use
 - **Orphan watchdog in skill processes**, so skills stop the robot and exit if the dispatcher dies.
 - **One dispatcher process per machine (file lock)**, so two processes can never drive one robot, overwrite the stub state, or interleave `index.jsonl`.
 - **The robot is stationary during LLM calls**, so a slow or failing LLM call never leaves the robot moving.
+- **Agent limits are permission rules, not only CLAUDE.md prose**, because instructions are context, not enforcement. Bash argument patterns can be bypassed (`sh -c`, a changed config file); a PreToolUse guard hook is pending ([roadmap.md](roadmap.md#future-ideas)).
 - **The physical/remote e-stop remains the final safety measure.** The software stops are best effort; their real latency is still to be measured.
