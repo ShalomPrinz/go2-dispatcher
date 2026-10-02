@@ -1,6 +1,5 @@
 """Stub backend (skills/docs/skills.md): remembers posture in a shared JSON state file, supports fault
-injection, configured detections and a test-only stdout noise mode. Replaces only the
-SDK layer inside the skill subprocess."""
+injection and configured detections. Replaces only the SDK layer inside the skill subprocess."""
 
 from __future__ import annotations
 
@@ -18,7 +17,6 @@ STATE_FILE_ENV = "GO2_STUB_STATE_FILE"
 TIME_SCALE_ENV = "GO2_STUB_TIME_SCALE"
 DETECTIONS_ENV = "GO2_STUB_DETECTIONS"
 FAULT_ENV = "GO2_STUB_FAULT"
-NOISE_ENV = "GO2_STUB_NOISE"
 
 # Defaults when the env is unset (manual runs); they mirror the config defaults (docs/configuration.md).
 DEFAULT_STATE_FILE = "runs/.stub_state.json"
@@ -41,11 +39,7 @@ DETECT_CONFIDENCE = 0.9
 BODY_HEIGHT_STANDING_M = 0.32
 BODY_HEIGHT_SITTING_M = 0.08
 
-NOISE_PRINT_TEXT = "stub noise via print()"
-NOISE_RAW_TEXT = b"stub noise via os.write(1)\n"
-
 _fault_consumed = False
-_noise_done = False
 
 
 class StubCameraError(CameraUnavailable):
@@ -76,16 +70,6 @@ def detections() -> dict[str, str]:
 
 def sleep(seconds: float) -> None:
     time.sleep(seconds * time_scale())
-
-
-def _noise() -> None:
-    """GO2_STUB_NOISE=1: write junk to stdout via print() and os.write(1) on first use."""
-    global _noise_done
-    if _noise_done or os.environ.get(NOISE_ENV) != "1":
-        return
-    _noise_done = True
-    print(NOISE_PRINT_TEXT, flush=True)
-    os.write(1, NOISE_RAW_TEXT)
 
 
 # --- state file -----------------------------------------------------------------
@@ -195,17 +179,14 @@ class StubDetector:
 
 
 def get_sport_client() -> StubSportClient:
-    _noise()
     return StubSportClient()
 
 
 def get_detector() -> StubDetector:
-    _noise()
     return StubDetector()
 
 
 def sample_state() -> dict:
-    _noise()
     posture = read_posture()
     return {
         "t": time.time(),

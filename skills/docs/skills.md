@@ -247,7 +247,7 @@ uv run go2 --fault 1:error --fault 3:crash batch tasks.txt
 | `crash` | exits with code 139, no output | `malformed` |
 | `garbage` | prints `not json` and exits 0 | `malformed` |
 
-For one process run by hand, set `GO2_STUB_FAULT=<kind>` directly. `GO2_STUB_NOISE=1` (tests only) makes the stub write junk to stdout, to check that the response line stays clean.
+For one process run by hand, set `GO2_STUB_FAULT=<kind>` directly.
 
 ## Adding a new skill
 

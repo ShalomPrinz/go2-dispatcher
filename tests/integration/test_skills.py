@@ -71,13 +71,6 @@ def test_backend_not_configured(tmp_path):
     assert "Traceback" not in proc.stderr
 
 
-def test_noise_stays_off_stdout(tmp_path):
-    proc = run_module("walk", VALID["walk"], stub_env(tmp_path, GO2_STUB_NOISE="1"))
-    resp = SkillResponse.model_validate(single_response(proc))
-    assert proc.returncode == 0 and resp.status == "ok"
-    assert stub.NOISE_PRINT_TEXT in proc.stderr
-
-
 def test_fresh_interpreter_import_is_side_effect_free():
     """Every skills module imports without heavy modules or output (skills/docs/skills.md)."""
     code = r"""

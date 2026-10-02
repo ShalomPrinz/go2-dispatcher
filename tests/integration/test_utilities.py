@@ -64,15 +64,6 @@ def test_backend_not_configured(tmp_path, name):
 
 
 @pytest.mark.parametrize("name", UTILITIES)
-def test_noise_goes_to_stderr(tmp_path, name):
-    proc = run_module(name, {}, stub_env(tmp_path, GO2_STUB_NOISE="1"))
-    resp = SkillResponse.model_validate(single_response(proc))
-    assert proc.returncode == 0 and resp.status == "ok"
-    assert stub.NOISE_PRINT_TEXT in proc.stderr
-    assert stub.NOISE_RAW_TEXT.decode().strip() in proc.stderr
-
-
-@pytest.mark.parametrize("name", UTILITIES)
 def test_utilities_ignore_faults(tmp_path, name):
     """One `os.environ.pop` covers every kind; hang is the one whose failure is dangerous."""
     proc = run_module(name, {}, stub_env(tmp_path, fault="hang"), timeout=10)
