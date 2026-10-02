@@ -1,5 +1,5 @@
 """The five skills on the stub backend: contract, stub behaviour, faults, orphan
-watchdog (skills/docs/skills.md, docs/testing.md)."""
+watchdog (skills/docs/skills.md, tests/docs/testing.md)."""
 
 from __future__ import annotations
 

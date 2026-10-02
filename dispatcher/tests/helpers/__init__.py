@@ -1,4 +1,4 @@
-"""Dispatcher-only test helpers (docs/testing.md). Shared ones are in tests.helpers."""
+"""Dispatcher-only test helpers (tests/docs/testing.md). Shared ones are in tests.helpers."""
 
 from .config import make_config
 from .fake_telegram import fake_context, fake_update, replies

@@ -1,4 +1,4 @@
-"""Plan-level validation, one test per rule (dispatcher/docs/loop-and-context.md, docs/testing.md)."""
+"""Plan-level validation, one test per rule (dispatcher/docs/loop-and-context.md, tests/docs/testing.md)."""
 
 from __future__ import annotations
 

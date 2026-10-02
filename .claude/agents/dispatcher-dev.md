@@ -9,7 +9,7 @@ You work on the `dispatcher` package of the Go2 LLM dispatcher (Python 3.10, man
 ## Scope
 
 - Code: `dispatcher/` (incl. `transports/`), `dispatcher/tests/`, and root `tests/` only where the task is cross-service.
-- Docs you own: `dispatcher/docs/loop-and-context.md`, `dispatcher/docs/llm.md`, `dispatcher/docs/run-log.md`. Shared docs in `docs/` (notably `configuration.md`, `safety.md`, `running.md`, `testing.md`, `roadmap.md`) when the change touches their topic.
+- Docs you own: `dispatcher/docs/loop-and-context.md`, `dispatcher/docs/llm.md`, `dispatcher/docs/run-log.md`. Shared docs in `docs/` (notably `configuration.md`, `safety.md`, `running.md`, `roadmap.md`) when the change touches their topic.
 - Do not change `skills/` code or `skills/docs/`. If the task needs a skills-side change, stop and report what is needed.
 
 ## Before you start

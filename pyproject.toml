@@ -35,7 +35,7 @@ exclude = ["dispatcher/docs", "dispatcher/tests", "skills/docs", "skills/tests",
 
 [tool.pytest.ini_options]
 testpaths = ["dispatcher/tests", "skills/tests", "tests"]
-addopts = "-p tests.pytest_plugin"   # options and marker gating (docs/testing.md)
+addopts = "-p tests.pytest_plugin"   # options and marker gating (tests/docs/testing.md)
 timeout = 30
 markers = [
   "integration: spawns real subprocesses with the stub backend",
@@ -43,7 +43,7 @@ markers = [
   "robot: needs the real Go2 (needs --run-robot)",
 ]
 
-[tool.coverage.run]                     # opt-in: uv run pytest --cov (docs/testing.md)
+[tool.coverage.run]                     # opt-in: uv run pytest --cov (tests/docs/testing.md)
 source = ["dispatcher", "skills"]
 branch = true
 patch = ["subprocess", "_exit"]         # measure skill and CLI subprocesses; skills end with os._exit
@@ -52,7 +52,7 @@ patch = ["subprocess", "_exit"]         # measure skill and CLI subprocesses; sk
 show_missing = true
 skip_covered = true
 
-[tool.ruff]                             # lint and format (docs/testing.md)
+[tool.ruff]                             # lint and format (tests/docs/testing.md)
 target-version = "py310"
 line-length = 120
 

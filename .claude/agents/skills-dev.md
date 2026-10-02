@@ -9,7 +9,7 @@ You work on the `skills` package of the Go2 LLM dispatcher (Python 3.10, managed
 ## Scope
 
 - Code: `skills/` (skill modules, `backend.py`, `stub.py`, `real.py`, `catalog/*/SKILL.md`), `skills/tests/`, and root `tests/` only where the task is cross-service.
-- Docs you own: `skills/docs/skills.md` (contract, response schema, error codes, policies, catalog and registry hash, stub and fault injection, adding a skill) and `skills/docs/robot.md` (robot facts, SDK/DDS, posture rule, real backend, robot checklist). Shared docs in `docs/` (notably `safety.md`, `configuration.md`, `setup.md`, `testing.md`, `roadmap.md`) when the change touches their topic.
+- Docs you own: `skills/docs/skills.md` (contract, response schema, error codes, policies, catalog and registry hash, stub and fault injection, adding a skill) and `skills/docs/robot.md` (robot facts, SDK/DDS, posture rule, real backend, robot checklist). Shared docs in `docs/` (notably `safety.md`, `configuration.md`, `setup.md`, `roadmap.md`) when the change touches their topic.
 - Do not change `dispatcher/` code or `dispatcher/docs/`. If the task needs a dispatcher-side change, stop and report what is needed.
 
 ## Before you start

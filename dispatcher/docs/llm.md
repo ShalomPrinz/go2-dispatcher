@@ -45,7 +45,7 @@ Sonnet 5.5 returns HTTP 400 for three things an earlier design relied on. A 400 
 
 ### Live-API verification status
 
-**Unverified.** No request has yet been sent to the live API with these parameters. In particular it has not been confirmed that Sonnet 5.5 accepts `between_tools` together with auto `tool_choice` and a tool definition. The parameter facts above come from Anthropic's documentation ([references.md](../../docs/references.md#llm)). To verify, run the live test with an API key ([testing.md](../../docs/testing.md)); it is tracked in [roadmap.md](../../docs/roadmap.md#pending-human-work).
+**Unverified.** No request has yet been sent to the live API with these parameters. In particular it has not been confirmed that Sonnet 5.5 accepts `between_tools` together with auto `tool_choice` and a tool definition. The parameter facts above come from Anthropic's documentation ([references.md](../../docs/references.md#llm)). To verify, run the live test with an API key ([testing.md](../../tests/docs/testing.md)); it is tracked in [roadmap.md](../../docs/roadmap.md#pending-human-work).
 
 ## Response handling
 

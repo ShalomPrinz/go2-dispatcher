@@ -1,6 +1,6 @@
 # Claude Code hooks
 
-Wired in `.claude/settings.json`. Lint and format rules live in [docs/testing.md](../../docs/testing.md).
+Wired in `.claude/settings.json`. Lint and format rules live in [tests/docs/testing.md](../../tests/docs/testing.md).
 
 | Hook | Event | Blocks? | What it does |
 |---|---|---|---|

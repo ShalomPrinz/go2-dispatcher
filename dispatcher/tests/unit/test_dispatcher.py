@@ -1,4 +1,4 @@
-"""Dispatcher loop tests with ScriptedPlanner + FakeExecutor + FakeClock (docs/testing.md)."""
+"""Dispatcher loop tests with ScriptedPlanner + FakeExecutor + FakeClock (tests/docs/testing.md)."""
 
 from __future__ import annotations
 

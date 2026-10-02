@@ -1,5 +1,5 @@
 """prompts.py fixed texts as one golden file, plus completeness checks
-(dispatcher/docs/loop-and-context.md, skills/docs/skills.md, docs/testing.md)."""
+(dispatcher/docs/loop-and-context.md, skills/docs/skills.md, tests/docs/testing.md)."""
 
 from __future__ import annotations
 

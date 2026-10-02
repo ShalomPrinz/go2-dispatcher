@@ -1,4 +1,4 @@
-"""Telegram handlers called directly with fake objects (docs/testing.md)."""
+"""Telegram handlers called directly with fake objects (tests/docs/testing.md)."""
 
 from __future__ import annotations
 

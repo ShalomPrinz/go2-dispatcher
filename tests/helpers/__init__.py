@@ -1,4 +1,4 @@
-"""Helpers shared by the root cross-service tests and the service suites (docs/testing.md)."""
+"""Helpers shared by the root cross-service tests and the service suites (tests/docs/testing.md)."""
 
 from .paths import REPO_ROOT, TEST_TIME_SCALE
 from .skill_process import run_module, single_response, stub_env

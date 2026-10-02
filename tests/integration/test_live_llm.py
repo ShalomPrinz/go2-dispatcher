@@ -1,4 +1,4 @@
-"""Live stub run against the real Anthropic API (``--run-live``, docs/testing.md)."""
+"""Live stub run against the real Anthropic API (``--run-live``, tests/docs/testing.md)."""
 
 from __future__ import annotations
 

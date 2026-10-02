@@ -20,11 +20,11 @@ uv run go2 --fault 1:hang run "…"              # stub fault injection (skills/
 uv run go2 --reset-stub                        # reset the stub posture and exit
 ```
 
-Opt-in tests (`--run-live`, `--run-robot`) are described in [docs/testing.md](docs/testing.md).
+Opt-in tests (`--run-live`, `--run-robot`) are described in [tests/docs/testing.md](tests/docs/testing.md).
 
 ## Documentation rules
 
-- The docs (`docs/`, `dispatcher/docs/`, `skills/docs/`) are the source of truth for why the system is built as it is and for its contracts (plan schema, skill response, config keys, outcome codes, log records, fixed texts).
+- The docs (`docs/`, `dispatcher/docs/`, `skills/docs/`, `tests/docs/`) are the source of truth for why the system is built as it is and for its contracts (plan schema, skill response, config keys, outcome codes, log records, fixed texts).
 - A change that affects behaviour updates the owning doc **in the same commit**. Never leave docs and code disagreeing.
 - Decisions go into the owning doc's "Design decisions" section, with the reason and any rejected alternative. There is no separate decisions log.
 - Open questions and pending work go into [docs/roadmap.md](docs/roadmap.md), each with an owner or a way to resolve it. When one is resolved, move the result into the owning doc and remove it from the roadmap.
@@ -44,7 +44,7 @@ Opt-in tests (`--run-live`, `--run-robot`) are described in [docs/testing.md](do
 - The main session is an **orchestrator**: it always delegates code and doc changes to a project agent (`.claude/agents/`), one task at a time, with a self-contained brief. It does not edit `dispatcher/` or `skills/` itself.
   - `dispatcher-dev`: anything under `dispatcher/` or owned by `dispatcher/docs/`.
   - `skills-dev`: anything under `skills/` or owned by `skills/docs/`.
-  - `tests-dev`: test infrastructure only (pytest plugin, helpers, markers, golden mechanism, coverage, CI) and `docs/testing.md`. Tests of package behaviour go with the package agent.
+  - `tests-dev`: test infrastructure only (pytest plugin, helpers, markers, golden mechanism, coverage, CI) and `tests/docs/testing.md`. Tests of package behaviour go with the package agent.
   - A task that touches both packages is split into one task per agent, run in sequence (the side that defines the contract first). Each agent stops and reports when it needs a change on the other side.
 - It verifies with commands only (`uv run pytest -q 2>&1 | tail -n 15`, `git status --short`, `git diff --stat`) and commits per task.
 - It does not read the whole doc set or source itself; that exhausts its context before the work starts.

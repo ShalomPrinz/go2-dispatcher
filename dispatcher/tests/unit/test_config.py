@@ -1,4 +1,4 @@
-"""Config unit tests (docs/testing.md)."""
+"""Config unit tests (tests/docs/testing.md)."""
 
 from __future__ import annotations
 

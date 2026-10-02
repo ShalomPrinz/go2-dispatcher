@@ -1,4 +1,4 @@
-"""ScriptedPlanner: a PlannerClient that replays scripted replies (docs/testing.md)."""
+"""ScriptedPlanner: a PlannerClient that replays scripted replies (tests/docs/testing.md)."""
 
 from __future__ import annotations
 

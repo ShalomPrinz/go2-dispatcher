@@ -1,4 +1,4 @@
-"""Step bounds, whole-plan pre-check, motion budget (dispatcher/docs/loop-and-context.md, docs/testing.md)."""
+"""Step bounds, whole-plan pre-check, motion budget (dispatcher/docs/loop-and-context.md, tests/docs/testing.md)."""
 
 from __future__ import annotations
 

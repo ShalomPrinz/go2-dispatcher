@@ -1,4 +1,4 @@
-"""Test-only skill: reports the names of its environment variables (docs/testing.md).
+"""Test-only skill: reports the names of its environment variables (tests/docs/testing.md).
 
 Run as ``python -m skill_modules.env_dump '{}'`` with ``dispatcher/tests/helpers`` on
 ``PYTHONPATH`` (importing it as ``skill_modules`` avoids loading ``helpers``).

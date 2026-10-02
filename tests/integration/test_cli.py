@@ -1,4 +1,4 @@
-"""CLI subprocess tests (docs/testing.md): GO2_TEST_PLANNER=planner_factory:factory."""
+"""CLI subprocess tests (tests/docs/testing.md): GO2_TEST_PLANNER=planner_factory:factory."""
 
 from __future__ import annotations
 

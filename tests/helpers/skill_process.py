@@ -1,4 +1,4 @@
-"""Run skills modules as subprocesses on the stub backend (docs/testing.md)."""
+"""Run skills modules as subprocesses on the stub backend (tests/docs/testing.md)."""
 
 from __future__ import annotations
 

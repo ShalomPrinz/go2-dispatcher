@@ -117,7 +117,7 @@ The gate for experiments with participants, collected from the sections above. E
 | Item | Owner / how |
 |---|---|
 | Is the robot's position estimate (odometry) available and usable? Decides `walk` verification and the geofence. | Ask Achiya |
-| Live API check of the LLM request parameters (Sonnet 5.5, `between_tools`, auto tool choice). | `ANTHROPIC_API_KEY=... uv run pytest --run-live -s tests/integration/test_live_llm.py` ([testing.md](testing.md#live-llm-test)) |
+| Live API check of the LLM request parameters (Sonnet 5.5, `between_tools`, auto tool choice). | `ANTHROPIC_API_KEY=... uv run pytest --run-live -s tests/integration/test_live_llm.py` ([testing.md](../tests/docs/testing.md#live-llm-test)) |
 | Supervised robot checklist: posture thresholds (`body_height` or `mode`), settle waits, what `Move` does while lying down, kill-to-stop latency. | Supervised run on the robot; record results in [robot.md](../skills/docs/robot.md) |
 | First run of the real backend; `uv sync --extra robot` on the lab machine; pin the Python patch version once it works (currently `>=3.10,<3.11`). | Lab machine setup ([setup.md](setup.md)) |
 | Manual Telegram test on a phone: busy reply, stop. | Operator |

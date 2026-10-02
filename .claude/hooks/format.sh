@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Stop/SubagentStop hook: apply `ruff format` and import sorting to the changed .py files.
-# Non-blocking: always exits 0. lint.sh calls it first so the two never race (docs/testing.md).
+# Non-blocking: always exits 0. lint.sh calls it first so the two never race (tests/docs/testing.md).
 input=$(cat)
 active=$(printf '%s' "$input" | python3 -c 'import json,sys
 try: d=json.load(sys.stdin)

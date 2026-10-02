@@ -1,6 +1,6 @@
 # Testing
 
-Running the test suite: layout, markers and opt-in flags, helpers and fakes, golden files. The manual robot checks are in [robot.md](../skills/docs/robot.md#supervised-robot-checklist).
+Running the test suite: layout, markers and opt-in flags, helpers and fakes, golden files. The manual robot checks are in [robot.md](../../skills/docs/robot.md#supervised-robot-checklist).
 
 ## Running the tests
 
@@ -20,7 +20,7 @@ uv run ruff check --fix .        # apply safe fixes
 uv run ruff format .             # format (ruff defaults, line length 120)
 ```
 
-Formatting must be clean and the lint must pass before a commit; both run locally, not in CI. The Claude Code Stop and SubagentStop hook (`.claude/hooks/lint.sh`) first runs `.claude/hooks/format.sh`, which applies `ruff format` and import sorting to the changed and untracked `.py` files, then blocks the stop while `ruff check` fails on those files; the same failure twice in one session only warns ([hooks README](../.claude/hooks/README.md)). `.git-blame-ignore-revs` lists the formatting sweep (`git config blame.ignoreRevsFile .git-blame-ignore-revs`). Rules: pycodestyle, pyflakes, isort, bugbear and pyupgrade (`E`, `F`, `W`, `I`, `B`, `UP`) for Python 3.10, line length 120.
+Formatting must be clean and the lint must pass before a commit; both run locally, not in CI. The Claude Code Stop and SubagentStop hook (`.claude/hooks/lint.sh`) first runs `.claude/hooks/format.sh`, which applies `ruff format` and import sorting to the changed and untracked `.py` files, then blocks the stop while `ruff check` fails on those files; the same failure twice in one session only warns ([hooks README](../../.claude/hooks/README.md)). `.git-blame-ignore-revs` lists the formatting sweep (`git config blame.ignoreRevsFile .git-blame-ignore-revs`). Rules: pycodestyle, pyflakes, isort, bugbear and pyupgrade (`E`, `F`, `W`, `I`, `B`, `UP`) for Python 3.10, line length 120.
 
 ### Coverage
 
@@ -58,7 +58,7 @@ A service folder holds unit tests of that service only: `skills/tests/` never im
 Options (defined in the pytest plugin `tests/pytest_plugin.py`, loaded by `addopts = "-p tests.pytest_plugin"` in `pyproject.toml`, so they are available whichever folder is run):
 
 - `--run-live`: run `live_llm` tests. They are skipped without it, and also skipped if `ANTHROPIC_API_KEY` is not set.
-- `--run-robot`: run `robot` tests. There are none in v1; the robot checks are the supervised checklist in [robot.md](../skills/docs/robot.md#supervised-robot-checklist).
+- `--run-robot`: run `robot` tests. There are none in v1; the robot checks are the supervised checklist in [robot.md](../../skills/docs/robot.md#supervised-robot-checklist).
 - `--update-golden`: rewrite the golden files instead of comparing against them. Review the diff with `git diff dispatcher/tests/golden` before committing.
 
 ### Live LLM test
@@ -69,7 +69,7 @@ ANTHROPIC_API_KEY=sk-ant-... uv run pytest --run-live -s tests/integration/test_
 
 It runs the task "turn left 90 degrees, then tell me if you see a chair" on the stub with `stub.detections = {chair = "center:near"}`. It passes if the task ends `DONE`, the message mentions the chair, and the run log has no `plan_invalid` or `horizon_rejection` record. With `-s`, it prints the run log path.
 
-It uses the default LLM settings (`claude-sonnet-5-5`, `thinking = "between_tools"`, `tool_choice` auto, no `temperature`; see [llm.md](../dispatcher/docs/llm.md#the-request)). **It has not been run live yet**; running it is the pending check of the request parameters ([roadmap.md](roadmap.md#pending-human-work)).
+It uses the default LLM settings (`claude-sonnet-5-5`, `thinking = "between_tools"`, `tool_choice` auto, no `temperature`; see [llm.md](../../dispatcher/docs/llm.md#the-request)). **It has not been run live yet**; running it is the pending check of the request parameters ([roadmap.md](../../docs/roadmap.md#pending-human-work)).
 
 ## Helpers
 
@@ -98,15 +98,15 @@ uv run go2 run "turn left"
 
 ## Fault injection in tests
 
-The stub fault kinds `error`, `hang`, `crash` and `garbage` ([skills.md](../skills/docs/skills.md#fault-injection)) drive the executor and end-to-end tests through `stub.faults` (by dispatched step) or the `GO2_STUB_FAULT` env var (one process). `GO2_STUB_NOISE=1` makes the stub write junk to stdout, to check that the response line stays clean.
+The stub fault kinds `error`, `hang`, `crash` and `garbage` ([skills.md](../../skills/docs/skills.md#fault-injection)) drive the executor and end-to-end tests through `stub.faults` (by dispatched step) or the `GO2_STUB_FAULT` env var (one process). `GO2_STUB_NOISE=1` makes the stub write junk to stdout, to check that the response line stays clean.
 
 ## Golden files
 
-`dispatcher/tests/golden/catalog.txt` is the exact catalog for the five skills (no trailing newline). The `context_*.txt` files are exact user messages: first call, after a checkpoint, after a failure, after a rejection, with a previous task, and a schema retry. `fixed_texts.txt` renders every fixed text in `prompts.py` with example arguments, one labelled section each: every operator message with and without the StopMove warning, every notice, the motion-budget message, the rejection section, the transport texts, `help_text("stub")` and both system blocks for horizon 5. Any change to the wording in `prompts.py`, the renderer, or a `SKILL.md` changes them. Run `uv run pytest --update-golden`, review the diff, and remember that changing the prompt surface changes the registry hash and makes runs incomparable across the change ([skills.md](../skills/docs/skills.md#catalog-and-registry-hash)). The fixed texts must stay identical across experimental conditions ([loop-and-context.md](../dispatcher/docs/loop-and-context.md)).
+`dispatcher/tests/golden/catalog.txt` is the exact catalog for the five skills (no trailing newline). The `context_*.txt` files are exact user messages: first call, after a checkpoint, after a failure, after a rejection, with a previous task, and a schema retry. `fixed_texts.txt` renders every fixed text in `prompts.py` with example arguments, one labelled section each: every operator message with and without the StopMove warning, every notice, the motion-budget message, the rejection section, the transport texts, `help_text("stub")` and both system blocks for horizon 5. Any change to the wording in `prompts.py`, the renderer, or a `SKILL.md` changes them. Run `uv run pytest --update-golden`, review the diff, and remember that changing the prompt surface changes the registry hash and makes runs incomparable across the change ([skills.md](../../skills/docs/skills.md#catalog-and-registry-hash)). The fixed texts must stay identical across experimental conditions ([loop-and-context.md](../../dispatcher/docs/loop-and-context.md)).
 
 ## Robot checks
 
-There are no automated robot tests in v1. The real backend is checked by hand with the supervised checklist in [robot.md](../skills/docs/robot.md#supervised-robot-checklist), where its results are also recorded.
+There are no automated robot tests in v1. The real backend is checked by hand with the supervised checklist in [robot.md](../../skills/docs/robot.md#supervised-robot-checklist), where its results are also recorded.
 
 ## Writing tests
 
@@ -128,4 +128,5 @@ There are no automated robot tests in v1. The real backend is checked by hand wi
 - **`ruff format` is the formatter, with its defaults and line length 120** (not 88, which matches the existing code). One consistent style outweighs the hand-aligned trailing comments it removed. The formatter does not change string values, so the fixed texts in `dispatcher/prompts.py` and the registry hash are unaffected; that file stays exempt from `E501` because its fixed-text lines are long by design.
 - **Format runs non-blocking on Stop, on changed files only, before lint.** Formatting never needs the agent's attention, so it does not block; limiting it to changed files keeps the hook fast; it runs from `lint.sh` in sequence because hooks for one event run in parallel and would race on the same files.
 - **The lint hook checks changed files only and blocks a given failure once.** An agent is blocked only by files it touched, and an unfixable failure cannot trap it in a stop loop (it gets a warning instead). The whole-repo `uv run ruff check .` remains the pre-commit check.
-- **CI runs only the default suite; lint and format stay out of CI.** The local Claude Code hook and the pre-commit check are the lint gate; CI runs tests only. Live LLM tests would put the API key into CI secrets and cost money per push, and robot tests need a supervised session ([safety.md](safety.md)); both stay opt-in and manual. The `robot` and `vision` extras are not installed in CI, which also checks that the default run needs none of them.
+- **CI runs only the default suite; lint and format stay out of CI.** The local Claude Code hook and the pre-commit check are the lint gate; CI runs tests only. Live LLM tests would put the API key into CI secrets and cost money per push, and robot tests need a supervised session ([safety.md](../../docs/safety.md)); both stay opt-in and manual. The `robot` and `vision` extras are not installed in CI, which also checks that the default run needs none of them.
+- **This doc lives in `tests/docs/`.** The test-infrastructure owner (`tests-dev`) owns a doc tree in its own directory, like the `dispatcher` and `skills` packages. Rejected: keeping it in the shared `docs/`, which blurred its ownership.

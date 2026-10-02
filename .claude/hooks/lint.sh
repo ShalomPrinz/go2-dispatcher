@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Stop/SubagentStop hook: format the changed .py files, then block the stop while `ruff check` fails on them.
-# Changed files only, tree from payload .cwd, loop breaker per session (.claude/hooks/README.md, docs/testing.md).
+# Changed files only, tree from payload .cwd, loop breaker per session (.claude/hooks/README.md, tests/docs/testing.md).
 input=$(cat)
 field() {
   printf '%s' "$input" | python3 -c 'import json,sys

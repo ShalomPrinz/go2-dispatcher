@@ -1,4 +1,4 @@
-"""End-to-end: ScriptedPlanner + real Executor + stub backend (docs/testing.md)."""
+"""End-to-end: ScriptedPlanner + real Executor + stub backend (tests/docs/testing.md)."""
 
 from __future__ import annotations
 

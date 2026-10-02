@@ -1,4 +1,4 @@
-"""Repo root and the stub time scale shared by every test suite (docs/testing.md)."""
+"""Repo root and the stub time scale shared by every test suite (tests/docs/testing.md)."""
 
 from __future__ import annotations
 

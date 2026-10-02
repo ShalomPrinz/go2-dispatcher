@@ -8,7 +8,7 @@ New to the project? Read [project](project.md), then [architecture](architecture
 
 Each document owns one topic. Other documents link to the owner instead of repeating it.
 
-Docs live in three folders: shared documents that cover both services in `docs/` (this folder), dispatcher documents in `dispatcher/docs/`, and skill documents in `skills/docs/`.
+Docs live in four folders: shared documents that cover both services in `docs/` (this folder), dispatcher documents in `dispatcher/docs/`, skill documents in `skills/docs/`, and the test-infrastructure document in `tests/docs/`.
 
 ### Shared (`docs/`)
 
@@ -22,7 +22,6 @@ Documents that cover the whole system or both services.
 | [configuration.md](configuration.md) | Every config key (type, default, tunable or not), `.env` and secrets, precedence, CLI overrides, path resolution, validation rules. |
 | [setup.md](setup.md) | Installing on a development machine and on the lab machine (uv, robot and vision extras, CycloneDDS troubleshooting, network interface, YOLO weights), Python version, verifying an install. |
 | [running.md](running.md) | Operating the system: CLI commands and exit codes, `batch` files, Ctrl+C, Telegram setup, commands and replies, stub vs real backend, switching skill sets. |
-| [testing.md](testing.md) | Running the tests: layout, markers and opt-in flags (live LLM, robot), helpers and fakes, golden files. |
 | [roadmap.md](roadmap.md) | What comes next: the v2 plan (verification layer, verdicts, verifiability per skill, preconditions, escalation, `ASK`, stub upgrade, existing seams), future ideas, open questions (including experiment design), the gate before experiments, and pending human work with owners. |
 | [references.md](references.md) | External documentation and papers, each with one line on why it matters to the project. |
 
@@ -44,6 +43,14 @@ The `skills` package: the skill contract and the robot side.
 |---|---|
 | [skills.md](../skills/docs/skills.md) | The skill contract: `SKILL.md` format, invocation, the common response schema, error codes, policies (timeout and motion cost), catalog generation and registry hash, the stub backend and fault injection, how to add a skill. |
 | [robot.md](../skills/docs/robot.md) | The Go2 EDU side: robot facts, SDK and DDS usage, state sampling and the posture rule, the real backend, settle waits, robot-side open questions (odometry, `stand` skill, `Move` while lying down), and the supervised robot checklist with its recorded results. |
+
+### Tests (`tests/docs/`)
+
+The test infrastructure, owned by the `tests-dev` agent.
+
+| Document | Owns |
+|---|---|
+| [testing.md](../tests/docs/testing.md) | Running the tests: layout, markers and opt-in flags (live LLM, robot), helpers and fakes, golden files. |
 
 The repository root also has a short [README](../README.md) (one paragraph, quick start, link here) and `CLAUDE.md` (working instructions for Claude Code sessions on this repo).
 

@@ -1,4 +1,4 @@
-"""Clock abstraction (docs/testing.md)."""
+"""Clock abstraction (tests/docs/testing.md)."""
 
 from __future__ import annotations
 

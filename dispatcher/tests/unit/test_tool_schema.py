@@ -1,4 +1,4 @@
-"""submit_plan tool schema (dispatcher/docs/loop-and-context.md, docs/testing.md)."""
+"""submit_plan tool schema (dispatcher/docs/loop-and-context.md, tests/docs/testing.md)."""
 
 from __future__ import annotations
 
