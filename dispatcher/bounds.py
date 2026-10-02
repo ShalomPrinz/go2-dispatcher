@@ -46,8 +46,6 @@ def _finite(value: int | float) -> bool | None:
 def _expected(spec: ParamSpec) -> str:
     if spec.type == "number":
         return "a finite number"
-    if spec.type == "integer":
-        return "an integer"
     if spec.type == "string":
         return "a non-empty string"
     return "one of " + ", ".join(spec.values or ())
@@ -58,19 +56,13 @@ def _coerce(spec: ParamSpec, value: Any) -> Any:
 
     Returns the normalised value or _MISSING.
     """
-    if spec.type in ("number", "integer"):
+    if spec.type == "number":
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             return _MISSING
         finite = _finite(value)
         if finite is None:
             return _OVERFLOW
-        if not finite:
-            return _MISSING
-        if spec.type == "number":
-            return value
-        if isinstance(value, int):
-            return value
-        return int(value) if value.is_integer() else _MISSING
+        return value if finite else _MISSING
     if not isinstance(value, str):
         return _MISSING
     if spec.type == "string":
@@ -123,7 +115,7 @@ def check_step(step: PlanStep, registry: Registry) -> tuple[dict | None, list[st
 
     for p, value in typed.items():
         spec = desc.params[p]
-        if spec.type in ("number", "integer"):
+        if spec.type == "number":
             v = _range_violation(p, s, spec, value)
             if v:
                 violations.append(v)

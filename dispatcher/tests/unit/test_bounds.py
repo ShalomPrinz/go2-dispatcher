@@ -28,9 +28,9 @@ class _NullPolicy(SkillPolicy):
 
 @pytest.fixture
 def typed_registry() -> Registry:
-    """A registry with integer, string and one-sided range params (no real skill has them)."""
+    """A registry with string and one-sided range params (no real skill has them)."""
     params = {
-        "n": ParamSpec(type="integer", description="n", min=1),
+        "n": ParamSpec(type="number", description="n", min=1),
         "label": ParamSpec(type="string", description="label", default="x"),
         "level": ParamSpec(type="number", description="level", max=5, default=1.0),
     }
@@ -88,19 +88,6 @@ def test_huge_integer_is_violation_not_exception(registry, typed_registry):
     plan = make_plan(step("walk", direction="forward", distance_m=huge))
     res = precheck(plan, 1, registry, MotionBudget(10, 720), call_index=1)
     assert res.rejection is not None and res.rejection.error_code == "bounds"
-
-
-def test_integer_accepts_integral_float_and_converts(typed_registry):
-    filled, v = check_step(step("count", n=2.0), typed_registry)
-    assert v == []
-    assert filled["n"] == 2 and type(filled["n"]) is int
-
-
-def test_integer_rejects_fraction_and_bool(typed_registry):
-    _, v = check_step(step("count", n=2.5), typed_registry)
-    assert v == ["parameter 'n' for skill count must be an integer, got 2.5"]
-    _, v = check_step(step("count", n=False), typed_registry)
-    assert v == ["parameter 'n' for skill count must be an integer, got False"]
 
 
 def test_empty_string(typed_registry):

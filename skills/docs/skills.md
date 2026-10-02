@@ -25,14 +25,14 @@ ParamSpec (parameter names match `^[a-z][a-z0-9_]*$`):
 
 | Key | Type | Applies to | Meaning |
 |---|---|---|---|
-| `type` | `number` \| `integer` \| `string` \| `enum` | all | Required. |
+| `type` | `number` \| `string` \| `enum` | all | Required. |
 | `description` | non-empty string | all | Required. Short. |
 | `values` | non-empty list of unique lowercase strings | `enum` | Required for `enum`, not allowed otherwise. |
-| `min`, `max` | finite number | `number`, `integer` | Optional, inclusive, `min <= max`. |
+| `min`, `max` | finite number | `number` | Optional, inclusive, `min <= max`. |
 | `default` | value of the param's type | all | Optional. If absent, the parameter is required. Must pass the param's own checks. |
-| `unit` | non-empty string | `number`, `integer` | Optional. Shown in the catalog. |
+| `unit` | non-empty string | `number` | Optional. Shown in the catalog. |
 
-Any other key, a missing required key or an invalid value is a registry error, as are: an entrypoint that cannot be imported, a module without `POLICY`, a `POLICY` that is not a `SkillPolicy`, `POLICY.name` ≠ `name`, a missing skills folder, or zero skills. Transports print `Registry error: <message naming the file>` and exit 2.
+Any other key, a missing required key or an invalid value is a registry error, as are: an entrypoint that cannot be imported, a module without `POLICY`, a `POLICY` that is not a `SkillPolicy`, `POLICY.name` ≠ `name`, a missing skills folder, or zero skills. Transports print `Registry error: <message naming the file>` and exit 2. A frontmatter error reads `<path>: <dotted.loc>: <msg>` (e.g. `params.distance_m.min`); an extra key reads `unknown key`.
 
 Example (`skills/catalog/walk/SKILL.md`):
 
@@ -77,7 +77,7 @@ walk: Walk in a straight line forward, backward, or sideways by a distance, then
   - distance_m (optional, default 0.9): number from 0.1 to 3 metres. Distance to travel.
 ```
 
-Type phrases: `one of a, b`; `text`; `number from X to Y`, `number, at least X`, `number, at most Y` or `number` (likewise `integer`), followed by the unit.
+Type phrases: `one of a, b`; `text`; `number from X to Y`, `number, at least X`, `number, at most Y` or `number`, followed by the unit.
 
 The **registry hash** is the first 16 hex characters of SHA-256 over `system_text + "\n" + catalog_text + "\n" + json.dumps(tool_schema, sort_keys=True)`. It identifies the whole prompt surface, so it changes with the skill set, any `SKILL.md` wording, the system text and the horizon (which appears in the system text and the tool schema). It is logged in `task_start` and `index.jsonl`; runs with different hashes are not directly comparable. `go2 catalog` prints the system text, catalog, tool schema and hash.
 
@@ -311,3 +311,4 @@ Without `GO2_STUB_STATE_FILE` and `GO2_STUB_TIME_SCALE` the stub uses `runs/.stu
 - **State is sampled at the start and end of every step, for logging only.** v1 gives no verdicts. The samples provide data to set v2 verification thresholds before seeing any verification results, and supply the posture shown to the model ([roadmap.md](../../docs/roadmap.md#v2-plan)).
 - **The stub replaces only the SDK layer inside the subprocess**, so process start, timeouts and kills are exercised for real offline. It remembers sitting or standing only: enough to run every failure path. Simulating motion is a v2 prerequisite ([roadmap.md](../../docs/roadmap.md#stub-upgrade-prerequisite)).
 - **Fault injection by dispatched step number** (error, hang, crash, garbage) covers each step outcome the executor can produce, with real processes.
+- **No `integer` param type.** No skill used it; a whole-number parameter is declared `number`. Full decision in [loop-and-context.md](../../dispatcher/docs/loop-and-context.md).

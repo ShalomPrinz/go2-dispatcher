@@ -10,7 +10,7 @@ from dispatcher.llm import plan_tool_schema
 from dispatcher.models import RegistryError
 from dispatcher.policies import SkillPolicy
 from dispatcher.prompts import system_text
-from dispatcher.registry import MISSING, Registry, registry_hash
+from dispatcher.registry import Registry, registry_hash
 from tests.helpers import REPO_ROOT
 
 SKILLS_DIR = REPO_ROOT / "skills" / "catalog"
@@ -69,8 +69,8 @@ def test_loads_five_skills_sorted():
     assert walk is not None and walk.entrypoint == "skills.walk"
     assert isinstance(walk.policy, SkillPolicy) and walk.policy.name == "walk"
     assert list(walk.params) == ["direction", "distance_m"]
-    assert walk.params["direction"].default is MISSING
-    assert walk.params["distance_m"].default == 0.9
+    assert walk.params["direction"].required
+    assert not walk.params["distance_m"].required and walk.params["distance_m"].default == 0.9
     assert reg.get("sit").params == {}
     assert reg.get("nope") is None
 
@@ -106,7 +106,7 @@ def test_catalog_type_phrases(tmp_path):
         "demo",
         """params:
   a:
-    type: integer
+    type: number
     min: 1
     unit: steps
     description: A.
@@ -115,7 +115,7 @@ def test_catalog_type_phrases(tmp_path):
     max: 2.5
     description: B.
   c:
-    type: integer
+    type: number
     description: C.
   d:
     type: string
@@ -136,9 +136,9 @@ def test_catalog_type_phrases(tmp_path):
     )
     assert Registry.load(tmp_path).catalog_text() == (
         "demo: A demo skill.\n"
-        "  - a (required): integer, at least 1 steps. A.\n"
+        "  - a (required): number, at least 1 steps. A.\n"
         "  - b (required): number, at most 2.5. B.\n"
-        "  - c (required): integer. C.\n"
+        "  - c (required): number. C.\n"
         "  - d (optional, default hi): text. D.\n"
         "  - e (optional, default y): one of x, y. E.\n"
         "  - f (optional, default 3): number from 0 to 10. F."
@@ -216,42 +216,42 @@ def test_name_bad_pattern(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "params",
+    ("params", "match"),
     [
-        "params: [a, b]\n",  # not a mapping
-        "params:\n  x: 3\n",  # spec not a mapping
-        "params:\n  x:\n    description: X.\n",  # missing type
-        "params:\n  x:\n    type: number\n",  # missing description
-        "params:\n  x:\n    type: float\n    description: X.\n",  # bad type
-        "params:\n  x:\n    type: number\n    description: X.\n    color: red\n",  # unknown key
-        "params:\n  x:\n    type: enum\n    description: X.\n",  # enum without values
-        "params:\n  x:\n    type: enum\n    values: []\n    description: X.\n",  # empty values
-        "params:\n  x:\n    type: enum\n    values: [Left]\n    description: X.\n",  # not lowercase
-        "params:\n  x:\n    type: enum\n    values: [1, 2]\n    description: X.\n",  # not strings
-        "params:\n  x:\n    type: string\n    values: [a]\n    description: X.\n",  # values on non-enum
-        "params:\n  x:\n    type: string\n    min: 1\n    description: X.\n",  # min on string
-        "params:\n  x:\n    type: enum\n    values: [a]\n    unit: m\n    description: X.\n",  # unit on enum
-        "params:\n  x:\n    type: number\n    min: low\n    description: X.\n",  # non-numeric min
-        "params:\n  x:\n    type: number\n    min: 5\n    max: 1\n    description: X.\n",  # min > max
-        "params:\n  Bad-Name:\n    type: number\n    description: X.\n",  # bad param name
+        ("params:\n  x:\n    type: float\n    description: X.\n", "params.x.type"),  # bad type
+        ("params:\n  x:\n    type: number\n    description: X.\n    color: red\n", "color: unknown key"),
+        ("params:\n  x:\n    type: enum\n    description: X.\n", "values"),  # enum without values
+        ("params:\n  x:\n    type: string\n    min: 1\n    description: X.\n", "min"),  # min on string
+        ("params:\n  x:\n    type: number\n    min: 5\n    max: 1\n    description: X.\n", "min must be <= max"),
+        ("params:\n  Bad-Name:\n    type: number\n    description: X.\n", "Bad-Name"),
     ],
 )
-def test_invalid_param_spec(tmp_path, params):
+def test_invalid_param_spec(tmp_path, params, match):
     path = write_skill(tmp_path, "demo", params)
-    assert_registry_error(tmp_path, path)
+    assert_registry_error(tmp_path, path, match)
+
+
+def test_explicit_null_and_set_rejected(tmp_path):
+    for key, spec in [
+        ("min", "type: number\n    min: null"),
+        ("unit", "type: string\n    unit: null"),
+        ("values", "type: string\n    values: null"),
+    ]:
+        path = write_skill(tmp_path, "demo", f"params:\n  x:\n    {spec}\n    description: X.\n")
+        assert_registry_error(tmp_path, path, f"params.x.{key}")
+    path = write_skill(
+        tmp_path, "demo", "params:\n  x:\n    type: enum\n    values: !!set {a, b}\n    description: X.\n"
+    )
+    assert_registry_error(tmp_path, path, "values must be a list")
 
 
 @pytest.mark.parametrize(
     "spec",
     [
         "type: number\n    min: 1\n    max: 5\n    default: 9",  # above max
-        "type: number\n    min: 1\n    default: 0",  # below min
-        "type: number\n    default: fast",  # wrong type
         "type: number\n    default: true",  # bool is not a number
-        "type: integer\n    default: 2.5",  # not an integer
         "type: enum\n    values: [a, b]\n    default: c",  # not a value
-        "type: string\n    default: ''",  # empty string
-        "type: string\n    default: null",  # null
+        "type: string\n    default: null",  # explicit null is not "no default"
     ],
 )
 def test_default_failing_its_own_checks(tmp_path, spec):

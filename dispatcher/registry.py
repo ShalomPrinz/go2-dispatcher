@@ -9,9 +9,19 @@ import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any, Literal
 
 import yaml
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    ValidationError,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 from .models import RegistryError
 from .policies import SkillPolicy
@@ -21,46 +31,90 @@ FRONTMATTER_DELIMITER = "---"
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 REGISTRY_HASH_LEN = 16
 
-FRONTMATTER_KEYS = frozenset({"name", "entrypoint", "description", "params", "expect"})
-REQUIRED_KEYS = ("name", "entrypoint", "description")
-PARAM_TYPES = frozenset({"number", "integer", "string", "enum"})
-NUMERIC_TYPES = frozenset({"number", "integer"})
-PARAM_KEYS = frozenset({"type", "description", "values", "min", "max", "default", "unit"})
+Name = Annotated[str, StringConstraints(pattern=NAME_RE.pattern)]
+NonEmptyStr = Annotated[str, StringConstraints(pattern=r"\S")]
 
 
-class _Missing:
-    """Sentinel for a ParamSpec without a default (the param is required)."""
-
-    _instance: _Missing | None = None
-
-    def __new__(cls) -> _Missing:
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-
-    def __repr__(self) -> str:
-        return "MISSING"
-
-    def __bool__(self) -> bool:
-        return False
+class _Frontmatter(BaseModel):
+    # strict: no coercion; extra keys are rejected (skills/docs/skills.md)
+    model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
 
 
-MISSING: Any = _Missing()
+class ParamSpec(_Frontmatter):
+    """One entry under ``params:``. ``required`` is true when the file gives no ``default``."""
 
-
-@dataclass(frozen=True)
-class ParamSpec:
-    type: str
-    description: str
-    values: tuple[str, ...] | None = None
-    min: float | None = None
-    max: float | None = None
-    default: Any = MISSING
-    unit: str | None = None
+    type: Literal["number", "string", "enum"]
+    description: NonEmptyStr
+    values: tuple[str, ...] | None = Field(None, strict=False)  # YAML gives a list
+    min: float | None = Field(None, allow_inf_nan=False)
+    max: float | None = Field(None, allow_inf_nan=False)
+    default: Any = None
+    unit: NonEmptyStr | None = None
 
     @property
     def required(self) -> bool:
-        return self.default is MISSING
+        return "default" not in self.model_fields_set
+
+    @field_validator("values", "min", "max", "unit", mode="before")
+    @classmethod
+    def _no_null(cls, v: Any, info: ValidationInfo) -> Any:
+        # an optional key, when present, must carry a value; a YAML set is not an ordered list
+        if v is None:
+            raise ValueError(f"'{info.field_name}' must not be null")
+        if info.field_name == "values" and not isinstance(v, (list, tuple)):
+            raise ValueError("values must be a list")
+        return v
+
+    @model_validator(mode="after")
+    def _check(self) -> ParamSpec:
+        if self.type == "enum":
+            vals = self.values
+            if vals is None:
+                raise ValueError("enum requires 'values'")
+            if not vals or not all(v and v == v.strip().lower() for v in vals):
+                raise ValueError("values must be a non-empty list of lowercase strings")
+            if len(set(vals)) != len(vals):
+                raise ValueError("values must be unique")
+        elif self.values is not None:
+            raise ValueError("'values' is only allowed for type enum")
+        if self.type != "number":
+            for key in ("min", "max", "unit"):
+                if getattr(self, key) is not None:
+                    raise ValueError(f"'{key}' is only allowed for type number")
+        lo, hi = self.min, self.max
+        if lo is not None and hi is not None and lo > hi:
+            raise ValueError("min must be <= max")
+        if not self.required:
+            self._check_default(lo, hi)
+        return self
+
+    def _check_default(self, lo: float | None, hi: float | None) -> None:
+        d = self.default
+        if self.type == "number":
+            ok = _is_number(d)
+        elif self.type == "string":
+            ok = _is_nonempty_str(d)
+        else:  # enum
+            ok = isinstance(d, str) and d in (self.values or ())
+        if not ok:
+            raise ValueError(f"default {d!r} is not a valid {self.type}")
+        if self.type == "number" and ((lo is not None and d < lo) or (hi is not None and d > hi)):
+            raise ValueError(f"default {d!r} is outside its min/max")
+
+
+class SkillFrontmatter(_Frontmatter):
+    name: Name
+    entrypoint: NonEmptyStr
+    description: NonEmptyStr
+    params: dict[Name, ParamSpec] = {}  # frontmatter order
+    expect: Any = None  # accepted and ignored (docs/roadmap.md)
+
+    @field_validator("description")
+    @classmethod
+    def _single_line(cls, v: str) -> str:
+        if "\n" in v.strip():
+            raise ValueError("description must be a single line")
+        return v
 
 
 @dataclass(frozen=True)
@@ -87,6 +141,15 @@ def _fmt_num(v: float) -> str:
     return f"{v:g}"
 
 
+def _format_validation_error(err: ValidationError) -> str:
+    parts = []
+    for e in err.errors():
+        loc = ".".join(str(p) for p in e["loc"])
+        msg = "unknown key" if e["type"] == "extra_forbidden" else e["msg"]
+        parts.append(f"{loc}: {msg}" if loc else msg)
+    return "; ".join(parts)
+
+
 def _read_frontmatter(path: Path) -> dict[str, Any]:
     try:
         text = path.read_text(encoding="utf-8")
@@ -108,113 +171,15 @@ def _read_frontmatter(path: Path) -> dict[str, Any]:
     return data
 
 
-def _parse_param(path: Path, pname: Any, raw: Any) -> ParamSpec:
-    if not isinstance(pname, str) or not NAME_RE.match(pname):
-        raise RegistryError(f"{path}: parameter name {pname!r} must match {NAME_RE.pattern}")
-    where = f"{path}: parameter '{pname}'"
-    if not isinstance(raw, dict):
-        raise RegistryError(f"{where}: spec must be a mapping")
-    unknown = sorted(str(k) for k in raw if k not in PARAM_KEYS)
-    if unknown:
-        raise RegistryError(f"{where}: unknown key '{unknown[0]}'")
-    for key in ("type", "description"):
-        if key not in raw:
-            raise RegistryError(f"{where}: missing required key '{key}'")
-
-    ptype = raw["type"]
-    if ptype not in PARAM_TYPES:
-        raise RegistryError(f"{where}: type must be one of {', '.join(sorted(PARAM_TYPES))}, got {ptype!r}")
-    if not _is_nonempty_str(raw["description"]):
-        raise RegistryError(f"{where}: description must be a non-empty string")
-
-    values: tuple[str, ...] | None = None
-    if ptype == "enum":
-        if "values" not in raw:
-            raise RegistryError(f"{where}: enum requires 'values'")
-        vals = raw["values"]
-        if (
-            not isinstance(vals, list)
-            or not vals
-            or not all(isinstance(v, str) and v and v == v.strip().lower() for v in vals)
-        ):
-            raise RegistryError(f"{where}: values must be a non-empty list of lowercase strings")
-        if len(set(vals)) != len(vals):
-            raise RegistryError(f"{where}: values must be unique")
-        values = tuple(vals)
-    elif "values" in raw:
-        raise RegistryError(f"{where}: 'values' is only allowed for type enum")
-
-    bounds: dict[str, float | None] = {"min": None, "max": None}
-    for key in ("min", "max", "unit"):
-        if key in raw and ptype not in NUMERIC_TYPES:
-            raise RegistryError(f"{where}: '{key}' is only allowed for type number or integer")
-    for key in ("min", "max"):
-        if key in raw:
-            if not _is_number(raw[key]):
-                raise RegistryError(f"{where}: {key} must be a finite number")
-            bounds[key] = raw[key]
-    lo, hi = bounds["min"], bounds["max"]
-    if lo is not None and hi is not None and lo > hi:
-        raise RegistryError(f"{where}: min must be <= max")
-
-    unit = raw.get("unit")
-    if unit is not None and not _is_nonempty_str(unit):
-        raise RegistryError(f"{where}: unit must be a non-empty string")
-
-    default = raw.get("default", MISSING)
-    if default is not MISSING:
-        _check_default(where, ptype, default, values, lo, hi)
-
-    return ParamSpec(
-        type=ptype, description=raw["description"], values=values, min=lo, max=hi, default=default, unit=unit
-    )
-
-
-def _check_default(
-    where: str, ptype: str, default: Any, values: tuple[str, ...] | None, lo: float | None, hi: float | None
-) -> None:
-    if ptype == "number":
-        ok = _is_number(default)
-    elif ptype == "integer":
-        ok = isinstance(default, int) and not isinstance(default, bool)
-    elif ptype == "string":
-        ok = _is_nonempty_str(default)
-    else:  # enum
-        ok = isinstance(default, str) and values is not None and default in values
-    if not ok:
-        raise RegistryError(f"{where}: default {default!r} is not a valid {ptype}")
-    if ptype in NUMERIC_TYPES:
-        if (lo is not None and default < lo) or (hi is not None and default > hi):
-            raise RegistryError(f"{where}: default {default!r} is outside its min/max")
-
-
 def _load_skill(folder: Path) -> SkillDescriptor:
     path = folder / SKILL_FILE
-    data = _read_frontmatter(path)
-
-    unknown = sorted(str(k) for k in data if k not in FRONTMATTER_KEYS)
-    if unknown:
-        raise RegistryError(f"{path}: unknown key '{unknown[0]}'")
-    for key in REQUIRED_KEYS:
-        if key not in data:
-            raise RegistryError(f"{path}: missing required key '{key}'")
-
-    name = data["name"]
-    if not isinstance(name, str) or not NAME_RE.match(name):
-        raise RegistryError(f"{path}: name {name!r} must match {NAME_RE.pattern}")
+    try:
+        fm = SkillFrontmatter.model_validate(_read_frontmatter(path))
+    except ValidationError as e:
+        raise RegistryError(f"{path}: {_format_validation_error(e)}") from None
+    name, entrypoint = fm.name, fm.entrypoint
     if name != folder.name:
         raise RegistryError(f"{path}: name '{name}' does not match folder name '{folder.name}'")
-    entrypoint = data["entrypoint"]
-    if not _is_nonempty_str(entrypoint):
-        raise RegistryError(f"{path}: entrypoint must be a non-empty string")
-    description = data["description"]
-    if not _is_nonempty_str(description) or "\n" in description.strip():
-        raise RegistryError(f"{path}: description must be a non-empty single-line string")
-
-    raw_params = data.get("params", {})
-    if not isinstance(raw_params, dict):
-        raise RegistryError(f"{path}: params must be a mapping")
-    params = {pname: _parse_param(path, pname, spec) for pname, spec in raw_params.items()}
 
     try:
         module = importlib.import_module(entrypoint)
@@ -229,7 +194,7 @@ def _load_skill(folder: Path) -> SkillDescriptor:
         raise RegistryError(f"{path}: POLICY.name '{policy.name}' does not match name '{name}'")
 
     return SkillDescriptor(
-        name=name, entrypoint=entrypoint, description=description.strip(), params=params, policy=policy
+        name=name, entrypoint=entrypoint, description=fm.description.strip(), params=dict(fm.params), policy=policy
     )
 
 
@@ -241,7 +206,7 @@ def _type_phrase(spec: ParamSpec) -> str:
         return "one of " + ", ".join(spec.values or ())
     if spec.type == "string":
         return "text"
-    word = spec.type  # number / integer
+    word = spec.type  # number
     if spec.min is not None and spec.max is not None:
         phrase = f"{word} from {_fmt_num(spec.min)} to {_fmt_num(spec.max)}"
     elif spec.min is not None:
