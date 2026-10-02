@@ -46,7 +46,7 @@ Opt-in tests (`--run-live`, `--run-robot`) are described in [tests/docs/testing.
   - `skills-dev`: anything under `skills/` or owned by `skills/docs/`.
   - `tests-dev`: test infrastructure only (pytest plugin, helpers, markers, golden mechanism, coverage, CI) and `tests/docs/testing.md`. Tests of package behaviour go with the package agent.
   - A task that touches both packages is split into one task per agent, run in sequence (the side that defines the contract first). Each agent stops and reports when it needs a change on the other side.
-- It verifies with commands only (`uv run pytest -q 2>&1 | tail -n 15`, `git status --short`, `git diff --stat`) and commits per task.
+- It verifies with commands only (`uv run pytest -q 2>&1 | tail -n 15`, `git status --short`, `git diff --stat`) and commits per task with the `git-commit` skill (`.claude/skills/git-commit/`).
 - It does not read the whole doc set or source itself; that exhausts its context before the work starts.
 - Subagents record any gap they fill in the owning doc and report briefly (300 words or fewer).
 - End with a fresh, read-only reviewer subagent that checks conformance with the docs.
