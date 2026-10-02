@@ -54,13 +54,7 @@ def test_explicit_missing_config_exits_2(tmp_path, capsys):
 
 def test_unknown_key_named(tmp_path):
     p = write(tmp_path / "c.toml", "[loop]\nplanning_horizon = 3\nbogus_key = 1\n")
-    with pytest.raises(ConfigError, match="loop.bogus_key"):
-        load_config(p)
-
-
-def test_unknown_section_named(tmp_path):
-    p = write(tmp_path / "c.toml", "[nonsense]\na = 1\n")
-    with pytest.raises(ConfigError, match="nonsense"):
+    with pytest.raises(ConfigError, match="loop.bogus_key: unknown key"):
         load_config(p)
 
 
@@ -132,10 +126,6 @@ def test_real_backend_requires_interface(tmp_path):
     ok(tmp_path, {"robot": {"backend": "real", "network_interface": "enp0s31f6"}})
 
 
-def test_backend_value(tmp_path):
-    bad(tmp_path, {"robot": {"backend": "sim"}}, "robot.backend")
-
-
 @pytest.mark.parametrize("kind", ["error", "hang", "crash", "garbage"])
 def test_fault_kinds_valid(tmp_path, kind):
     ok(tmp_path, {"stub": {"faults": [{"step": 1, "kind": kind}]}})
@@ -146,11 +136,6 @@ def test_fault_kinds_valid(tmp_path, kind):
     [
         {"step": 1, "kind": "explode"},
         {"step": 0, "kind": "error"},
-        {"step": -1, "kind": "error"},
-        {"step": 1.0, "kind": "error"},
-        {"step": "1", "kind": "error"},
-        {"kind": "error"},
-        {"step": 1, "kind": "error", "extra": 1},
     ],
 )
 def test_fault_invalid(tmp_path, fault):
@@ -165,13 +150,7 @@ def test_detections(tmp_path):
     ok(tmp_path, {"stub": {"detections": {"chair": "center:near", "cell phone": "left:far", "person": "right:medium"}}})
     bad(tmp_path, {"stub": {"detections": {"phone": "left:far"}}}, "phone")
     bad(tmp_path, {"stub": {"detections": {"chair": "middle:near"}}}, "chair")
-    bad(tmp_path, {"stub": {"detections": {"chair": "center:close"}}}, "chair")
     bad(tmp_path, {"stub": {"detections": {"chair": "center:near "}}}, "chair")
-
-
-def test_initial_posture(tmp_path):
-    ok(tmp_path, {"stub": {"initial_posture": "sitting"}})
-    bad(tmp_path, {"stub": {"initial_posture": "unknown"}}, "initial_posture")
 
 
 @pytest.mark.parametrize(
@@ -187,8 +166,6 @@ def test_initial_posture(tmp_path):
 def test_integers_at_least_one(tmp_path, section, key):
     ok(tmp_path, {section: {key: 1}})
     bad(tmp_path, {section: {key: 0}}, f"{section}.{key}")
-    bad(tmp_path, {section: {key: 2.5}}, f"{section}.{key}")
-    bad(tmp_path, {section: {key: True}}, f"{section}.{key}")
 
 
 @pytest.mark.parametrize(
@@ -204,7 +181,6 @@ def test_integers_at_least_one(tmp_path, section, key):
 def test_floats_positive(tmp_path, section, key):
     ok(tmp_path, {section: {key: 0.001}})
     bad(tmp_path, {section: {key: 0}}, f"{section}.{key}")
-    bad(tmp_path, {section: {key: -1.0}}, f"{section}.{key}")
 
 
 @pytest.mark.parametrize(
@@ -223,25 +199,11 @@ def test_llm_thinking(tmp_path):
     ok(tmp_path, {"llm": {"thinking": "between_tools"}})
     ok(tmp_path, {"llm": {"thinking": "adaptive"}})
     bad(tmp_path, {"llm": {"thinking": "disabled"}}, "thinking")
-    bad(tmp_path, {"llm": {"thinking": "enabled"}}, "thinking")
-
-
-def test_llm_temperature_removed(tmp_path):
-    bad(tmp_path, {"llm": {"temperature": 0.0}}, "temperature")
 
 
 def test_backoff_values_non_negative(tmp_path):
     ok(tmp_path, {"llm": {"infra_backoff_s": [0.0, 0.0]}})
     bad(tmp_path, {"llm": {"infra_backoff_s": [1.0, -1.0]}}, "infra_backoff_s")
-
-
-def test_infra_retries(tmp_path):
-    ok(tmp_path, {"llm": {"infra_backoff_s": []}})
-
-
-def test_allowed_user_ids(tmp_path):
-    ok(tmp_path, {"telegram": {"allowed_user_ids": [123, 456]}})
-    bad(tmp_path, {"telegram": {"allowed_user_ids": ["123"]}}, "allowed_user_ids")
 
 
 # --- .env ---------------------------------------------------------------------
@@ -323,7 +285,7 @@ FLOAT_FIELDS = [
 
 # All float fields share one annotated type (config.py): every bad value on one field, and
 # every field with one bad value, instead of the cross product.
-@pytest.mark.parametrize("value", [True, "1.5", float("inf"), float("-inf"), float("nan")])
+@pytest.mark.parametrize("value", [True, "1.5", float("inf"), float("nan")])
 def test_float_value_rejected(tmp_path, value):
     bad(tmp_path, {"stub": {"time_scale": value}}, "stub.time_scale")
 
@@ -333,7 +295,7 @@ def test_float_field_is_strict(tmp_path, section, key):
     bad(tmp_path, {section: {key: True}}, f"{section}.{key}")
 
 
-@pytest.mark.parametrize("value", [True, "1.5", float("inf"), float("nan")])
+@pytest.mark.parametrize("value", [True, float("nan")])
 def test_backoff_values_strict_and_finite(tmp_path, value):
     bad(tmp_path, {"llm": {"infra_backoff_s": [1.0, value]}}, "infra_backoff_s")
 

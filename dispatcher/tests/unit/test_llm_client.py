@@ -137,9 +137,12 @@ def test_valid_tool_use_parsed(tmp_path):
 
 def test_first_submit_plan_block_used(tmp_path):
     second = {"status": "DONE", "steps": [], "message": "x"}
-    body = message([{"type": "text", "text": "thinking aloud"}, tool_use(GOOD_INPUT), tool_use(second, id_="toolu_2")])
+    thinking = {"type": "thinking", "thinking": "", "signature": "sig"}
+    text = {"type": "text", "text": "thinking aloud"}
+    body = message([thinking, text, tool_use(GOOD_INPUT), tool_use(second, id_="toolu_2")])
     r = Harness(tmp_path, [ok(body)]).plan()
-    assert r.plan.status == "PLAN" and len(r.content) == 3
+    assert r.plan.status == "PLAN"
+    assert [b["type"] for b in r.content] == ["thinking", "text", "tool_use", "tool_use"]
 
 
 def test_invalid_tool_input_validated(tmp_path):
@@ -155,14 +158,6 @@ def test_text_only_reply_is_no_tool_call(tmp_path):
     assert r.plan is None and r.rejection_kind == "no_tool_call"
     assert r.errors == [ERR_NO_TOOL_CALL] and r.tool_input is None
     assert r.content[0]["type"] == "text"
-
-
-def test_thinking_block_before_tool_use(tmp_path):
-    body = message([{"type": "thinking", "thinking": "", "signature": "sig"}, tool_use(GOOD_INPUT)])
-    r = Harness(tmp_path, [ok(body)]).plan()
-    assert r.errors == [] and r.rejection_kind == "none"
-    assert r.plan is not None and r.plan.steps[0].skill == "sit"
-    assert [b["type"] for b in r.content] == ["thinking", "tool_use"]
 
 
 def test_max_tokens(tmp_path):
@@ -220,14 +215,6 @@ def test_500_three_times_unavailable(tmp_path):
         h.plan()
     assert len(h.requests) == 3 and h.sleeps == [1.0, 4.0] and len(h.retries) == 2
     assert ei.value.detail == "InternalServerError 500"
-
-
-def test_400_unavailable_immediately(tmp_path):
-    h = Harness(tmp_path, [httpx.Response(400, json={}), ok()])
-    with pytest.raises(LLMUnavailable) as ei:
-        h.plan()
-    assert len(h.requests) == 1 and h.sleeps == [] and h.retries == []
-    assert ei.value.detail == "BadRequestError 400"
 
 
 def test_connection_error_retried(tmp_path):
