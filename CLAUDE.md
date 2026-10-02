@@ -49,5 +49,5 @@ Opt-in tests (`--run-live`, `--run-robot`) are described in [tests/docs/testing.
 - It verifies with commands only (`uv run pytest -q 2>&1 | tail -n 15`, `git status --short`, `git diff --stat`) and commits per task with the `git-commit` skill (`.claude/skills/git-commit/`).
 - It does not read the whole doc set or source itself; that exhausts its context before the work starts.
 - Subagents record any gap they fill in the owning doc and report briefly (300 words or fewer).
-- End with a fresh, read-only reviewer subagent that checks conformance with the docs.
+- Before each commit, run the `reviewer` subagent (`.claude/agents/reviewer.md`) on the uncommitted diff; after fixing blocking findings, run it again on the fix diff only.
 - Keep the test suite fast; prefer fewer, meaningful tests over many parameterised ones.
