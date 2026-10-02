@@ -6,7 +6,6 @@ from skills import motion, result
 
 VELOCITY_MPS = 0.3
 CMD_PERIOD_S = 0.1
-SDK_TIMEOUT_S = 10.0  # applied by the real backend's SportClient.SetTimeout
 # direction -> (vx, vy) as multiples of VELOCITY_MPS
 DIRECTION_VECTORS = {"forward": (1, 0), "backward": (-1, 0), "left": (0, 1), "right": (0, -1)}
 BASE_S = 10.0  # process start + SDK init + state samples (tunable)

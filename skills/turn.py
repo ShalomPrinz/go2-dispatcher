@@ -8,7 +8,6 @@ from skills import motion, result
 
 YAW_RATE_RPS = 1.0  # rad/s
 CMD_PERIOD_S = 0.1
-SDK_TIMEOUT_S = 10.0  # applied by the real backend's SportClient.SetTimeout
 DIRECTION_SIGN = {"left": 1, "right": -1}
 BASE_S = 10.0  # process start + SDK init + state samples (tunable)
 FACTOR = 1.5  # safety factor on commanded motion time (tunable)
