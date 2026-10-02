@@ -11,8 +11,9 @@ from typing import Any, Literal
 from . import prompts
 from .bounds import cut_message
 from .budget import MotionBudget
+from .llm import plan_tool_schema
 from .models import PlanStep, StepResult, TaskSummary
-from .registry import Registry
+from .registry import Registry, registry_hash
 
 NOT_DISPATCHED_PREFIX = "- rejected before running: "
 NOT_DISPATCHED_OUTCOMES = frozenset({"rejected", "motion_budget_exceeded"})
@@ -20,6 +21,31 @@ BUDGET_DECIMALS = 2  # budget numbers: round(x, 2) then :g (dispatcher/docs/loop
 
 Posture = Literal["standing", "sitting", "unknown"]
 ReturnReason = Literal["initial", "plan_complete", "checkpoint", "failure"]
+
+
+# --- prompt surface (dispatcher/docs/loop-and-context.md) ----------------------------------
+
+
+@dataclass(frozen=True)
+class PromptSurface:
+    """The fixed request parts, built once per process: sent by the Dispatcher, copied into the run log."""
+
+    system: tuple[str, str]
+    catalog_text: str
+    tool_schema: dict[str, Any]
+    registry_hash: str
+
+    @classmethod
+    def build(cls, registry: Registry, horizon: int) -> PromptSurface:
+        catalog_text = registry.catalog_text()
+        system_text, skills_text = prompts.system_blocks(horizon, catalog_text)
+        tool_schema = plan_tool_schema(horizon)
+        return cls(
+            system=(system_text, skills_text),
+            catalog_text=catalog_text,
+            tool_schema=tool_schema,
+            registry_hash=registry_hash(system_text, catalog_text, tool_schema),
+        )
 
 
 # --- step-line rendering (dispatcher/docs/loop-and-context.md) -----------------------------

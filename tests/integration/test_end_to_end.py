@@ -8,6 +8,7 @@ import time
 
 import pytest
 
+from dispatcher.context import PromptSurface
 from dispatcher.dispatcher import Dispatcher
 from dispatcher.executor import Executor
 from dispatcher.models import Plan, PlanStep
@@ -34,12 +35,14 @@ def build(tmp_path, registry, items, **cfg_over):
     cfg = make_config(tmp_path, **cfg_over)
     stub.write_posture(cfg.stub.initial_posture, cfg.stub.state_file)
     planner = ScriptedPlanner(items)
+    surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
     d = Dispatcher(
         cfg,
         registry,
         planner,
         Executor(cfg, cfg.base_dir),
-        RunLogFactory(cfg.log.dir, "e2e", SessionInfo.collect(cfg, registry)),
+        surface,
+        RunLogFactory(cfg.log.dir, "e2e", SessionInfo.collect(cfg, registry, surface)),
         initial_posture=cfg.stub.initial_posture,
     )
     return d, planner, cfg

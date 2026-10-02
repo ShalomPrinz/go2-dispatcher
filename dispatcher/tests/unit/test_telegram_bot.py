@@ -13,6 +13,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from dispatcher import prompts
+from dispatcher.context import PromptSurface
 from dispatcher.dispatcher import Dispatcher
 from dispatcher.models import BusyError, Plan, PlanStep
 from dispatcher.registry import Registry
@@ -147,12 +148,14 @@ def test_handler_exception_replies_error(cfg, capsys):
 def test_normal_task(cfg, registry):
     turn = PlanStep(skill="turn", params={"direction": "left", "angle_deg": 90})
     planner = ScriptedPlanner([Plan(status="PLAN", steps=[turn]), Plan(status="DONE", message="Turned left.")])
+    surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
     d = Dispatcher(
         cfg,
         registry,
         planner,
         FakeExecutor([exec_result("ok", skill="turn")]),
-        RunLogFactory(cfg.log.dir, "s1", SessionInfo.collect(cfg, registry)),
+        surface,
+        RunLogFactory(cfg.log.dir, "s1", SessionInfo.collect(cfg, registry, surface)),
         clock=FakeClock().now,
         initial_posture="standing",
     )

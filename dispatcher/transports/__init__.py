@@ -12,7 +12,7 @@ from skills import stub
 
 from .. import process_lock
 from ..config import Config, load_config_and_env
-from ..context import render_step
+from ..context import PromptSurface, render_step
 from ..dispatcher import Dispatcher
 from ..executor import Executor
 from ..llm import AnthropicPlanner, PlannerClient
@@ -89,12 +89,14 @@ def build_dispatcher(cfg: Config, *, reset_stub: bool, planner: PlannerClient | 
         planner = make_planner(cfg)
     executor = Executor(cfg, cfg.base_dir)
     posture = initial_posture(cfg, executor, reset=reset_stub)
+    surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
     dispatcher = Dispatcher(
         cfg,
         registry,
         planner,
         executor,
-        RunLogFactory(cfg.log.dir, uuid.uuid4().hex, SessionInfo.collect(cfg, registry)),
+        surface,
+        RunLogFactory(cfg.log.dir, uuid.uuid4().hex, SessionInfo.collect(cfg, registry, surface)),
         initial_posture=posture,
     )
     atexit.register(dispatcher.shutdown, 0)

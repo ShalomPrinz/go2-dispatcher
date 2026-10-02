@@ -15,7 +15,7 @@ from . import prompts
 from .bounds import cut_message, precheck
 from .budget import MotionBudget
 from .config import Config
-from .context import ContextInput, build_user_message, schema_retry_message
+from .context import ContextInput, PromptSurface, build_user_message, schema_retry_message
 from .executor import STDERR_TAIL_CHARS, Executor
 from .llm import LLMResult, PlannerClient
 from .models import (
@@ -82,6 +82,7 @@ class Dispatcher:
         registry: Registry,
         planner: PlannerClient,
         executor: Executor,
+        surface: PromptSurface,
         runlog_factory: RunLogFactory,
         *,
         clock: Callable[[], float] = time.monotonic,
@@ -102,11 +103,14 @@ class Dispatcher:
         self._stop_event = threading.Event()
         self._log: RunLog | None = None
 
-        # the prompt surface is the one the run log records (dispatcher/docs/run-log.md)
+        # what the run log records must be what is sent (dispatcher/docs/run-log.md)
         session = runlog_factory.session
-        self._system = prompts.system_blocks(cfg.loop.planning_horizon, session.catalog_text)
-        self._tool_schema = session.tool_schema
-        self.registry_hash = session.registry_hash
+        logged = (session.system_text, session.catalog_text, session.tool_schema, session.registry_hash)
+        if logged != (surface.system[0], surface.catalog_text, surface.tool_schema, surface.registry_hash):
+            raise ValueError("run-log session does not match the prompt surface")
+        self._system = surface.system
+        self._tool_schema = surface.tool_schema
+        self.registry_hash = surface.registry_hash
 
     # --- public interface (dispatcher/docs/loop-and-context.md) ------------------------------------------------------
 

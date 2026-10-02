@@ -8,6 +8,7 @@ import threading
 import pytest
 
 from dispatcher import prompts
+from dispatcher.context import PromptSurface
 from dispatcher.dispatcher import Dispatcher
 from dispatcher.executor import STDERR_TAIL_CHARS
 from dispatcher.models import BusyError, LLMInterrupted, LLMUnavailable, Plan, PlanStep
@@ -59,12 +60,14 @@ class Rig:
         self.planner = ScriptedPlanner(items, on_call=on_call)
         self.executor = executor or FakeExecutor(results)
         self.clock = FakeClock()
+        surface = PromptSurface.build(registry, self.cfg.loop.planning_horizon)
         self.d = Dispatcher(
             self.cfg,
             registry,
             self.planner,
             self.executor,
-            RunLogFactory(self.cfg.log.dir, "s1", SessionInfo.collect(self.cfg, registry)),
+            surface,
+            RunLogFactory(self.cfg.log.dir, "s1", SessionInfo.collect(self.cfg, registry, surface)),
             clock=self.clock.now,
             initial_posture=posture,
         )
@@ -84,6 +87,16 @@ def records(outcome, type_=None):
 
 def reasons(outcome):
     return [r["return_reason"] for r in records(outcome, "llm_request")]
+
+
+def test_session_must_match_prompt_surface(tmp_path, registry):
+    cfg = make_config(tmp_path)
+    surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
+    session = SessionInfo.collect(cfg, registry, surface).model_copy(update={"catalog_text": "other"})
+    with pytest.raises(ValueError, match="prompt surface"):
+        Dispatcher(
+            cfg, registry, ScriptedPlanner([]), FakeExecutor(), surface, RunLogFactory(cfg.log.dir, "s1", session)
+        )
 
 
 def test_plan_then_done(tmp_path, registry):

@@ -15,11 +15,11 @@ from skills import stub
 
 from .. import process_lock, prompts
 from ..config import config_error_exit
+from ..context import PromptSurface
 from ..dispatcher import Dispatcher
 from ..executor import Executor
-from ..llm import plan_tool_schema
 from ..models import RegistryError, TaskOutcome
-from ..registry import Registry, registry_hash
+from ..registry import Registry
 from . import build_dispatcher, format_outcome, load_config_and_env
 
 SOURCE = "cli"
@@ -95,18 +95,15 @@ def cmd_catalog(cfg) -> int:
     except RegistryError as e:
         print(f"Registry error: {e}", file=sys.stderr)
         return EXIT_USAGE
-    horizon = cfg.loop.planning_horizon
-    catalog = registry.catalog_text()
-    system = prompts.system_blocks(horizon, catalog)
-    schema = plan_tool_schema(horizon)
-    print(system[0])
+    surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
+    print(surface.system[0])
     print()
-    print(system[1])
+    print(surface.system[1])
     print()
     print(TOOL_SCHEMA_HEADER)
-    print(json.dumps(schema, indent=2))
+    print(json.dumps(surface.tool_schema, indent=2))
     print()
-    print(REGISTRY_HASH_LINE.format(hash=registry_hash(system[0], catalog, schema)))
+    print(REGISTRY_HASH_LINE.format(hash=surface.registry_hash))
     return EXIT_OK
 
 

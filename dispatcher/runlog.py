@@ -17,15 +17,12 @@ from typing import TYPE_CHECKING, Any, TextIO
 
 from pydantic import BaseModel
 
-from . import prompts
-from .llm import plan_tool_schema
-from .registry import registry_hash
-
 if TYPE_CHECKING:
     from skills.result import MotionCost
 
     from .budget import MotionBudget
     from .config import Config
+    from .context import PromptSurface
     from .llm import LLMResult
     from .models import Plan, StepResult, StopMoveResult, TaskOutcome, TaskSummary
     from .registry import Registry
@@ -82,18 +79,14 @@ class SessionInfo(BaseModel):
     git_commit: str | None
 
     @classmethod
-    def collect(cls, cfg: Config, registry: Registry) -> SessionInfo:
-        horizon = cfg.loop.planning_horizon
-        catalog_text = registry.catalog_text()
-        system_text = prompts.system_blocks(horizon, catalog_text)[0]
-        tool_schema = plan_tool_schema(horizon)
+    def collect(cls, cfg: Config, registry: Registry, surface: PromptSurface) -> SessionInfo:
         return cls(
             condition=cfg.run.condition,
             config=cfg.model_dump(mode="json"),
-            registry_hash=registry_hash(system_text, catalog_text, tool_schema),
-            system_text=system_text,
-            catalog_text=catalog_text,
-            tool_schema=tool_schema,
+            registry_hash=surface.registry_hash,
+            system_text=surface.system[0],
+            catalog_text=surface.catalog_text,
+            tool_schema=surface.tool_schema,
             skills=registry.names(),
             versions=_versions(),
             git_commit=_git_commit(cfg.base_dir),

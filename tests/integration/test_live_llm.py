@@ -7,6 +7,7 @@ import os
 
 import pytest
 
+from dispatcher.context import PromptSurface
 from dispatcher.dispatcher import Dispatcher
 from dispatcher.executor import Executor
 from dispatcher.llm import AnthropicPlanner
@@ -28,12 +29,14 @@ def test_live_turn_and_find_chair(tmp_path):
     cfg = make_config(tmp_path, stub={"detections": {"chair": "center:near"}})
     stub.write_posture(cfg.stub.initial_posture, cfg.stub.state_file)
     registry = Registry.load(REPO_ROOT / "skills" / "catalog")
+    surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
     d = Dispatcher(
         cfg,
         registry,
         AnthropicPlanner(key, cfg.llm, cfg.loop.planning_horizon),
         Executor(cfg, cfg.base_dir),
-        RunLogFactory(cfg.log.dir, "live", SessionInfo.collect(cfg, registry)),
+        surface,
+        RunLogFactory(cfg.log.dir, "live", SessionInfo.collect(cfg, registry, surface)),
         initial_posture=cfg.stub.initial_posture,
     )
     o = d.run_task(TASK, source="test")
