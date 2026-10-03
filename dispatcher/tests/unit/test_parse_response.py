@@ -5,17 +5,24 @@ from __future__ import annotations
 import pytest
 
 from dispatcher.executor import _parse_response
-from skills.result import build_response, to_json
+from skills.result import SkillOutcome, StateSampler, build_response, to_json
 from skills.schema import ErrorCode
 
-LINE = to_json(build_response("walk", "ok"))
+LINE = to_json(build_response("walk", SkillOutcome.ok(observations={}, timing={}), StateSampler(), 0.0))
 
 
 @pytest.mark.parametrize(
     "stdout",
     [
         "junk\n"
-        + to_json(build_response("walk", "error", error_code=ErrorCode.SDK_ERROR, error_message="y"))
+        + to_json(
+            build_response(
+                "walk",
+                SkillOutcome.error(ErrorCode.SDK_ERROR, "y", observations={}, timing={}),
+                StateSampler(),
+                0.0,
+            )
+        )
         + "\n"
         + LINE,
         LINE + "\n\n  \n",

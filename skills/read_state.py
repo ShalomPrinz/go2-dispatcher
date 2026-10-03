@@ -6,30 +6,27 @@
 from __future__ import annotations
 
 import sys
-import time
 import traceback
 
 from skills import backend, result, stub
+from skills.result import SkillOutcome, StateSampler
 from skills.schema import ErrorCode
 
 SKILL = "read_state"
 
 
-def body(out: dict) -> None:
+def body(states: StateSampler) -> SkillOutcome:
     stub.disable_faults()  # utilities ignore faults
     result.parse_params()
     backend.backend_name()  # raises BackendNotConfigured
-    t = time.monotonic()
     try:
-        out["state_after"] = backend.sample_state()
-        out["status"] = "ok"
+        states.take("after", strict=True)
     except backend.BackendNotConfigured:
         raise
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
-        first = str(e).splitlines()[0] if str(e) else ""
-        out.update(error_code=ErrorCode.STATE_UNAVAILABLE, error_message=f"{type(e).__name__}: {first}")
-    out["timing"]["state_ms"] = result.ms_since(t)
+        return SkillOutcome.error(ErrorCode.STATE_UNAVAILABLE, result.describe_exception(e), observations={}, timing={})
+    return SkillOutcome.ok(observations={}, timing={})
 
 
 def main() -> None:

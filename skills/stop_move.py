@@ -10,34 +10,33 @@ from __future__ import annotations
 import time
 
 from skills import backend, result, stub
+from skills.result import SkillOutcome, StateSampler
 from skills.schema import ErrorCode
 
 SKILL = "stop_move"
 SETTLE_S = 0.5
 
 
-def body(out: dict) -> None:
+def body(states: StateSampler) -> SkillOutcome:
     t0 = time.monotonic()
     stub.disable_faults()  # utilities ignore faults
     try:
         result.parse_params()
         params_error = None
     except result.InvalidParams as e:
-        params_error = e  # raised only after StopMove was sent
+        params_error = str(e)  # reported only after StopMove was sent
     ret = backend.get_sport_client().StopMove()
-    out["timing"]["stop_call_ms"] = result.ms_since(t0)
-    out["observations"] = {"sdk_ret": ret}
+    timing = {"stop_call_ms": result.ms_since(t0)}
+    observations = {"sdk_ret": ret}
     backend.sleep(SETTLE_S)
-    state_errors: list[str] = []
-    out["state_after"], dt = result.sample_state_safe(state_errors, "after")
-    out["state_error"] = "; ".join(state_errors) or None
-    out["timing"]["state_ms"] = round(dt * 1000.0, 3)
+    states.take("after")
     if params_error is not None:
-        raise params_error
-    if ret == 0:
-        out["status"] = "ok"
-    else:
-        out.update(error_code=ErrorCode.SDK_ERROR, error_message=f"StopMove returned {ret}")
+        return SkillOutcome.error(ErrorCode.INVALID_PARAMS, params_error, observations=observations, timing=timing)
+    if ret != 0:
+        return SkillOutcome.error(
+            ErrorCode.SDK_ERROR, f"StopMove returned {ret}", observations=observations, timing=timing
+        )
+    return SkillOutcome.ok(observations=observations, timing=timing)
 
 
 def main() -> None:

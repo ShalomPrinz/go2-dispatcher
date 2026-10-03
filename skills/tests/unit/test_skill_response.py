@@ -7,13 +7,14 @@ from __future__ import annotations
 import pytest
 
 from skills import result
-from skills.result import build_response
+from skills.result import SkillOutcome, StateSampler, build_response
 from skills.schema import ErrorCode, SkillError, SkillResponse
 
 
 def test_message_collapsed_and_cut():
     msg = "line one\nline   two\r\n\tthree " + "x" * 400
-    error = build_response("walk", "error", error_code=ErrorCode.EXCEPTION, error_message=msg).error
+    outcome = SkillOutcome.error(ErrorCode.EXCEPTION, msg, observations={}, timing={})
+    error = build_response("walk", outcome, StateSampler(), 1.0).error
     assert error is not None
     out = error.message
     assert "\n" not in out and "\r" not in out and "\t" not in out

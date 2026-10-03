@@ -126,7 +126,7 @@ class Emitted(Exception):
 
 @pytest.fixture
 def run_stop_move(sdk, monkeypatch):
-    """Run stop_move.main() in process; returns (client, emit kwargs)."""
+    """Run stop_move.main() in process; returns the SkillResponse it would emit."""
 
     def run(argv, client, state=None):
         sdk(client)
@@ -139,16 +139,16 @@ def run_stop_move(sdk, monkeypatch):
         monkeypatch.setattr(backend, "sample_state", sample)
         monkeypatch.setattr(result, "capture_stdout", lambda: None)
         monkeypatch.setattr(sys, "argv", ["stop_move", *argv])
-        emitted: dict = {}
+        emitted = []
 
-        def emit(skill, status, **kwargs):
-            emitted.update(kwargs, skill=skill, status=status)
+        def emit(skill, outcome, states, total_ms):
+            emitted.append(result.build_response(skill, outcome, states, total_ms))
             raise Emitted
 
         monkeypatch.setattr(result, "emit", emit)
         with pytest.raises(Emitted):
             stop_move.main()
-        return emitted
+        return emitted[0]
 
     return run
 
@@ -157,17 +157,18 @@ def test_stop_move_invalid_params_still_stops(run_stop_move):
     client = FakeClient()
     out = run_stop_move(["not json"], client)
     assert client.calls == ["StopMove"]
-    assert (out["status"], out["error_code"]) == ("error", "invalid_params")
+    assert out.error is not None and out.error.code == "invalid_params"
+    assert out.observations == {"sdk_ret": 0} and list(out.timing) == ["stop_call_ms", "state_ms", "total_ms"]
 
 
 def test_stop_move_sdk_error(run_stop_move):
     out = run_stop_move(["{}"], FakeClient(stop=9))
-    assert (out["status"], out["error_code"], out["error_message"]) == ("error", "sdk_error", "StopMove returned 9")
+    assert out.error is not None and (out.error.code, out.error.message) == ("sdk_error", "StopMove returned 9")
 
 
 def test_stop_move_state_error_keeps_ok(run_stop_move):
     client = FakeClient()
     out = run_stop_move(["{}"], client, state=backend.StateUnavailable("no message"))
     assert client.calls == ["StopMove"]
-    assert (out["status"], out["error_code"], out["state_after"]) == ("ok", None, None)
-    assert out["state_error"] == "after: StateUnavailable: no message"
+    assert (out.status, out.error, out.state_after) == ("ok", None, None)
+    assert out.state_error == "after: StateUnavailable: no message"

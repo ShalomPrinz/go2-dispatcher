@@ -10,8 +10,8 @@ import threading
 import time
 import traceback
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
-from typing import NoReturn
+from dataclasses import asdict, dataclass, field
+from typing import Literal, NoReturn
 
 from skills.env import PARENT_PID
 from skills.schema import SCHEMA_VERSION, ErrorCode, RobotState, SkillError, SkillResponse, Status
@@ -24,8 +24,8 @@ ORPHAN_EXIT_CODE = 137
 
 @dataclass(frozen=True)
 class SkillOutcome:
-    """What a skill body returns to run_skill; build it with ok() or error() (skills/docs/skills.md).
-    timing holds init_ms and exec_ms."""
+    """What a skill body returns to run_skill; build it with ok(), error() or from_exception()
+    (skills/docs/skills.md). timing holds init_ms and exec_ms."""
 
     status: Status
     observations: dict
@@ -40,6 +40,62 @@ class SkillOutcome:
     @classmethod
     def error(cls, code: ErrorCode, message: str, *, observations: dict, timing: dict) -> SkillOutcome:
         return cls("error", observations, code, message, timing)
+
+    @classmethod
+    def from_exception(cls, e: BaseException) -> SkillOutcome:
+        """The error outcome for an exception that escaped a skill or utility body."""
+        from skills.backend import BackendNotConfigured
+
+        if isinstance(e, InvalidParams):
+            code, message = ErrorCode.INVALID_PARAMS, str(e)
+        elif isinstance(e, BackendNotConfigured):
+            code, message = ErrorCode.BACKEND_NOT_CONFIGURED, str(e)
+        else:
+            code, message = ErrorCode.EXCEPTION, describe_exception(e)
+        return cls.error(code, message, observations={}, timing={})
+
+
+@dataclass
+class StateSampler:
+    """The state samples of one skill process, filled by take() and read by build_response;
+    run_main owns it, so samples taken before an exception survive (skills/docs/skills.md)."""
+
+    before: RobotState | None = None
+    after: RobotState | None = None
+    errors: list[str] = field(default_factory=list)
+    seconds: float = 0.0
+    used: bool = False  # a sample was attempted: timing gets state_ms
+
+    def take(self, label: Literal["before", "after"], *, strict: bool = False) -> RobotState | None:
+        """Sample state into ``label``; on failure record "<label>: <Type>: <msg>" and return None.
+        strict re-raises instead and records nothing. BackendNotConfigured always propagates."""
+        from skills import backend
+
+        self.used = True
+        t = time.monotonic()
+        try:
+            state = backend.sample_state()
+        except backend.BackendNotConfigured:
+            raise
+        except Exception as e:
+            if strict:
+                raise
+            traceback.print_exc(file=sys.stderr)
+            self.errors.append(f"{label}: {describe_exception(e)}")
+            state = None
+        finally:
+            self.seconds += time.monotonic() - t
+        setattr(self, label, state)
+        return state
+
+    def state_error(self) -> str | None:
+        return "; ".join(self.errors) or None
+
+
+def describe_exception(e: BaseException) -> str:
+    """Return "<ExceptionType>: <first line of str(e)>"."""
+    first = str(e).splitlines()[0] if str(e) else ""
+    return f"{type(e).__name__}: {first}"
 
 
 Body = Callable[[dict], SkillOutcome]
@@ -155,36 +211,29 @@ def one_line(text: str, limit: int = ERROR_MESSAGE_MAX_CHARS) -> str:
     return " ".join(str(text).split())[:limit]
 
 
-def build_response(
-    skill: str,
-    status: Status,
-    *,
-    observations: dict | None = None,
-    error_code: ErrorCode | None = None,
-    error_message: str | None = None,
-    state_before: RobotState | None = None,
-    state_after: RobotState | None = None,
-    state_error: str | None = None,
-    timing: dict | None = None,
-) -> SkillResponse:
-    """The SkillResponse (schema_version=1); only its error-iff-status rule is checked here,
-    the dispatcher validates the rest (skills/docs/skills.md).
+def build_response(skill: str, outcome: SkillOutcome, states: StateSampler, total_ms: float) -> SkillResponse:
+    """The SkillResponse (schema_version=1), built from the three sources of its fields; only the
+    error-iff-status rule is checked here, the dispatcher validates the rest (skills/docs/skills.md).
     error_message: newlines replaced by spaces, collapsed, cut to 300 chars."""
     error = None
-    if status == "error":
-        if error_code is None or error_message is None:
+    if outcome.status == "error":
+        if outcome.error_code is None or outcome.error_message is None:
             raise ValueError("an error response needs error_code and error_message")
-        error = SkillError(code=str(error_code), message=one_line(error_message))
+        error = SkillError(code=str(outcome.error_code), message=one_line(outcome.error_message))
+    timing = dict(outcome.timing)
+    if states.used:
+        timing["state_ms"] = round(states.seconds * 1000.0, 3)
+    timing["total_ms"] = total_ms
     return SkillResponse(
         schema_version=SCHEMA_VERSION,
         skill=skill,
-        status=status,
-        observations=dict(observations or {}),
+        status=outcome.status,
+        observations=dict(outcome.observations),
         error=error,
-        state_before=state_before,
-        state_after=state_after,
-        state_error=state_error,
-        timing={k: float(v) for k, v in (timing or {}).items()},
+        state_before=states.before,
+        state_after=states.after,
+        state_error=states.state_error(),
+        timing={k: float(v) for k, v in timing.items()},
     )
 
 
@@ -193,17 +242,16 @@ def to_json(response: SkillResponse) -> str:
     return json.dumps(asdict(response), ensure_ascii=False, separators=(",", ":"), allow_nan=False)
 
 
-def emit(skill, status, **kwargs) -> NoReturn:
+def emit(skill: str, outcome: SkillOutcome, states: StateSampler, total_ms: float) -> NoReturn:
     """line = to_json(build_response(...)). Write line + "\\n" to the saved stdout fd, os.fsync it,
     then os._exit(0 if ok else 1).
     os._exit is required: DDS/SDK threads can hang normal interpreter shutdown."""
     try:
-        line = to_json(build_response(skill, status, **kwargs))
-    except Exception as e:  # a bug in the skill: still emit one valid line
+        line = to_json(build_response(skill, outcome, states, total_ms))
+    except Exception as e:  # a bug in the skill: still emit one valid line, without the body's data
         traceback.print_exc(file=sys.stderr)
-        status = "error"
-        code, message = error_from_exception(e)
-        line = to_json(build_response(skill, status, error_code=code, error_message=message))
+        outcome = SkillOutcome.from_exception(e)
+        line = to_json(build_response(skill, outcome, StateSampler(), total_ms))
     for stream in (sys.stdout, sys.stderr):
         try:
             stream.flush()
@@ -214,20 +262,10 @@ def emit(skill, status, **kwargs) -> NoReturn:
         os.fsync(_out_fd())
     except OSError:
         pass  # pipes and terminals cannot be fsynced
-    os._exit(0 if status == "ok" else 1)
+    os._exit(0 if outcome.status == "ok" else 1)
 
 
 # --- run_skill ----------------------------------------------------------------
-
-
-def error_from_exception(e: BaseException) -> tuple[ErrorCode, str]:
-    """(error_code, message) for an unexpected exception in a skill process."""
-    from skills.backend import BackendNotConfigured
-
-    if isinstance(e, BackendNotConfigured):
-        return ErrorCode.BACKEND_NOT_CONFIGURED, str(e)
-    first = str(e).splitlines()[0] if str(e) else ""
-    return ErrorCode.EXCEPTION, f"{type(e).__name__}: {first}"
 
 
 def parse_params(argv: list[str] | None = None) -> dict:
@@ -252,82 +290,40 @@ def ms_since(t0: float) -> float:
     return round((time.monotonic() - t0) * 1000.0, 3)
 
 
-def sample_state_safe(errors: list[str], label: str) -> tuple[RobotState | None, float]:
-    """Sample state; on failure append "<label>: <Type>: <msg>" to errors.
-    BackendNotConfigured propagates. Returns (state or None, elapsed seconds)."""
-    from skills import backend
-
-    t = time.monotonic()
-    try:
-        state = backend.sample_state()
-    except backend.BackendNotConfigured:
-        raise
-    except Exception as e:
-        traceback.print_exc(file=sys.stderr)
-        first = str(e).splitlines()[0] if str(e) else ""
-        errors.append(f"{label}: {type(e).__name__}: {first}")
-        state = None
-    return state, time.monotonic() - t
-
-
-def run_main(skill: str, body: Callable[[dict], None], *, watchdog: bool = True) -> NoReturn:
+def run_main(skill: str, body: Callable[[StateSampler], SkillOutcome], *, watchdog: bool = True) -> NoReturn:
     """Shared main() of skills and utilities: capture_stdout(), optional orphan watchdog, then
-    body(out), where out holds emit()'s keyword arguments plus "status" and body fills it in place,
-    so partial results survive an exception. An exception sets status=error with
-    error_response_fields(); timing["total_ms"] is added; then emit()."""
+    outcome = body(states). An exception becomes SkillOutcome.from_exception(e); states sampled
+    before it are kept. Then emit() with total_ms since start."""
     capture_stdout()
     if watchdog:
         start_orphan_watchdog()
     t0 = time.monotonic()
-    out: dict = {"status": "error", "error_code": None, "error_message": None, "timing": {}}
+    states = StateSampler()
     try:
-        body(out)
+        outcome = body(states)
     except Exception as e:
-        out["status"] = "error"
-        if isinstance(e, InvalidParams):
-            out["error_code"], out["error_message"] = ErrorCode.INVALID_PARAMS, str(e)
-        else:
-            out["error_code"], out["error_message"] = error_from_exception(e)
-            if out["error_code"] != ErrorCode.BACKEND_NOT_CONFIGURED:
-                traceback.print_exc(file=sys.stderr)
-    out["timing"]["total_ms"] = ms_since(t0)
-    emit(skill, out.pop("status"), **out)
+        outcome = SkillOutcome.from_exception(e)
+        if outcome.error_code == ErrorCode.EXCEPTION:
+            traceback.print_exc(file=sys.stderr)
+    emit(skill, outcome, states, ms_since(t0))
 
 
 def run_skill(policy: SkillPolicy, body: Body, *, sample_state: bool = True) -> NoReturn:
     """Standard main() of a skill, via run_main:
     1. params = json.loads(argv[1]); must be a dict -> else error invalid_params
-    2. if sample_state: state_before = backend.sample_state() (exception -> state_error, continue)
+    2. if sample_state: sample state_before (exception -> state_error, continue)
     3. outcome = body(params), a SkillOutcome
-    4. if sample_state: state_after = backend.sample_state() (exception -> append to state_error)
-    5. timing["state_ms"] = total time spent in the two samples; timing["total_ms"] = since start
-    Any exception from steps 1-4 gives status=error, code="exception",
-    message="<ExceptionType>: <first line of str(e)>"; the traceback goes to stderr.
-    BackendNotConfigured maps to code "backend_not_configured"; InvalidParams to
-    "invalid_params"."""
+    4. if sample_state: sample state_after (exception -> appended to state_error)
+    timing gets state_ms (time in the samples, if any was taken) and total_ms.
+    Exceptions map as in SkillOutcome.from_exception; the traceback goes to stderr."""
 
-    def main(out: dict) -> None:
-        state_errors: list[str] = []
-        state_s = 0.0
-        try:
-            params = parse_params()
-            if sample_state:
-                out["state_before"], dt = sample_state_safe(state_errors, "before")
-                state_s += dt
-            outcome = body(params)
-            out["timing"] = dict(outcome.timing)
-            if sample_state:
-                out["state_after"], dt = sample_state_safe(state_errors, "after")
-                state_s += dt
-            out.update(
-                status=outcome.status,
-                observations=outcome.observations,
-                error_code=outcome.error_code,
-                error_message=outcome.error_message,
-            )
-        finally:
-            out["state_error"] = "; ".join(state_errors) or None
-            if sample_state:
-                out["timing"]["state_ms"] = round(state_s * 1000.0, 3)
+    def main(states: StateSampler) -> SkillOutcome:
+        params = parse_params()
+        if sample_state:
+            states.take("before")
+        outcome = body(params)
+        if sample_state:
+            states.take("after")
+        return outcome
 
     run_main(policy.name, main)
