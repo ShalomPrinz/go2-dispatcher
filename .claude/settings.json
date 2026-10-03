@@ -31,6 +31,14 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/touched.py", "timeout": 10 }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

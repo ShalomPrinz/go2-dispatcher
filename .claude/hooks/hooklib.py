@@ -47,18 +47,82 @@ def tree() -> Path:
     sys.exit(0)
 
 
-def changed_files(suffix: str = ".py") -> list[str]:
-    """Changed (vs HEAD) and untracked files with `suffix` that exist on disk, relative to `tree()`."""
-    root = tree()
-    names: list[str] = []
-    for args in (("diff", "-z", "--name-only", "HEAD"), ("ls-files", "-z", "--others", "--exclude-standard")):
-        names += [os.fsdecode(n) for n in git(*args, cwd=str(root)).stdout.split(b"\0") if n]
-    return [n for n in dict.fromkeys(names) if n.endswith(suffix) and (root / n).is_file()]
+def agent_type() -> str | None:
+    """The calling subagent's `agent_type` (`agent` if unnamed); None for the main session (no `agent_id`)."""
+    data = payload()
+    return str(data.get("agent_type") or "agent") if data.get("agent_id") else None
 
 
-def run(*cmd: str) -> subprocess.CompletedProcess[str]:
-    """Run a command in `tree()`, stdout and stderr merged."""
-    return subprocess.run(cmd, cwd=tree(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+def written_path() -> Path | None:
+    """The Edit/Write/NotebookEdit target, resolved against the payload `cwd` and `realpath`; None if absent."""
+    data = payload()
+    tool_input = data.get("tool_input")
+    if not isinstance(tool_input, dict):
+        return None
+    raw = tool_input.get("file_path") or tool_input.get("notebook_path")
+    if not isinstance(raw, str) or not raw:
+        return None
+    cwd = data.get("cwd") if isinstance(data.get("cwd"), str) else os.getcwd()
+    return Path(os.path.realpath(os.path.join(cwd, raw)))
+
+
+def _common_dir(where: Path) -> str | None:
+    done = git("rev-parse", "--path-format=absolute", "--git-common-dir", cwd=str(where))
+    return os.fsdecode(done.stdout.strip()) if done.returncode == 0 else None
+
+
+def locate(path: Path) -> tuple[Path, str] | None:
+    """`path`'s own git top level and its path relative to it, if that tree is this project's checkout or a worktree."""
+    where = path.parent
+    while not where.is_dir():
+        where = where.parent
+    top = git("rev-parse", "--show-toplevel", cwd=str(where))
+    if top.returncode != 0 or _common_dir(where) != _common_dir(tree()):
+        return None
+    root = Path(os.fsdecode(top.stdout.strip()))
+    try:
+        return root, path.relative_to(root).as_posix()
+    except ValueError:
+        return None
+
+
+def record(path: Path) -> None:
+    """Append `path` to the caller's touched-files record."""
+    if "\n" in str(path):
+        return
+    try:
+        with _state("touched").open("a", encoding="utf-8") as f:
+            f.write(f"{path}\n")
+    except (OSError, ValueError):
+        pass
+
+
+@functools.cache
+def _record() -> str:
+    try:
+        return _state("touched").read_text(encoding="utf-8")
+    except (OSError, ValueError):
+        return ""
+
+
+def touched(name: str, suffix: str = ".py") -> dict[Path, list[str]]:
+    """Existing `suffix` files the caller wrote since hook `name` last passed for it, by their git top level."""
+    text = _record()
+    try:
+        start = int(_state(f"{name}-checked").read_text())
+    except (OSError, ValueError):
+        start = 0
+    files: dict[Path, list[str]] = {}
+    for line in dict.fromkeys(text[start if start <= len(text) else 0 :].splitlines()):
+        found = locate(Path(line)) if line.endswith(suffix) else None
+        if found and (found[0] / found[1]).is_file():
+            files.setdefault(found[0], []).append(found[1])
+    return files
+
+
+def run(*cmd: str, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+    """Run a command in `cwd` (default `tree()`), stdout and stderr merged."""
+    return subprocess.run(cmd, cwd=cwd or tree(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 
 
 def report(msg: str) -> None:
@@ -66,14 +130,24 @@ def report(msg: str) -> None:
     print(json.dumps({"systemMessage": msg, "suppressOutput": True}, ensure_ascii=False))
 
 
+def _clean(value: object) -> str:
+    return re.sub(r"[^A-Za-z0-9_-]", "", str(value or ""))
+
+
 def _state(name: str) -> Path:
-    session = re.sub(r"[^A-Za-z0-9_-]", "", str(payload().get("session_id") or "")) or "unknown"
-    return Path(os.environ.get("TMPDIR") or "/tmp") / f"claude-{name}-{session}"
+    """Per-caller state file: `claude-<name>-<session_id>-<agent_id or main>` in `$TMPDIR`."""
+    data = payload()
+    caller = f"{_clean(data.get('session_id')) or 'unknown'}-{_clean(data.get('agent_id')) or 'main'}"
+    return Path(os.environ.get("TMPDIR") or "/tmp") / f"claude-{name}-{caller}"
 
 
 def passed(name: str) -> None:
-    """Forget the last block of hook `name` after a clean run."""
+    """After a clean run of hook `name`: forget its last block and mark the caller's record checked up to here."""
     _state(name).unlink(missing_ok=True)
+    try:
+        _state(f"{name}-checked").write_text(f"{len(_record())}\n")
+    except OSError:
+        pass
 
 
 def block(name: str, output: str, *, reason: str, command: str, done: Sequence[str] = ()) -> NoReturn:

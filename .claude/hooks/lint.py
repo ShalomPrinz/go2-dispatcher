@@ -1,4 +1,4 @@
-"""Stop/SubagentStop hook: format the changed .py files, then block while `ruff check` fails on them.
+"""Stop/SubagentStop hook: format the .py files the stopping agent wrote, then block while `ruff check` fails on them.
 
 Format runs here, before the lint, because hooks on one event run in parallel (.claude/hooks/README.md).
 """
@@ -6,36 +6,42 @@ Format runs here, before the lint, because hooks on one event run in parallel (.
 from __future__ import annotations
 
 import hashlib
+from pathlib import Path
 
 import hooklib
 
 
-def digests(files: list[str]) -> list[str]:
-    return [hashlib.md5((hooklib.tree() / f).read_bytes()).hexdigest() for f in files]
+def digests(root: Path, files: list[str]) -> list[str]:
+    return [hashlib.md5((root / f).read_bytes()).hexdigest() for f in files]
 
 
 def main() -> None:
     if hooklib.stop_hook_active():
         return
-    files = hooklib.changed_files()
-    if not files:
+    trees = hooklib.touched("lint")
+    if not trees:
+        hooklib.passed("lint")
         hooklib.report("format - · lint -")
         return
 
-    before = digests(files)
-    hooklib.run("uv", "run", "ruff", "format", "--quiet", "--", *files)
-    hooklib.run("uv", "run", "ruff", "check", "--select", "I", "--fix", "--quiet", "--", *files)
-    formatted = sum(a != b for a, b in zip(before, digests(files), strict=True))
+    formatted, failures = 0, []
+    for root, files in trees.items():
+        before = digests(root, files)
+        hooklib.run("uv", "run", "ruff", "format", "--quiet", "--", *files, cwd=root)
+        hooklib.run("uv", "run", "ruff", "check", "--select", "I", "--fix", "--quiet", "--", *files, cwd=root)
+        formatted += sum(a != b for a, b in zip(before, digests(root, files), strict=True))
+        lint = hooklib.run("uv", "run", "ruff", "check", "--force-exclude", "--", *files, cwd=root)
+        if lint.returncode != 0:
+            failures.append(f"(in {root})\n{lint.stdout}" if len(trees) > 1 else lint.stdout)
     fmt = f"format ✓ ({formatted} files)" if formatted else "format -"
 
-    lint = hooklib.run("uv", "run", "ruff", "check", "--force-exclude", "--", *files)
-    if lint.returncode == 0:
+    if not failures:
         hooklib.passed("lint")
-        hooklib.report(f"{fmt} · lint ✓ ({len(files)} files)")
+        hooklib.report(f"{fmt} · lint ✓ ({sum(map(len, trees.values()))} files)")
         return
     hooklib.block(
         "lint",
-        lint.stdout,
+        "\n".join(failures),
         reason="ruff check failed; fix the lint errors before stopping:",
         command="uv run ruff check .",
         done=[fmt],
