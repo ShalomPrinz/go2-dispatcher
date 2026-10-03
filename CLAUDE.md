@@ -12,6 +12,7 @@ uv run pytest -q                               # default suite: no API key, robo
 uv run ruff format .                           # format; must be clean before a commit
 uv run ruff check .                            # lint; must pass before a commit
 uv run lint-imports                            # import contracts (skills boundary); must pass before a commit
+uv run basedpyright <files>                    # type check; must pass on changed files before a commit
 uv run pytest -m integration                   # real subprocesses on the stub backend
 uv run go2 catalog                             # system text, catalog, tool schema, registry hash; no key needed
 uv run go2 state                               # stub state as JSON

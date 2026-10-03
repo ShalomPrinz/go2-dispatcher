@@ -13,6 +13,8 @@
     "allow": [
       "Bash(uv run pytest *)",
       "Bash(uv run ruff *)",
+      "Bash(uv run basedpyright *)",
+      "Bash(uv run lint-imports*)",
       "Bash(uv run go2 catalog*)",
       "Bash(uv run go2 state*)",
       "Bash(git status*)",
@@ -24,14 +26,16 @@
     "Stop": [
       {
         "hooks": [
-          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/lint.sh", "timeout": 120 }
+          { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/lint.py", "timeout": 120 },
+          { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/typecheck.py", "timeout": 120 }
         ]
       }
     ],
     "SubagentStop": [
       {
         "hooks": [
-          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/lint.sh", "timeout": 120 }
+          { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/lint.py", "timeout": 120 },
+          { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/typecheck.py", "timeout": 120 }
         ]
       }
     ]
