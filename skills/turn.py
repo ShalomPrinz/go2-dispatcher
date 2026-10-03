@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 
 from skills import motion, result
 
@@ -19,13 +20,13 @@ POLICY = result.SkillPolicy(
 )
 
 
-def body(params: dict):
+def body(params: dict) -> result.SkillOutcome:
     direction = params["direction"]
     angle_deg = float(params["angle_deg"])
-    status, obs, code, msg, timing = motion.move_loop(
+    outcome = motion.move_loop(
         0.0, 0.0, DIRECTION_SIGN[direction] * YAW_RATE_RPS, math.radians(angle_deg) / YAW_RATE_RPS, CMD_PERIOD_S
     )
-    return status, {"direction": direction, "angle_deg": angle_deg, **obs}, code, msg, timing
+    return replace(outcome, observations={"direction": direction, "angle_deg": angle_deg, **outcome.observations})
 
 
 def main() -> None:

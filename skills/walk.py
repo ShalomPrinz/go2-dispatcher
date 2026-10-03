@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from skills import motion, result
 
 VELOCITY_MPS = 0.3
@@ -18,14 +20,12 @@ POLICY = result.SkillPolicy(
 )
 
 
-def body(params: dict):
+def body(params: dict) -> result.SkillOutcome:
     direction = params["direction"]
     distance_m = float(params["distance_m"])
     sx, sy = DIRECTION_VECTORS[direction]
-    status, obs, code, msg, timing = motion.move_loop(
-        sx * VELOCITY_MPS, sy * VELOCITY_MPS, 0.0, distance_m / VELOCITY_MPS, CMD_PERIOD_S
-    )
-    return status, {"direction": direction, "distance_m": distance_m, **obs}, code, msg, timing
+    outcome = motion.move_loop(sx * VELOCITY_MPS, sy * VELOCITY_MPS, 0.0, distance_m / VELOCITY_MPS, CMD_PERIOD_S)
+    return replace(outcome, observations={"direction": direction, "distance_m": distance_m, **outcome.observations})
 
 
 def main() -> None:

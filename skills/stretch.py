@@ -10,7 +10,7 @@ SETTLE_S = 6.0  # wait after Stretch so state_after is sampled at rest (tunable,
 POLICY = result.SkillPolicy(name="stretch", timeout=TIMEOUT_S)
 
 
-def body(params: dict):
+def body(params: dict) -> result.SkillOutcome:
     return motion.single_action("Stretch", SETTLE_S)
 
 

@@ -62,18 +62,18 @@ def sdk(monkeypatch):
 def test_move_fails_mid_loop(sdk, stop, suffix):
     client = FakeClient(move=[0, 0, 7], stop=stop)
     sdk(client)
-    status, obs, code, msg, _ = motion.move_loop(0.3, 0, 0, 1.0, PERIOD)
-    assert (status, code, msg) == ("error", "sdk_error", "Move returned 7" + suffix)
-    assert obs == {"duration_s": round(2 * PERIOD, 3), "sdk_ret": 7}
+    o = motion.move_loop(0.3, 0, 0, 1.0, PERIOD)
+    assert (o.status, o.error_code, o.error_message) == ("error", "sdk_error", "Move returned 7" + suffix)
+    assert o.observations == {"duration_s": round(2 * PERIOD, 3), "sdk_ret": 7}
     assert client.calls == ["Move"] * 3 + ["StopMove"]
 
 
 def test_final_stop_move_fails(sdk):
     client = FakeClient(stop=4)
     sdk(client)
-    status, obs, code, msg, _ = motion.move_loop(0.3, 0, 0, 0.3, PERIOD)
-    assert (status, code, msg) == ("error", "sdk_error", "StopMove returned 4")
-    assert obs == {"duration_s": round(3 * PERIOD, 3), "sdk_ret": 4}
+    o = motion.move_loop(0.3, 0, 0, 0.3, PERIOD)
+    assert (o.status, o.error_code, o.error_message) == ("error", "sdk_error", "StopMove returned 4")
+    assert o.observations == {"duration_s": round(3 * PERIOD, 3), "sdk_ret": 4}
     assert client.calls == ["Move"] * 3 + ["StopMove"]
 
 
@@ -91,9 +91,9 @@ def test_orphaned_breaks_and_stops(sdk, monkeypatch):
     client = FakeClient()
     sdk(client)
     monkeypatch.setattr(result, "ORPHANED", True)
-    status, obs, code, _, _ = motion.move_loop(0.3, 0, 0, 1.0, PERIOD)
-    assert (status, code) == ("ok", None)
-    assert obs == {"orphaned": True, "duration_s": 0.0, "sdk_ret": 0}
+    o = motion.move_loop(0.3, 0, 0, 1.0, PERIOD)
+    assert (o.status, o.error_code) == ("ok", None)
+    assert o.observations == {"orphaned": True, "duration_s": 0.0, "sdk_ret": 0}
     assert client.calls == ["StopMove"]
 
 
@@ -102,15 +102,19 @@ def test_orphaned_breaks_and_stops(sdk, monkeypatch):
 
 def test_single_action_failure_skips_settle(sdk):
     sleeps = sdk(FakeClient(stand_down=3))
-    status, obs, code, msg, _ = motion.single_action("StandDown", 2.0)
-    assert (status, obs, code, msg) == ("error", {"sdk_ret": 3}, "sdk_error", "StandDown returned 3")
+    o = motion.single_action("StandDown", 2.0)
+    assert (o.status, o.observations, o.error_code, o.error_message) == (
+        "error",
+        {"sdk_ret": 3},
+        "sdk_error",
+        "StandDown returned 3",
+    )
     assert sleeps == []
 
 
 def test_single_action_ok_settles(sdk):
     sleeps = sdk(FakeClient())
-    status, *_ = motion.single_action("StandDown", 2.0)
-    assert status == "ok" and sleeps == [2.0]
+    assert motion.single_action("StandDown", 2.0).status == "ok" and sleeps == [2.0]
 
 
 # --- stop_move utility -----------------------------------------------------------------

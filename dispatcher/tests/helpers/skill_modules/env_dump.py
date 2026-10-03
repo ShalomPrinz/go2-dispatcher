@@ -16,8 +16,10 @@ SKILL = "env_dump"
 POLICY = result.SkillPolicy(name=SKILL, timeout=10.0)
 
 
-def _body(params: dict):
-    return "ok", {"env_keys": sorted(os.environ)}, None, None, {"init_ms": 0.0, "exec_ms": 0.0}
+def _body(params: dict) -> result.SkillOutcome:
+    return result.SkillOutcome.ok(
+        observations={"env_keys": sorted(os.environ)}, timing={"init_ms": 0.0, "exec_ms": 0.0}
+    )
 
 
 if __name__ == "__main__":

@@ -28,11 +28,13 @@ def unsupported_message(target: str) -> str:
     return f"'{target}' is not a detectable object."
 
 
-def body(params: dict):
+def body(params: dict) -> result.SkillOutcome:
     target = params["target"].strip().lower()
     obs: dict = {"target": target}
     if target not in COCO_CLASSES:
-        return "error", obs, ErrorCode.UNSUPPORTED_OBJECT, unsupported_message(target), {}
+        return result.SkillOutcome.error(
+            ErrorCode.UNSUPPORTED_OBJECT, unsupported_message(target), observations=obs, timing={}
+        )
     t = time.monotonic()
     detector = backend.get_detector()
     timing = {"init_ms": result.ms_since(t)}
@@ -41,7 +43,7 @@ def body(params: dict):
         found = detector.detect(target)
     except backend.DetectorError as e:
         timing["exec_ms"] = result.ms_since(t)
-        return "error", obs, e.code, f"{type(e).__name__}: {e}", timing
+        return result.SkillOutcome.error(e.code, f"{type(e).__name__}: {e}", observations=obs, timing=timing)
     timing["exec_ms"] = result.ms_since(t)
     obs["object_found"] = bool(found.found)
     if found.found:
@@ -50,7 +52,7 @@ def body(params: dict):
             closeness=found.closeness,
             confidence=round(float(found.confidence), CONFIDENCE_DECIMALS),
         )
-    return "ok", obs, None, None, timing
+    return result.SkillOutcome.ok(observations=obs, timing=timing)
 
 
 def main() -> None:

@@ -10,7 +10,7 @@ SETTLE_S = 3.0  # wait after StandDown so state_after is sampled at rest (tunabl
 POLICY = result.SkillPolicy(name="sit", timeout=TIMEOUT_S)
 
 
-def body(params: dict):
+def body(params: dict) -> result.SkillOutcome:
     return motion.single_action("StandDown", SETTLE_S)
 
 

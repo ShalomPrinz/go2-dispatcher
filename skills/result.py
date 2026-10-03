@@ -21,8 +21,28 @@ WATCHDOG_POLL_S = 0.2
 ORPHAN_GRACE_S = 2.0
 ORPHAN_EXIT_CODE = 137
 
-Body = Callable[[dict], tuple[Status, dict, "ErrorCode | None", "str | None", dict]]
-# returns (status, observations, error_code, error_message, timing) where timing has init_ms, exec_ms
+
+@dataclass(frozen=True)
+class SkillOutcome:
+    """What a skill body returns to run_skill; build it with ok() or error() (skills/docs/skills.md).
+    timing holds init_ms and exec_ms."""
+
+    status: Status
+    observations: dict
+    error_code: ErrorCode | None
+    error_message: str | None
+    timing: dict
+
+    @classmethod
+    def ok(cls, *, observations: dict, timing: dict) -> SkillOutcome:
+        return cls("ok", observations, None, None, timing)
+
+    @classmethod
+    def error(cls, code: ErrorCode, message: str, *, observations: dict, timing: dict) -> SkillOutcome:
+        return cls("error", observations, code, message, timing)
+
+
+Body = Callable[[dict], SkillOutcome]
 
 
 # --- policy -------------------------------------------------------------------
@@ -278,7 +298,7 @@ def run_skill(policy: SkillPolicy, body: Body, *, sample_state: bool = True) -> 
     """Standard main() of a skill, via run_main:
     1. params = json.loads(argv[1]); must be a dict -> else error invalid_params
     2. if sample_state: state_before = backend.sample_state() (exception -> state_error, continue)
-    3. status, obs, code, msg, timing = body(params)
+    3. outcome = body(params), a SkillOutcome
     4. if sample_state: state_after = backend.sample_state() (exception -> append to state_error)
     5. timing["state_ms"] = total time spent in the two samples; timing["total_ms"] = since start
     Any exception from steps 1-4 gives status=error, code="exception",
@@ -294,12 +314,17 @@ def run_skill(policy: SkillPolicy, body: Body, *, sample_state: bool = True) -> 
             if sample_state:
                 out["state_before"], dt = sample_state_safe(state_errors, "before")
                 state_s += dt
-            status, obs, code, msg, timing = body(params)
-            out["timing"] = dict(timing or {})
+            outcome = body(params)
+            out["timing"] = dict(outcome.timing)
             if sample_state:
                 out["state_after"], dt = sample_state_safe(state_errors, "after")
                 state_s += dt
-            out.update(status=status, observations=obs, error_code=code, error_message=msg)
+            out.update(
+                status=outcome.status,
+                observations=outcome.observations,
+                error_code=outcome.error_code,
+                error_message=outcome.error_message,
+            )
         finally:
             out["state_error"] = "; ".join(state_errors) or None
             if sample_state:
