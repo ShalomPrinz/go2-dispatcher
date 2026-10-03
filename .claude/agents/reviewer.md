@@ -17,7 +17,8 @@ Tests, lint, format and the registry hash are already verified by the orchestrat
 
 1. **Behaviour and contracts preserved by the diff.** Unless the brief says the change is intended, nothing observable that the diff touches may change: values (timeouts, costs, bounds), inputs that used to be rejected, log records and their field types (dispatcher/docs/run-log.md), plan schema, skill response, config keys, fixed texts. Compare the minus and plus sides of the diff. You may run a short read-only Python snippet (`uv run python -c ...`) to confirm a suspicion.
 2. **Docs match the code.** The doc that owns a changed contract is updated in the same diff and agrees with it. No stale references to names the diff removes (a targeted grep for those names is fine).
-3. **Safety paths untouched.** Only when the diff touches the executor, the stop path, a skill's motion loop or secret stripping: StopMove on every exit, the kill path and the orphan watchdog still hold (docs/safety.md).
+3. **Doc text sits in the doc that owns its topic** (ownership table in docs/README.md). A rule, its reasons and its enforcement gaps live with the rule's owner; a tool's doc covers only the tool and links the rule. A folder `CLAUDE.md` links docs and never repeats them.
+4. **Safety paths untouched.** Only when the diff touches the executor, the stop path, a skill's motion loop or secret stripping: StopMove on every exit, the kill path and the orphan watchdog still hold (docs/safety.md).
 
 Skip test quality, style, doc formatting and simplification ideas.
 
