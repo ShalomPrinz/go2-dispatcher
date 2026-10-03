@@ -23,7 +23,7 @@ from pydantic import (
 )
 
 from skills.coco import COCO_CLASSES
-from skills.stub import FaultKind, StubPosture
+from skills.stub import DEFAULT_POSTURE, DEFAULT_STATE_FILE, DEFAULT_TIME_SCALE, FaultKind, StubPosture
 
 from .models import ConfigError
 
@@ -102,9 +102,9 @@ class FaultConfig(_Section):
 
 
 class StubConfig(_Section):
-    time_scale: FiniteFloat = Field(default=0.1, gt=0)
-    initial_posture: StubPosture = "standing"
-    state_file: Path = Path("runs/.stub_state.json")
+    time_scale: FiniteFloat = Field(default=DEFAULT_TIME_SCALE, gt=0)
+    initial_posture: StubPosture = DEFAULT_POSTURE
+    state_file: Path = Path(DEFAULT_STATE_FILE)
     detections: dict[str, StrictStr] = {}
     faults: list[FaultConfig] = []
 

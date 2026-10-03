@@ -16,7 +16,7 @@ from skills.backend import CameraUnavailable, DetectResult
 from skills.env import STUB_DETECTIONS, STUB_FAULT, STUB_STATE_FILE, STUB_TIME_SCALE
 from skills.schema import RobotState
 
-# Defaults when the env is unset (manual runs); they mirror the config defaults (docs/configuration.md).
+# Stub defaults: used when the env is unset (manual runs) and as the dispatcher's stub config defaults.
 DEFAULT_STATE_FILE = "runs/.stub_state.json"
 DEFAULT_TIME_SCALE = 0.1
 
