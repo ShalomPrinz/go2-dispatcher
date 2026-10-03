@@ -9,7 +9,7 @@ Start by reading the actual diff (`git status --short`, `git diff`, `git diff --
 
 ### Before committing
 
-- `uv run ruff format --check .` and `uv run ruff check .` pass.
+- `uv run ruff format --check .`, `uv run ruff check .` and `uv run lint-imports` pass.
 - `uv run pytest -q 2>&1 | tail -n 15` passes. If golden files changed, the diff was reviewed and is caused by the task (fixed-text changes make runs incomparable, see CLAUDE.md).
 - A behaviour change carries its owning-doc update in the same commit (CLAUDE.md, Documentation rules).
 - Nothing secret is staged: never `.env`, API keys or tokens.

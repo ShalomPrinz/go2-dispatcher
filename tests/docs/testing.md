@@ -22,6 +22,14 @@ uv run ruff format .             # format (ruff defaults, line length 120)
 
 Formatting must be clean and the lint must pass before a commit; both run locally, not in CI. The Claude Code Stop and SubagentStop hook (`.claude/hooks/lint.sh`) first runs `.claude/hooks/format.sh`, which applies `ruff format` and import sorting to the changed and untracked `.py` files, then blocks the stop while `ruff check` fails on those files; the same failure twice in one session only warns ([hooks README](../../.claude/hooks/README.md)). `.git-blame-ignore-revs` lists the formatting sweep (`git config blame.ignoreRevsFile .git-blame-ignore-revs`). Rules: pycodestyle, pyflakes, isort, bugbear and pyupgrade (`E`, `F`, `W`, `I`, `B`, `UP`) for Python 3.10, line length 120.
 
+### Import boundaries
+
+```bash
+uv run lint-imports              # import contracts (settings in [tool.importlinter] in pyproject.toml)
+```
+
+`import-linter` checks two contracts over the import graph of `skills` and `dispatcher`, direct and indirect imports alike, and must pass before a commit; CI runs it before the tests. No `skills` module imports `dispatcher`, `pydantic` or `yaml`, because skills run as short-lived subprocesses ([skills.md](../../skills/docs/skills.md)); the exception is `skills/frontmatter.py`, the SKILL.md parser, whose `pydantic` and `yaml` imports are ignored. A `protected` contract allows only `dispatcher` and the skill tests to import `skills.frontmatter`, so no skill reaches those packages through it. Modules under `skills/tests/` are checked too, so the layout rule that they never import `dispatcher` is enforced. `test_fresh_interpreter_import_is_side_effect_free` in `tests/integration/test_skills.py` still checks that importing skills prints nothing and pulls in no `dispatcher` module at run time.
+
 ### Coverage
 
 ```bash
@@ -30,7 +38,7 @@ uv run pytest --cov              # branch coverage of dispatcher and skills, wit
 
 Coverage is opt-in (`pytest-cov`; settings in `[tool.coverage.*]` in `pyproject.toml`). It measures branches, and it also measures the skill, utility and CLI subprocesses the integration tests start (coverage's `[run] patch = ["subprocess", "_exit"]`; `_exit` is needed because skills end with `os._exit`). Processes killed with SIGKILL (timeouts, stops) record nothing. A covered run takes about 20 s instead of about 12 s.
 
-The default run must pass on any machine after `uv sync` (core + dev dependencies only). CI (`.github/workflows/tests.yml`) runs it on every push to any branch, on Python 3.10, after `uv sync --locked`. Every test has a 30 s timeout (`pytest-timeout`). Parallel runs are opt-in (see design decisions below).
+The default run must pass on any machine after `uv sync` (core + dev dependencies only). CI (`.github/workflows/tests.yml`) runs `uv run lint-imports` and then the default run on every push to any branch, on Python 3.10, after `uv sync --locked`. Every test has a 30 s timeout (`pytest-timeout`). Parallel runs are opt-in (see design decisions below).
 
 ## Layout
 
@@ -134,5 +142,6 @@ There are no automated robot tests in v1. The real backend is checked by hand wi
 - **`ruff format` is the formatter, with its defaults and line length 120** (not 88, which matches the existing code). One consistent style outweighs the hand-aligned trailing comments it removed. The formatter does not change string values, so the fixed texts in `dispatcher/prompts.py` and the registry hash are unaffected; that file stays exempt from `E501` because its fixed-text lines are long by design.
 - **Format runs non-blocking on Stop, on changed files only, before lint.** Formatting never needs the agent's attention, so it does not block; limiting it to changed files keeps the hook fast; it runs from `lint.sh` in sequence because hooks for one event run in parallel and would race on the same files.
 - **The lint hook checks changed files only and blocks a given failure once.** An agent is blocked only by files it touched, and an unfixable failure cannot trap it in a stop loop (it gets a warning instead). The whole-repo `uv run ruff check .` remains the pre-commit check.
-- **CI runs only the default suite; lint and format stay out of CI.** The local Claude Code hook and the pre-commit check are the lint gate; CI runs tests only. Live LLM tests would put the API key into CI secrets and cost money per push, and robot tests need a supervised session ([safety.md](../../docs/safety.md)); both stay opt-in and manual. The `robot` and `vision` extras are not installed in CI, which also checks that the default run needs none of them.
+- **CI runs the import contracts and the default suite; lint and format stay out of CI.** The local Claude Code hook and the pre-commit check are the lint gate. The import contracts also run in CI because no hook checks them and a broken boundary is a design error, not a style issue. Live LLM tests would put the API key into CI secrets and cost money per push, and robot tests need a supervised session ([safety.md](../../docs/safety.md)); both stay opt-in and manual. The `robot` and `vision` extras are not installed in CI, which also checks that the default run needs none of them.
+- **The skills import boundary is checked by `import-linter` contracts.** They follow indirect imports through every module of the graph, whether or not a test executes it. Rejected: a ruff `TID251` banned-api rule, which sees only direct imports; a `sys.modules` check after importing every skill module, which covers only the executed import paths and cannot check for `pydantic` because `skills.frontmatter` loads it; and Tach, which is unmaintained. A single `forbidden` contract cannot cover `skills.frontmatter`: import-linter skips a source and forbidden pair that overlap (`skills` contains `skills.frontmatter`), so the parser has its own `protected` contract.
 - **This doc lives in `tests/docs/`.** The test-infrastructure owner (`tests-dev`) owns a doc tree in its own directory, like the `dispatcher` and `skills` packages. Rejected: keeping it in the shared `docs/`, which blurred its ownership.

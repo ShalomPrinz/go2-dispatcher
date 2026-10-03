@@ -20,7 +20,13 @@ vision = ["ultralytics", "opencv-python", "numpy"]
 go2 = "dispatcher.transports.cli:main"
 
 [dependency-groups]
-dev = ["pytest", "pytest-cov>=7.1", "pytest-timeout", "ruff>=0.16"]   # pytest-cov pulls coverage >= 7.10 for [run] patch
+dev = [
+    "import-linter>=2.15",
+    "pytest",
+    "pytest-cov>=7.1",                  # pulls coverage >= 7.10 for [run] patch
+    "pytest-timeout",
+    "ruff>=0.16",
+]
 
 [tool.uv.sources]
 unitree_sdk2py = { git = "https://github.com/unitreerobotics/unitree_sdk2_python" }
@@ -51,6 +57,26 @@ patch = ["subprocess", "_exit"]         # measure skill and CLI subprocesses; sk
 [tool.coverage.report]
 show_missing = true
 skip_covered = true
+
+[tool.importlinter]                     # import boundaries: uv run lint-imports (tests/docs/testing.md)
+root_packages = ["skills", "dispatcher"]
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Skills import neither the dispatcher, pydantic nor yaml"
+type = "forbidden"
+source_modules = ["skills"]
+forbidden_modules = ["dispatcher", "pydantic", "yaml"]
+ignore_imports = [
+  "skills.frontmatter -> pydantic",     # the SKILL.md parser runs in the dispatcher only
+  "skills.frontmatter -> yaml",
+]
+
+[[tool.importlinter.contracts]]
+name = "Only the dispatcher and skill tests import the SKILL.md parser"
+type = "protected"                      # a forbidden contract skips skills -> skills.frontmatter as overlapping
+protected_modules = ["skills.frontmatter"]
+allowed_importers = ["dispatcher", "skills.tests"]
 
 [tool.ruff]                             # lint and format (tests/docs/testing.md)
 target-version = "py310"

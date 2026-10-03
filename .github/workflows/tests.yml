@@ -13,4 +13,5 @@ jobs:
           python-version: "3.10"
           enable-cache: true
       - run: uv sync --locked
+      - run: uv run lint-imports
       - run: uv run pytest -q
