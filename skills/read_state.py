@@ -8,8 +8,8 @@ from __future__ import annotations
 import sys
 import traceback
 
-from skills import backend, result, stub
-from skills.result import SkillOutcome, StateSampler
+from skills import backend, runner, stub
+from skills.runner import SkillOutcome, StateSampler
 from skills.schema import ErrorCode
 
 SKILL = "read_state"
@@ -17,7 +17,7 @@ SKILL = "read_state"
 
 def body(states: StateSampler) -> SkillOutcome:
     stub.disable_faults()  # utilities ignore faults
-    result.parse_params()
+    runner.parse_params()
     backend.backend_name()  # raises BackendNotConfigured
     try:
         states.take("after", strict=True)
@@ -25,12 +25,12 @@ def body(states: StateSampler) -> SkillOutcome:
         raise
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
-        return SkillOutcome.error(ErrorCode.STATE_UNAVAILABLE, result.describe_exception(e), observations={}, timing={})
+        return SkillOutcome.error(ErrorCode.STATE_UNAVAILABLE, runner.describe_exception(e), observations={}, timing={})
     return SkillOutcome.ok(observations={}, timing={})
 
 
 def main() -> None:
-    result.run_main(SKILL, body, watchdog=False)
+    runner.run_main(SKILL, body, watchdog=False)
 
 
 if __name__ == "__main__":

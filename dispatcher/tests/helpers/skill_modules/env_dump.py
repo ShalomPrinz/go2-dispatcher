@@ -8,19 +8,19 @@ from __future__ import annotations
 
 import os
 
-from skills import result
+from skills import policy, runner
 
 SKILL = "env_dump"
 
 
-POLICY = result.SkillPolicy(name=SKILL, timeout=10.0)
+POLICY = policy.SkillPolicy(name=SKILL, timeout=10.0)
 
 
-def _body(params: dict) -> result.SkillOutcome:
-    return result.SkillOutcome.ok(
+def _body(params: dict) -> runner.SkillOutcome:
+    return runner.SkillOutcome.ok(
         observations={"env_keys": sorted(os.environ)}, timing={"init_ms": 0.0, "exec_ms": 0.0}
     )
 
 
 if __name__ == "__main__":
-    result.run_skill(POLICY, _body, sample_state=False)
+    runner.run_skill(POLICY, _body, sample_state=False)

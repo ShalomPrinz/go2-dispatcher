@@ -9,8 +9,9 @@ import sys
 
 import pytest
 
-from skills import backend, env, result, sit, walk
-from skills.result import InvalidParams, MotionCost, SkillOutcome, StateSampler, parse_params
+from skills import backend, env, process, runner, sit, walk
+from skills.policy import MotionCost
+from skills.runner import InvalidParams, SkillOutcome, StateSampler, parse_params
 from skills.schema import ErrorCode, RobotState
 
 
@@ -48,30 +49,30 @@ def test_backend_not_configured(monkeypatch, value):
 
 def test_error_code_serialises_as_plain_string():
     outcome = SkillOutcome.error(ErrorCode.SDK_ERROR, "m", observations={}, timing={})
-    response = result.build_response("walk", outcome, StateSampler(), 1.0)
+    response = runner.build_response("walk", outcome, StateSampler(), 1.0)
     assert response.error is not None
     assert type(response.error.code) is str and str(ErrorCode.SDK_ERROR) == "sdk_error"
-    assert '"code":"sdk_error"' in result.to_json(response)
+    assert '"code":"sdk_error"' in runner.to_json(response)
 
 
 def test_run_skill_keeps_state_sampled_before_an_exception(monkeypatch):
     """The state taken before the body raised survives into the error response."""
     state = RobotState(t=1.0, backend="stub", posture="standing", body_height=0.32)
     monkeypatch.setattr(backend, "sample_state", lambda: state)
-    monkeypatch.setattr(result, "capture_stdout", lambda: None)
+    monkeypatch.setattr(process, "capture_stdout", lambda: None)
     monkeypatch.setattr(sys, "argv", ["walk", "{}"])
     sent = []
 
     def emit(*args):
-        sent.append(result.build_response(*args))
+        sent.append(runner.build_response(*args))
         raise SystemExit
 
     def body(params):
         raise RuntimeError("boom\nsecond line")
 
-    monkeypatch.setattr(result, "emit", emit)
+    monkeypatch.setattr(runner, "emit", emit)
     with pytest.raises(SystemExit):
-        result.run_skill(walk.POLICY, body)
+        runner.run_skill(walk.POLICY, body)
     response = sent[0]
     assert response.error is not None and response.error.message == "RuntimeError: boom"
     assert (response.state_before, response.state_after) == (state, None)
@@ -82,22 +83,22 @@ def test_capture_stdout_keeps_junk_off_the_response_line(tmp_path, monkeypatch):
     """Junk via print() and os.write(1) after capture_stdout() goes to stderr; stdout holds only the line."""
     out_path, err_path = tmp_path / "stdout", tmp_path / "stderr"
     ok = SkillOutcome.ok(observations={}, timing={})
-    line = result.to_json(result.build_response("walk", ok, StateSampler(), 1.0)) + "\n"
+    line = runner.to_json(runner.build_response("walk", ok, StateSampler(), 1.0)) + "\n"
     saved = os.dup(1), os.dup(2)
-    monkeypatch.setattr(result, "_saved_stdout_fd", None)
+    monkeypatch.setattr(process, "_saved_stdout_fd", None)
     with open(out_path, "wb") as out, open(err_path, "wb") as err:
         os.dup2(out.fileno(), 1)
         os.dup2(err.fileno(), 2)
         try:
-            result.capture_stdout()
+            process.capture_stdout()
             with open(1, "w", closefd=False) as fd1:
                 monkeypatch.setattr(sys, "stdout", fd1)
                 print("junk via print()", flush=True)
             os.write(1, b"junk via os.write(1)\n")
-            result.write_raw_stdout(line)
+            process.write_raw_stdout(line)
         finally:
-            assert result._saved_stdout_fd is not None
-            os.close(result._saved_stdout_fd)
+            assert process._saved_stdout_fd is not None
+            os.close(process._saved_stdout_fd)
             os.dup2(saved[0], 1)
             os.dup2(saved[1], 2)
             os.close(saved[0])

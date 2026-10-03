@@ -7,7 +7,7 @@ import pytest
 from dispatcher.models import StepDispatch, StepOutcome, StepRef, StepResult, TaskOutcome
 from dispatcher.registry import Registry
 from dispatcher.transports import OUTCOME_MAX_CHARS, format_outcome
-from skills.result import MotionCost
+from skills.policy import MotionCost
 from tests.helpers import REPO_ROOT
 
 

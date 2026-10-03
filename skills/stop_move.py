@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import time
 
-from skills import backend, result, stub
-from skills.result import SkillOutcome, StateSampler
+from skills import backend, runner, stub
+from skills.runner import SkillOutcome, StateSampler
 from skills.schema import ErrorCode
 
 SKILL = "stop_move"
@@ -21,12 +21,12 @@ def body(states: StateSampler) -> SkillOutcome:
     t0 = time.monotonic()
     stub.disable_faults()  # utilities ignore faults
     try:
-        result.parse_params()
+        runner.parse_params()
         params_error = None
-    except result.InvalidParams as e:
+    except runner.InvalidParams as e:
         params_error = str(e)  # reported only after StopMove was sent
     ret = backend.get_sport_client().StopMove()
-    timing = {"stop_call_ms": result.ms_since(t0)}
+    timing = {"stop_call_ms": runner.ms_since(t0)}
     observations = {"sdk_ret": ret}
     backend.sleep(SETTLE_S)
     states.take("after")
@@ -40,7 +40,7 @@ def body(states: StateSampler) -> SkillOutcome:
 
 
 def main() -> None:
-    result.run_main(SKILL, body, watchdog=False)
+    runner.run_main(SKILL, body, watchdog=False)
 
 
 if __name__ == "__main__":

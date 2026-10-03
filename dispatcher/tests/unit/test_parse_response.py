@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from dispatcher.executor import _parse_response
-from skills.result import SkillOutcome, StateSampler, build_response, to_json
+from skills.runner import SkillOutcome, StateSampler, build_response, to_json
 from skills.schema import ErrorCode
 
 LINE = to_json(build_response("walk", SkillOutcome.ok(observations={}, timing={}), StateSampler(), 0.0))

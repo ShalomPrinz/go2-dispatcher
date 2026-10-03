@@ -8,7 +8,7 @@ import sys
 
 import pytest
 
-from skills import backend, motion, result, stop_move
+from skills import backend, motion, process, runner, stop_move
 
 PERIOD = 0.1
 
@@ -46,7 +46,7 @@ def sdk(monkeypatch):
     """Install a FakeClient (returned by ``sdk(client)``) and record backend sleeps."""
     sleeps: list[float] = []
     monkeypatch.setattr(backend, "sleep", sleeps.append)
-    monkeypatch.setattr(result, "ORPHANED", False)
+    monkeypatch.setattr(process, "ORPHANED", False)
 
     def install(client):
         monkeypatch.setattr(backend, "get_sport_client", lambda: client)
@@ -90,7 +90,7 @@ def test_move_raises_still_stops(sdk, stop):
 def test_orphaned_breaks_and_stops(sdk, monkeypatch):
     client = FakeClient()
     sdk(client)
-    monkeypatch.setattr(result, "ORPHANED", True)
+    monkeypatch.setattr(process, "ORPHANED", True)
     o = motion.move_loop(0.3, 0, 0, 1.0, PERIOD)
     assert (o.status, o.error_code) == ("ok", None)
     assert o.observations == {"orphaned": True, "duration_s": 0.0, "sdk_ret": 0}
@@ -121,7 +121,7 @@ def test_single_action_ok_settles(sdk):
 
 
 class Emitted(Exception):
-    """Raised by the patched result.emit instead of exiting the process."""
+    """Raised by the patched runner.emit instead of exiting the process."""
 
 
 @pytest.fixture
@@ -137,15 +137,15 @@ def run_stop_move(sdk, monkeypatch):
             return state or {"posture": "standing"}
 
         monkeypatch.setattr(backend, "sample_state", sample)
-        monkeypatch.setattr(result, "capture_stdout", lambda: None)
+        monkeypatch.setattr(process, "capture_stdout", lambda: None)
         monkeypatch.setattr(sys, "argv", ["stop_move", *argv])
         emitted = []
 
         def emit(skill, outcome, states, total_ms):
-            emitted.append(result.build_response(skill, outcome, states, total_ms))
+            emitted.append(runner.build_response(skill, outcome, states, total_ms))
             raise Emitted
 
-        monkeypatch.setattr(result, "emit", emit)
+        monkeypatch.setattr(runner, "emit", emit)
         with pytest.raises(Emitted):
             stop_move.main()
         return emitted[0]

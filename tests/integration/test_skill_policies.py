@@ -8,7 +8,7 @@ import pytest
 
 from dispatcher.registry import Registry
 from skills import detect_object, sit, stretch, turn, walk
-from skills.result import MotionCost
+from skills.policy import MotionCost
 from tests.helpers import REPO_ROOT
 
 REGISTRY = Registry.load(REPO_ROOT / "skills" / "catalog")

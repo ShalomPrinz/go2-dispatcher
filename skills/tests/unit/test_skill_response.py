@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import pytest
 
-from skills import result
-from skills.result import SkillOutcome, StateSampler, build_response
+from skills import runner
+from skills.runner import SkillOutcome, StateSampler, build_response
 from skills.schema import ErrorCode, SkillError, SkillResponse
 
 
@@ -19,7 +19,7 @@ def test_message_collapsed_and_cut():
     out = error.message
     assert "\n" not in out and "\r" not in out and "\t" not in out
     assert out.startswith("line one line two three x")
-    assert len(out) == result.ERROR_MESSAGE_MAX_CHARS == 300
+    assert len(out) == runner.ERROR_MESSAGE_MAX_CHARS == 300
 
 
 def test_error_iff_status_error():

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from skills.frontmatter import SKILL_FILE, ParamSpec, SkillFileError, parse_skill_file
-from skills.result import SkillPolicy
+from skills.policy import SkillPolicy
 
 from .models import RegistryError
 

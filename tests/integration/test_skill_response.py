@@ -8,7 +8,7 @@ import json
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from skills.result import SkillOutcome, StateSampler, build_response, to_json
+from skills.runner import SkillOutcome, StateSampler, build_response, to_json
 from skills.schema import ErrorCode, RobotState, SkillResponse
 
 ADAPTER = TypeAdapter(SkillResponse)

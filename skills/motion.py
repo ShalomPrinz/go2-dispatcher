@@ -8,7 +8,7 @@ import sys
 import time
 import traceback
 
-from skills import backend, result
+from skills import backend, process, runner
 from skills.schema import ErrorCode
 
 # --- actions --------------------------------------------------------------------
@@ -23,21 +23,21 @@ def _safe_stop(client) -> int | None:
         return None
 
 
-def move_loop(vx: float, vy: float, vyaw: float, duration_s: float, period_s: float) -> result.SkillOutcome:
+def move_loop(vx: float, vy: float, vyaw: float, duration_s: float, period_s: float) -> runner.SkillOutcome:
     """Command Move(vx, vy, vyaw) every ``period_s`` for ``duration_s``, then StopMove().
 
     Returns a SkillOutcome whose observations hold ``duration_s`` (iterations commanded × period), ``sdk_ret`` and
     ``orphaned: true`` when the loop broke because the parent died."""
     t = time.monotonic()
     client = backend.get_sport_client()
-    timing = {"init_ms": result.ms_since(t)}
+    timing = {"init_ms": runner.ms_since(t)}
     t = time.monotonic()
     n = max(1, round(duration_s / period_s))
     obs: dict = {}
     sent = 0
     try:
         for _ in range(n):
-            if result.orphaned():
+            if process.orphaned():
                 obs["orphaned"] = True
                 break
             ret = client.Move(vx, vy, vyaw)
@@ -47,35 +47,35 @@ def move_loop(vx: float, vy: float, vyaw: float, duration_s: float, period_s: fl
                 if stop_ret != 0:
                     msg += f"; StopMove returned {stop_ret}"
                 obs.update(duration_s=round(sent * period_s, 3), sdk_ret=ret)
-                timing["exec_ms"] = result.ms_since(t)
-                return result.SkillOutcome.error(ErrorCode.SDK_ERROR, msg, observations=obs, timing=timing)
+                timing["exec_ms"] = runner.ms_since(t)
+                return runner.SkillOutcome.error(ErrorCode.SDK_ERROR, msg, observations=obs, timing=timing)
             sent += 1
             backend.sleep(period_s)
     except BaseException:
         _safe_stop(client)
         raise
     ret = client.StopMove()
-    timing["exec_ms"] = result.ms_since(t)
+    timing["exec_ms"] = runner.ms_since(t)
     obs.update(duration_s=round(sent * period_s, 3), sdk_ret=ret)
     if ret != 0:
-        return result.SkillOutcome.error(
+        return runner.SkillOutcome.error(
             ErrorCode.SDK_ERROR, f"StopMove returned {ret}", observations=obs, timing=timing
         )
-    return result.SkillOutcome.ok(observations=obs, timing=timing)
+    return runner.SkillOutcome.ok(observations=obs, timing=timing)
 
 
-def single_action(call: str, settle_s: float) -> result.SkillOutcome:
+def single_action(call: str, settle_s: float) -> runner.SkillOutcome:
     """Call ``client.<call>()``; on success wait ``settle_s`` (via backend.sleep) so
     state_after is sampled after the motion ends. Returns a SkillOutcome."""
     t = time.monotonic()
     client = backend.get_sport_client()
-    timing = {"init_ms": result.ms_since(t)}
+    timing = {"init_ms": runner.ms_since(t)}
     t = time.monotonic()
     ret = getattr(client, call)()
     obs = {"sdk_ret": ret}
     if ret != 0:
-        timing["exec_ms"] = result.ms_since(t)
-        return result.SkillOutcome.error(ErrorCode.SDK_ERROR, f"{call} returned {ret}", observations=obs, timing=timing)
+        timing["exec_ms"] = runner.ms_since(t)
+        return runner.SkillOutcome.error(ErrorCode.SDK_ERROR, f"{call} returned {ret}", observations=obs, timing=timing)
     backend.sleep(settle_s)
-    timing["exec_ms"] = result.ms_since(t)
-    return result.SkillOutcome.ok(observations=obs, timing=timing)
+    timing["exec_ms"] = runner.ms_since(t)
+    return runner.SkillOutcome.ok(observations=obs, timing=timing)

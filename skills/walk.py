@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from skills import motion, result
+from skills import motion, policy, runner
 
 VELOCITY_MPS = 0.3
 CMD_PERIOD_S = 0.1
@@ -13,14 +13,14 @@ DIRECTION_VECTORS = {"forward": (1, 0), "backward": (-1, 0), "left": (0, 1), "ri
 BASE_S = 10.0  # process start + SDK init + state samples (tunable)
 FACTOR = 1.5  # safety factor on commanded motion time (tunable)
 
-POLICY = result.SkillPolicy(
+POLICY = policy.SkillPolicy(
     name="walk",
     timeout=lambda p: BASE_S + FACTOR * p["distance_m"] / VELOCITY_MPS,
-    cost=lambda p: result.MotionCost(distance_m=p["distance_m"]),
+    cost=lambda p: policy.MotionCost(distance_m=p["distance_m"]),
 )
 
 
-def body(params: dict) -> result.SkillOutcome:
+def body(params: dict) -> runner.SkillOutcome:
     direction = params["direction"]
     distance_m = float(params["distance_m"])
     sx, sy = DIRECTION_VECTORS[direction]
@@ -29,7 +29,7 @@ def body(params: dict) -> result.SkillOutcome:
 
 
 def main() -> None:
-    result.run_skill(POLICY, body)
+    runner.run_skill(POLICY, body)
 
 
 if __name__ == "__main__":

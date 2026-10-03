@@ -28,7 +28,7 @@ from dispatcher.models import (
     TaskSummary,
 )
 from dispatcher.registry import Registry
-from skills.result import MotionCost
+from skills.policy import MotionCost
 from tests.helpers import REPO_ROOT
 
 GOLDEN = REPO_ROOT / "dispatcher" / "tests" / "golden"

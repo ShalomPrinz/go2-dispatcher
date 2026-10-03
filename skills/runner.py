@@ -1,25 +1,22 @@
-"""Shared skill helpers: the per-skill dispatcher policy, stdout capture, response building,
-emit, run_main and run_skill, orphan watchdog (skills/docs/skills.md). Standard library only."""
+"""Shared skill runner: SkillOutcome, state sampling, response building, emit, run_main and
+run_skill (skills/docs/skills.md). Standard library only."""
 
 from __future__ import annotations
 
 import json
 import os
 import sys
-import threading
 import time
 import traceback
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from typing import Literal, NoReturn
 
-from skills.env import PARENT_PID
+from skills import backend, process
+from skills.policy import SkillPolicy
 from skills.schema import SCHEMA_VERSION, ErrorCode, RobotState, SkillError, SkillResponse, Status
 
 ERROR_MESSAGE_MAX_CHARS = 300
-WATCHDOG_POLL_S = 0.2
-ORPHAN_GRACE_S = 2.0
-ORPHAN_EXIT_CODE = 137
 
 
 @dataclass(frozen=True)
@@ -44,11 +41,9 @@ class SkillOutcome:
     @classmethod
     def from_exception(cls, e: BaseException) -> SkillOutcome:
         """The error outcome for an exception that escaped a skill or utility body."""
-        from skills.backend import BackendNotConfigured
-
         if isinstance(e, InvalidParams):
             code, message = ErrorCode.INVALID_PARAMS, str(e)
-        elif isinstance(e, BackendNotConfigured):
+        elif isinstance(e, backend.BackendNotConfigured):
             code, message = ErrorCode.BACKEND_NOT_CONFIGURED, str(e)
         else:
             code, message = ErrorCode.EXCEPTION, describe_exception(e)
@@ -69,8 +64,6 @@ class StateSampler:
     def take(self, label: Literal["before", "after"], *, strict: bool = False) -> RobotState | None:
         """Sample state into ``label``; on failure record "<label>: <Type>: <msg>" and return None.
         strict re-raises instead and records nothing. BackendNotConfigured always propagates."""
-        from skills import backend
-
         self.used = True
         t = time.monotonic()
         try:
@@ -99,108 +92,6 @@ def describe_exception(e: BaseException) -> str:
 
 
 Body = Callable[[dict], SkillOutcome]
-
-
-# --- policy -------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class MotionCost:
-    distance_m: float = 0.0
-    rotation_deg: float = 0.0
-
-    def __post_init__(self):  # plan params may be ints; the run log records floats
-        object.__setattr__(self, "distance_m", float(self.distance_m))
-        object.__setattr__(self, "rotation_deg", float(self.rotation_deg))
-
-
-@dataclass(frozen=True)
-class SkillPolicy:
-    """Per-skill dispatcher policy, one module-level ``POLICY`` per skill (skills/docs/skills.md).
-    ``timeout`` and ``cost`` are a constant or a function of the validated params; the dispatcher
-    reads them only through ``timeout_s(params)`` and ``motion_cost(params)``."""
-
-    name: str
-    timeout: float | Callable[[dict], float]
-    cost: MotionCost | Callable[[dict], MotionCost] = MotionCost()
-    context_observations: tuple[str, ...] = ()  # observation keys shown to the LLM on ok
-
-    def timeout_s(self, params: dict) -> float:
-        return self.timeout(params) if callable(self.timeout) else self.timeout
-
-    def motion_cost(self, params: dict) -> MotionCost:
-        return self.cost(params) if callable(self.cost) else self.cost
-
-
-_saved_stdout_fd: int | None = None
-ORPHANED = False
-_watchdog_started = False
-
-
-# --- stdout capture -----------------------------------------------------------
-
-
-def capture_stdout() -> None:
-    """Call first in main(). Duplicate fd 1 to a saved fd, then dup2 fd 2 onto fd 1,
-    so anything printed by the SDK, cyclonedds, ultralytics or C code goes to stderr.
-    emit() writes only to the saved fd."""
-    global _saved_stdout_fd
-    if _saved_stdout_fd is not None:
-        return
-    try:
-        sys.stdout.flush()
-    except Exception:
-        pass
-    _saved_stdout_fd = os.dup(1)
-    os.dup2(2, 1)
-
-
-def _out_fd() -> int:
-    return _saved_stdout_fd if _saved_stdout_fd is not None else 1
-
-
-def write_raw_stdout(text: str) -> None:
-    """Write text to the saved stdout fd. Used only by the stub's `garbage` fault."""
-    data = text.encode("utf-8")
-    fd = _out_fd()
-    while data:
-        n = os.write(fd, data)
-        data = data[n:]
-
-
-# --- orphan watchdog ----------------------------------------------------------
-
-
-def orphaned() -> bool:
-    return ORPHANED
-
-
-def _watchdog(parent_pid: int) -> None:
-    global ORPHANED
-    while os.getppid() == parent_pid:
-        time.sleep(WATCHDOG_POLL_S)
-    ORPHANED = True
-    print(f"orphan watchdog: parent {parent_pid} is gone; exiting in {ORPHAN_GRACE_S:g}s", file=sys.stderr, flush=True)
-    time.sleep(ORPHAN_GRACE_S)
-    os._exit(ORPHAN_EXIT_CODE)
-
-
-def start_orphan_watchdog() -> None:
-    """Start a daemon thread that polls os.getppid() every 0.2 s. If it differs from
-    int(os.environ["GO2_PARENT_PID"]), set the module flag ORPHANED; if the process is
-    still alive 2.0 s later, os._exit(137). Motion loops check orphaned() each iteration
-    and break (then StopMove). Does nothing if GO2_PARENT_PID is unset (manual runs)."""
-    global _watchdog_started
-    raw = os.environ.get(PARENT_PID, "").strip()
-    if not raw or _watchdog_started:
-        return
-    try:
-        parent_pid = int(raw)
-    except ValueError:
-        print(f"orphan watchdog: ignoring invalid {PARENT_PID}={raw!r}", file=sys.stderr)
-        return
-    _watchdog_started = True
-    threading.Thread(target=_watchdog, args=(parent_pid,), name="orphan-watchdog", daemon=True).start()
 
 
 # --- response -----------------------------------------------------------------
@@ -257,11 +148,8 @@ def emit(skill: str, outcome: SkillOutcome, states: StateSampler, total_ms: floa
             stream.flush()
         except Exception:
             pass
-    write_raw_stdout(line + "\n")
-    try:
-        os.fsync(_out_fd())
-    except OSError:
-        pass  # pipes and terminals cannot be fsynced
+    process.write_raw_stdout(line + "\n")
+    process.fsync_stdout()
     os._exit(0 if outcome.status == "ok" else 1)
 
 
@@ -294,9 +182,9 @@ def run_main(skill: str, body: Callable[[StateSampler], SkillOutcome], *, watchd
     """Shared main() of skills and utilities: capture_stdout(), optional orphan watchdog, then
     outcome = body(states). An exception becomes SkillOutcome.from_exception(e); states sampled
     before it are kept. Then emit() with total_ms since start."""
-    capture_stdout()
+    process.capture_stdout()
     if watchdog:
-        start_orphan_watchdog()
+        process.start_orphan_watchdog()
     t0 = time.monotonic()
     states = StateSampler()
     try:

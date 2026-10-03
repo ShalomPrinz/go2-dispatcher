@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from skills.result import MotionCost
+from skills.policy import MotionCost
 
 BUDGET_EPSILON = 1e-9  # tolerance on the limit: exceeds when used + cost > max + epsilon
 # numbers in the motion-budget message are rounded to this (dispatcher/docs/loop-and-context.md)

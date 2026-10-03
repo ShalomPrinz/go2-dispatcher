@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr, model_validator
 
-from skills.result import MotionCost
+from skills.policy import MotionCost
 
 # the response schema is owned by skills and re-exported here (skills/docs/skills.md)
 from skills.schema import Posture as Posture

@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from typing import Literal, get_args
 
-from skills import result
+from skills import process
 from skills.backend import CameraUnavailable, DetectResult
 from skills.env import STUB_DETECTIONS, STUB_FAULT, STUB_STATE_FILE, STUB_TIME_SCALE
 from skills.schema import RobotState
@@ -134,7 +134,7 @@ def _take_fault() -> str | None:
         os._exit(CRASH_EXIT_CODE)
     if kind == "garbage":
         print("stub fault: garbage", file=sys.stderr, flush=True)
-        result.write_raw_stdout(GARBAGE_TEXT)
+        process.write_raw_stdout(GARBAGE_TEXT)
         os._exit(0)
     return kind  # None or "error"
 

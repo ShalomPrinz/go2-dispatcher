@@ -100,7 +100,18 @@ print(json.dumps({"modules": names, "heavy": heavy, "out": buf.getvalue(),
     )
     assert proc.returncode == 0, proc.stderr
     out = json.loads(proc.stdout.strip().splitlines()[-1])
-    assert {"real", "stub", "result", "backend", "motion", "stop_move", "read_state", *SKILLS} <= set(out["modules"])
+    assert {
+        "real",
+        "stub",
+        "policy",
+        "process",
+        "runner",
+        "backend",
+        "motion",
+        "stop_move",
+        "read_state",
+        *SKILLS,
+    } <= set(out["modules"])
     assert out["heavy"] == [] and out["out"] == "" and proc.stderr == ""
     for n in SKILLS:
         assert out["policies"][n] == n
@@ -224,7 +235,7 @@ def test_fault_garbage(tmp_path):
 
 
 def test_orphan_watchdog_exits(tmp_path):
-    """The watchdog is shared (skills/result.py); one skill is enough."""
+    """The watchdog is shared (skills/process.py); one skill is enough."""
     env = stub_env(tmp_path, fault="hang", GO2_PARENT_PID=str(os.getppid() or 1))
     assert int(env["GO2_PARENT_PID"]) != os.getpid()
     t0 = time.monotonic()
