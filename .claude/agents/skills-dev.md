@@ -31,4 +31,4 @@ uv run ruff check .
 
 ## Report
 
-300 words or fewer: what changed (files), which docs were updated and why, test and lint results, any gap you filled in a doc, real-backend code that is now *unverified* on the robot, and anything left open or out of scope.
+Beyond the report core in the root CLAUDE.md, include any real-backend code that is now *unverified* on the robot.

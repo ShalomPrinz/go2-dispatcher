@@ -31,7 +31,7 @@ Owning doc: <doc to update in the same change, and whether a Design decisions bu
 Do: <numbered items, each checkable>
 Out of scope: <what not to touch; other owners' code; untracked files in the root>
 Verify: <commands to run; the expected result, e.g. test count unchanged, golden files unchanged>
-Report: <word limit (300 max); what to include: files, results, deviations, decisions made>
+Report: <only what this task needs beyond the report core in CLAUDE.md, e.g. a lower word limit or a verbatim snippet; omit if nothing>
 ```
 
 Name the user's explicit decisions in Context so the agent does not re-open them. Name any risky step and what to do instead, for example "if golden files fail, stop and report; do not run --update-golden".

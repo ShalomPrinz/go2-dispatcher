@@ -36,4 +36,4 @@ For a changed hook, pipe sample payloads into it and check the exit code and std
 
 ## Report
 
-300 words or fewer: what changed (files), how each hook or rule was checked, docs updated and why, and anything left open or out of scope.
+Beyond the report core in the root CLAUDE.md, include how each hook or rule was checked.

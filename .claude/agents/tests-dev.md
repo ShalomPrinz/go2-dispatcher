@@ -36,4 +36,4 @@ When the task is about speed, report the default-suite wall time before and afte
 
 ## Report
 
-300 words or fewer: what changed (files), test counts and timings before and after, docs updated and why, any test file you touched and why it was mechanical, and anything left open or out of scope.
+Beyond the report core in the root CLAUDE.md, include test counts and timings before and after, and any test file you touched and why the change was mechanical.

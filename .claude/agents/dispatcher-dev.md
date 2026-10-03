@@ -29,7 +29,3 @@ uv run pytest -q 2>&1 | tail -n 15
 uv run ruff format .
 uv run ruff check .
 ```
-
-## Report
-
-300 words or fewer: what changed (files), which docs were updated and why, test and lint results, any gap you filled in a doc, and anything left open or out of scope.

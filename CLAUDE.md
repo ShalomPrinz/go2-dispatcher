@@ -59,6 +59,6 @@ Package commands (golden files, fault injection, opt-in tests) live in the folde
   - A task that touches both packages is split into one task per agent, run in sequence (the side that defines the contract first). Each agent stops and reports when it needs a change on the other side.
 - It verifies with commands only (`uv run pytest -q 2>&1 | tail -n 15`, `git status --short`, `git diff --stat`) and commits per task with the `git-commit` skill (`.claude/skills/git-commit/`).
 - It does not read the whole doc set or source itself; that exhausts its context before the work starts.
-- Subagents record any gap they fill in the owning doc and report briefly (300 words or fewer).
+- Subagents record any gap they fill in the owning doc. Dev agents report in 300 words or fewer: files changed, docs updated and why, test and lint results where run, any gap filled in a doc, deviations and decisions made, and anything left open or out of scope (the reviewer has its own format).
 - Before each commit, run the `reviewer` subagent (`.claude/agents/reviewer.md`) on the uncommitted diff; after fixing blocking findings, run it again on the fix diff only.
 - Keep the test suite fast; prefer fewer, meaningful tests over many parameterised ones.
