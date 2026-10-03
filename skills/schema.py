@@ -4,12 +4,33 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from enum import Enum
+from typing import Any, Literal, get_args
 
 SCHEMA_VERSION = 1
 
 Posture = Literal["standing", "sitting", "unknown"]
+POSTURES: tuple[Posture, ...] = get_args(Posture)
 Status = Literal["ok", "error"]
+
+
+class ErrorCode(str, Enum):
+    """Skill error codes (skills/docs/skills.md); members are str, so JSON gets the plain value."""
+
+    INVALID_PARAMS = "invalid_params"
+    SDK_ERROR = "sdk_error"
+    BACKEND_NOT_CONFIGURED = "backend_not_configured"
+    EXCEPTION = "exception"
+    UNSUPPORTED_OBJECT = "unsupported_object"
+    DETECTOR_ERROR = "detector_error"
+    CAMERA_UNAVAILABLE = "camera_unavailable"
+    BAD_FRAME = "bad_frame"
+    WEIGHTS_MISSING = "weights_missing"
+    STATE_UNAVAILABLE = "state_unavailable"
+
+    def __str__(self) -> str:  # Python 3.10 has no StrEnum; str() and f-strings give the value
+        return self.value
+
 
 # read by pydantic when the dispatcher validates; a plain dict so no pydantic import is needed
 _FORBID_EXTRA = {"extra": "forbid"}

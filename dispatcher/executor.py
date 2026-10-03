@@ -14,12 +14,13 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
+from skills.env import child_env
+
 from .config import Config
 from .models import RobotState, SkillResponse, StopMoveResult, StopReason
 from .registry import SkillDescriptor
 
 SECRET_ENV = frozenset({"ANTHROPIC_API_KEY", "TELEGRAM_BOT_TOKEN"})
-FAULT_ENV = "GO2_STUB_FAULT"
 STOP_MOVE_MODULE = "skills.stop_move"
 READ_STATE_MODULE = "skills.read_state"
 UTILITY_SKILL_NAMES = {STOP_MOVE_MODULE: "stop_move", READ_STATE_MODULE: "read_state"}
@@ -152,22 +153,17 @@ class Executor:
     # --- environment and process start (skills/docs/skills.md) ----------------------------------
 
     def _env(self, fault: str | None) -> dict[str, str]:
-        env = {k: v for k, v in os.environ.items() if k not in SECRET_ENV and k != FAULT_ENV}
-        env.update(
-            {
-                "PYTHONUNBUFFERED": "1",
-                "GO2_BACKEND": self.cfg.robot.backend,
-                "GO2_IFACE": self.cfg.robot.network_interface,
-                "GO2_YOLO_WEIGHTS": str(self.cfg.robot.yolo_weights),
-                "GO2_STUB_STATE_FILE": str(self.cfg.stub.state_file),
-                "GO2_STUB_TIME_SCALE": repr(self.cfg.stub.time_scale),
-                "GO2_STUB_DETECTIONS": json.dumps(self.cfg.stub.detections),
-                "GO2_PARENT_PID": str(os.getpid()),
-            }
+        return child_env(
+            {k: v for k, v in os.environ.items() if k not in SECRET_ENV},
+            backend=self.cfg.robot.backend,
+            network_interface=self.cfg.robot.network_interface,
+            yolo_weights=str(self.cfg.robot.yolo_weights),
+            stub_state_file=str(self.cfg.stub.state_file),
+            stub_time_scale=self.cfg.stub.time_scale,
+            stub_detections=self.cfg.stub.detections,
+            parent_pid=os.getpid(),
+            fault=fault,
         )
-        if fault:
-            env[FAULT_ENV] = fault
-        return env
 
     def _popen(self, module: str, params: dict, env: dict[str, str]) -> subprocess.Popen:
         argv = [sys.executable, "-m", module, json.dumps(params)]

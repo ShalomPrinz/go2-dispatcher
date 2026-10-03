@@ -9,6 +9,7 @@ import time
 import traceback
 
 from skills import backend, result
+from skills.schema import ErrorCode
 
 # --- actions --------------------------------------------------------------------
 
@@ -48,7 +49,7 @@ def move_loop(vx: float, vy: float, vyaw: float, duration_s: float, period_s: fl
                     msg += f"; StopMove returned {stop_ret}"
                 obs.update(duration_s=round(sent * period_s, 3), sdk_ret=ret)
                 timing["exec_ms"] = result.ms_since(t)
-                return "error", obs, "sdk_error", msg, timing
+                return "error", obs, ErrorCode.SDK_ERROR, msg, timing
             sent += 1
             backend.sleep(period_s)
     except BaseException:
@@ -58,7 +59,7 @@ def move_loop(vx: float, vy: float, vyaw: float, duration_s: float, period_s: fl
     timing["exec_ms"] = result.ms_since(t)
     obs.update(duration_s=round(sent * period_s, 3), sdk_ret=ret)
     if ret != 0:
-        return "error", obs, "sdk_error", f"StopMove returned {ret}", timing
+        return "error", obs, ErrorCode.SDK_ERROR, f"StopMove returned {ret}", timing
     return "ok", obs, None, None, timing
 
 
@@ -73,7 +74,7 @@ def single_action(call: str, settle_s: float):
     obs = {"sdk_ret": ret}
     if ret != 0:
         timing["exec_ms"] = result.ms_since(t)
-        return "error", obs, "sdk_error", f"{call} returned {ret}", timing
+        return "error", obs, ErrorCode.SDK_ERROR, f"{call} returned {ret}", timing
     backend.sleep(settle_s)
     timing["exec_ms"] = result.ms_since(t)
     return "ok", obs, None, None, timing

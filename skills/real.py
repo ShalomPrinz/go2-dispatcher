@@ -19,10 +19,9 @@ from skills.backend import (
     StateUnavailable,
     WeightsMissing,
 )
+from skills.env import IFACE, YOLO_WEIGHTS
 from skills.schema import Posture, RobotState
 
-IFACE_ENV = "GO2_IFACE"
-YOLO_WEIGHTS_ENV = "GO2_YOLO_WEIGHTS"
 DDS_DOMAIN_ID = 0
 SPORT_CLIENT_TIMEOUT_S = 10.0
 SPORT_STATE_TOPIC = "rt/sportmodestate"
@@ -43,9 +42,9 @@ def _init_dds() -> None:
     with _dds_lock:
         if _dds_ready:
             return
-        iface = os.environ.get(IFACE_ENV, "")
+        iface = os.environ.get(IFACE, "")
         if not iface:
-            raise BackendNotConfigured(f"{IFACE_ENV} is not set (robot.network_interface)")
+            raise BackendNotConfigured(f"{IFACE} is not set (robot.network_interface)")
         from unitree_sdk2py.core.channel import ChannelFactoryInitialize
 
         ChannelFactoryInitialize(DDS_DOMAIN_ID, iface)
@@ -85,7 +84,7 @@ class RealDetector:
 
     def _load_model(self):
         if self._model is None:
-            weights = os.environ.get(YOLO_WEIGHTS_ENV, "")
+            weights = os.environ.get(YOLO_WEIGHTS, "")
             if not weights or not os.path.isfile(weights):
                 # never let ultralytics download weights automatically
                 raise WeightsMissing(f"YOLO weights file not found: {weights or '(unset)'}")

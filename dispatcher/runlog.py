@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from .config import Config
     from .context import PromptSurface
     from .llm import LLMResult
-    from .models import Plan, StepDispatch, StepRef, StepResult, StopMoveResult, TaskOutcome, TaskSummary
+    from .models import Plan, Posture, StepDispatch, StepRef, StepResult, StopMoveResult, TaskOutcome, TaskSummary
 
 INDEX_FILE = "index.jsonl"
 FILE_TIME_FORMAT = "%Y%m%dT%H%M%S"  # local time at task start (dispatcher/docs/run-log.md)
@@ -142,7 +142,7 @@ class RunLog:
     # --- records (dispatcher/docs/run-log.md) -------------------------------------------------
 
     def task_start(
-        self, task: str, source: str, sender_id: str | None, previous: TaskSummary | None, posture: str
+        self, task: str, source: str, sender_id: str | None, previous: TaskSummary | None, posture: Posture
     ) -> None:
         s = self._session
         self._write(
@@ -213,7 +213,7 @@ class RunLog:
     def step_start(self, ref: StepRef, dispatch: StepDispatch) -> None:
         self._write("step_start", ref=ref.model_dump(mode="json"), dispatch=dispatch.model_dump(mode="json"))
 
-    def step_result(self, sr: StepResult, *, budget: MotionBudget, failures: int, posture: str) -> None:
+    def step_result(self, sr: StepResult, *, budget: MotionBudget, failures: int, posture: Posture) -> None:
         self._write(
             "step_result", **sr.model_dump(mode="json"), budget_used=budget.used(), failures=failures, posture=posture
         )

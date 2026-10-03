@@ -9,8 +9,9 @@ import sys
 
 import pytest
 
-from skills import backend, result, sit, walk
+from skills import backend, env, result, sit, walk
 from skills.result import InvalidParams, MotionCost, parse_params
+from skills.schema import ErrorCode
 
 
 @pytest.mark.parametrize(
@@ -38,11 +39,18 @@ def test_parse_params_accepts_object():
 
 @pytest.mark.parametrize("value", [None, "", "simulator"], ids=["unset", "empty", "unknown"])
 def test_backend_not_configured(monkeypatch, value):
-    monkeypatch.delenv(backend.BACKEND_ENV, raising=False)
+    monkeypatch.delenv(env.BACKEND, raising=False)
     if value is not None:
-        monkeypatch.setenv(backend.BACKEND_ENV, value)
+        monkeypatch.setenv(env.BACKEND, value)
     with pytest.raises(backend.BackendNotConfigured):
         backend.backend_name()
+
+
+def test_error_code_serialises_as_plain_string():
+    response = result.build_response("walk", "error", error_code=ErrorCode.SDK_ERROR, error_message="m")
+    assert response.error is not None
+    assert type(response.error.code) is str and str(ErrorCode.SDK_ERROR) == "sdk_error"
+    assert '"code":"sdk_error"' in result.to_json(response)
 
 
 def test_capture_stdout_keeps_junk_off_the_response_line(tmp_path, monkeypatch):

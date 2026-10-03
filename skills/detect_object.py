@@ -7,6 +7,7 @@ import time
 
 from skills import backend, result
 from skills.coco import COCO_CLASSES
+from skills.schema import ErrorCode
 
 SUGGESTIONS_N = 3
 SUGGESTIONS_CUTOFF = 0.5
@@ -31,7 +32,7 @@ def body(params: dict):
     target = params["target"].strip().lower()
     obs: dict = {"target": target}
     if target not in COCO_CLASSES:
-        return "error", obs, "unsupported_object", unsupported_message(target), {}
+        return "error", obs, ErrorCode.UNSUPPORTED_OBJECT, unsupported_message(target), {}
     t = time.monotonic()
     detector = backend.get_detector()
     timing = {"init_ms": result.ms_since(t)}

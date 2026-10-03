@@ -7,10 +7,10 @@ argument is invalid (the response then reports invalid_params).
 
 from __future__ import annotations
 
-import os
 import time
 
-from skills import backend, result
+from skills import backend, result, stub
+from skills.schema import ErrorCode
 
 SKILL = "stop_move"
 SETTLE_S = 0.5
@@ -18,7 +18,7 @@ SETTLE_S = 0.5
 
 def body(out: dict) -> None:
     t0 = time.monotonic()
-    os.environ.pop("GO2_STUB_FAULT", None)  # utilities ignore faults
+    stub.disable_faults()  # utilities ignore faults
     try:
         result.parse_params()
         params_error = None
@@ -37,7 +37,7 @@ def body(out: dict) -> None:
     if ret == 0:
         out["status"] = "ok"
     else:
-        out.update(error_code="sdk_error", error_message=f"StopMove returned {ret}")
+        out.update(error_code=ErrorCode.SDK_ERROR, error_message=f"StopMove returned {ret}")
 
 
 def main() -> None:

@@ -51,7 +51,7 @@ python -m skills.<name> '<params-json>'
 ```
 
 - `argv[1]` is a JSON object with the **filled** params: checked, normalised and with defaults filled in by the dispatcher. Always present (`{}` for no params).
-- Environment, set by the executor (secrets `ANTHROPIC_API_KEY` and `TELEGRAM_BOT_TOKEN` removed):
+- Environment, set by the executor through `skills.env.child_env()` (secrets `ANTHROPIC_API_KEY` and `TELEGRAM_BOT_TOKEN` removed by the executor first). `skills/env.py` defines every variable name below; skills and backends read them only through its constants:
 
 | Variable | Meaning |
 |---|---|
@@ -103,6 +103,8 @@ Params and ranges are in each `SKILL.md`. Walk and turn are open-loop ([robot.md
 
 ### Error codes
 
+The codes are the members of `ErrorCode` in `skills/schema.py`, a `str` enum: skills pass members, the response line carries the plain string, and `SkillError.code` stays a `str`.
+
 | Code | Skills | Meaning |
 |---|---|---|
 | `invalid_params` | all | The params argument is missing, not valid JSON, or not a JSON object. Keys and values are not checked by the skill (the dispatcher validates them). |
@@ -110,6 +112,7 @@ Params and ranges are in each `SKILL.md`. Walk and turn are open-loop ([robot.md
 | `backend_not_configured` | all | `GO2_BACKEND` missing or unknown, or `GO2_IFACE` empty on the real backend. |
 | `exception` | all | Unexpected exception: `<Type>: <first line>`. The traceback goes to stderr. |
 | `unsupported_object` | detect_object | Target is not one of the 80 COCO classes, for example `'phone' is not a detectable object. Closest supported: cell phone, spoon, horse.` (up to 3 close matches, if any). |
+| `detector_error` | detect_object | Any other detector failure (`backend.DetectorError`; the specific cases below are its subclasses). |
 | `camera_unavailable` | detect_object | The camera returned an error or no data (also the stub's `error` fault). |
 | `bad_frame` | detect_object | The image could not be decoded. |
 | `weights_missing` | detect_object | The YOLO weights file does not exist. |
@@ -168,7 +171,8 @@ or on the command line with `--fault STEP:KIND` (repeatable), which replaces the
 
 - `step` counts **dispatched** steps in the task, 1-based, across plans. Rejected steps are not counted. Steps must be unique.
 - The dispatcher sets `GO2_STUB_FAULT` for that step only. Inside the process, the fault hits the first action call the skill makes (`Move`, `StopMove`, `StandDown`, `Stretch` or `detect`); later calls behave normally.
-- Utilities (`stop_move`, `read_state`) ignore faults, so the stop path always works.
+- Utilities (`stop_move`, `read_state`) ignore faults (they call `stub.disable_faults()` first), so the stop path always works.
+- The fault kinds are `stub.FaultKind` (`FAULT_KINDS`); the dispatcher's `stub.faults[].kind` config type is that same `Literal`, as `stub.initial_posture` is `stub.StubPosture`.
 
 | Kind | What the skill process does | Step outcome |
 |---|---|---|
@@ -220,5 +224,6 @@ Without `GO2_STUB_STATE_FILE` and `GO2_STUB_TIME_SCALE` the stub uses `runs/.stu
 - **An unsupported `detect_object` target is a skill error with suggestions; the 80-class COCO list stays out of the catalog.** Listing every class would add tokens to every call; the skill validates the target and suggests close matches, so the model can correct itself on the next call.
 - **State is sampled at the start and end of every step, for logging only.** v1 gives no verdicts. The samples provide data to set v2 verification thresholds before seeing any verification results, and supply the posture shown to the model ([roadmap.md](../../docs/roadmap.md#v2-plan)).
 - **The stub replaces only the SDK layer inside the subprocess**, so process start, timeouts and kills are exercised for real offline. It remembers sitting or standing only: enough to run every failure path. Simulating motion is a v2 prerequisite ([roadmap.md](../../docs/roadmap.md#stub-upgrade-prerequisite)).
+- **`skills` owns the process environment contract, the posture type, the error codes and the fault kinds; the dispatcher imports them.** These are contracts between the executor and the skill processes, and the skill side is where they are read. Defining them once (`skills/env.py`, `schema.Posture`/`POSTURES`, `schema.ErrorCode`, `stub.FaultKind`) removes the copies in the executor and config that could drift silently: a renamed variable or a new fault kind used to need matching edits in both packages. `ErrorCode` is `class ErrorCode(str, Enum)` with `__str__` returning the value, because Python 3.10 has no `StrEnum`; the members serialise and compare as their plain strings, so the response line and the dispatcher's validation are unchanged. `SkillError.code` stays `str`, so pydantic does not reject a code the dispatcher does not know. `Posture` lives in `schema.py` next to `RobotState`, which uses it, rather than in `backend.py`. Rejected: a dispatcher-owned env builder (it would keep the variable names in the package that only sets them); typing `SkillError.code` as `ErrorCode` (an unknown code would turn a skill error into `malformed`).
 - **Fault injection by dispatched step number** (error, hang, crash, garbage) covers each step outcome the executor can produce, with real processes.
 - **No `integer` param type.** No skill used it; a whole-number parameter is declared `number`. Full decision in [loop-and-context.md](../../dispatcher/docs/loop-and-context.md).

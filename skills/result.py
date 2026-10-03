@@ -13,15 +13,15 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from typing import NoReturn
 
-from skills.schema import SCHEMA_VERSION, RobotState, SkillError, SkillResponse, Status
+from skills.env import PARENT_PID
+from skills.schema import SCHEMA_VERSION, ErrorCode, RobotState, SkillError, SkillResponse, Status
 
 ERROR_MESSAGE_MAX_CHARS = 300
 WATCHDOG_POLL_S = 0.2
 ORPHAN_GRACE_S = 2.0
 ORPHAN_EXIT_CODE = 137
-PARENT_PID_ENV = "GO2_PARENT_PID"
 
-Body = Callable[[dict], tuple[Status, dict, "str | None", "str | None", dict]]
+Body = Callable[[dict], tuple[Status, dict, "ErrorCode | None", "str | None", dict]]
 # returns (status, observations, error_code, error_message, timing) where timing has init_ms, exec_ms
 
 
@@ -115,13 +115,13 @@ def start_orphan_watchdog() -> None:
     still alive 2.0 s later, os._exit(137). Motion loops check orphaned() each iteration
     and break (then StopMove). Does nothing if GO2_PARENT_PID is unset (manual runs)."""
     global _watchdog_started
-    raw = os.environ.get(PARENT_PID_ENV, "").strip()
+    raw = os.environ.get(PARENT_PID, "").strip()
     if not raw or _watchdog_started:
         return
     try:
         parent_pid = int(raw)
     except ValueError:
-        print(f"orphan watchdog: ignoring invalid {PARENT_PID_ENV}={raw!r}", file=sys.stderr)
+        print(f"orphan watchdog: ignoring invalid {PARENT_PID}={raw!r}", file=sys.stderr)
         return
     _watchdog_started = True
     threading.Thread(target=_watchdog, args=(parent_pid,), name="orphan-watchdog", daemon=True).start()
@@ -140,7 +140,7 @@ def build_response(
     status: Status,
     *,
     observations: dict | None = None,
-    error_code: str | None = None,
+    error_code: ErrorCode | None = None,
     error_message: str | None = None,
     state_before: RobotState | None = None,
     state_after: RobotState | None = None,
@@ -154,7 +154,7 @@ def build_response(
     if status == "error":
         if error_code is None or error_message is None:
             raise ValueError("an error response needs error_code and error_message")
-        error = SkillError(code=error_code, message=one_line(error_message))
+        error = SkillError(code=str(error_code), message=one_line(error_message))
     return SkillResponse(
         schema_version=SCHEMA_VERSION,
         skill=skill,
@@ -200,14 +200,14 @@ def emit(skill, status, **kwargs) -> NoReturn:
 # --- run_skill ----------------------------------------------------------------
 
 
-def error_from_exception(e: BaseException) -> tuple[str, str]:
+def error_from_exception(e: BaseException) -> tuple[ErrorCode, str]:
     """(error_code, message) for an unexpected exception in a skill process."""
     from skills.backend import BackendNotConfigured
 
     if isinstance(e, BackendNotConfigured):
-        return "backend_not_configured", str(e)
+        return ErrorCode.BACKEND_NOT_CONFIGURED, str(e)
     first = str(e).splitlines()[0] if str(e) else ""
-    return "exception", f"{type(e).__name__}: {first}"
+    return ErrorCode.EXCEPTION, f"{type(e).__name__}: {first}"
 
 
 def parse_params(argv: list[str] | None = None) -> dict:
@@ -265,10 +265,10 @@ def run_main(skill: str, body: Callable[[dict], None], *, watchdog: bool = True)
     except Exception as e:
         out["status"] = "error"
         if isinstance(e, InvalidParams):
-            out["error_code"], out["error_message"] = "invalid_params", str(e)
+            out["error_code"], out["error_message"] = ErrorCode.INVALID_PARAMS, str(e)
         else:
             out["error_code"], out["error_message"] = error_from_exception(e)
-            if out["error_code"] != "backend_not_configured":
+            if out["error_code"] != ErrorCode.BACKEND_NOT_CONFIGURED:
                 traceback.print_exc(file=sys.stderr)
     out["timing"]["total_ms"] = ms_since(t0)
     emit(skill, out.pop("status"), **out)

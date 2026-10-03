@@ -5,18 +5,18 @@
 
 from __future__ import annotations
 
-import os
 import sys
 import time
 import traceback
 
-from skills import backend, result
+from skills import backend, result, stub
+from skills.schema import ErrorCode
 
 SKILL = "read_state"
 
 
 def body(out: dict) -> None:
-    os.environ.pop("GO2_STUB_FAULT", None)  # utilities ignore faults
+    stub.disable_faults()  # utilities ignore faults
     result.parse_params()
     backend.backend_name()  # raises BackendNotConfigured
     t = time.monotonic()
@@ -28,7 +28,7 @@ def body(out: dict) -> None:
     except Exception as e:
         traceback.print_exc(file=sys.stderr)
         first = str(e).splitlines()[0] if str(e) else ""
-        out.update(error_code="state_unavailable", error_message=f"{type(e).__name__}: {first}")
+        out.update(error_code=ErrorCode.STATE_UNAVAILABLE, error_message=f"{type(e).__name__}: {first}")
     out["timing"]["state_ms"] = result.ms_since(t)
 
 

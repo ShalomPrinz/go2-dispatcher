@@ -6,6 +6,7 @@ import pytest
 
 from dispatcher.executor import _parse_response
 from skills.result import build_response, to_json
+from skills.schema import ErrorCode
 
 LINE = to_json(build_response("walk", "ok"))
 
@@ -13,7 +14,10 @@ LINE = to_json(build_response("walk", "ok"))
 @pytest.mark.parametrize(
     "stdout",
     [
-        "junk\n" + to_json(build_response("walk", "error", error_code="x", error_message="y")) + "\n" + LINE,
+        "junk\n"
+        + to_json(build_response("walk", "error", error_code=ErrorCode.SDK_ERROR, error_message="y"))
+        + "\n"
+        + LINE,
         LINE + "\n\n  \n",
     ],
     ids=["last_line_wins", "trailing_blank_lines"],

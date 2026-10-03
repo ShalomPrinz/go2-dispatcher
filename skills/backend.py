@@ -11,7 +11,9 @@ import os
 from dataclasses import dataclass
 from types import ModuleType
 
-BACKEND_ENV = "GO2_BACKEND"
+from skills.env import BACKEND
+from skills.schema import ErrorCode
+
 BACKENDS = ("real", "stub")
 
 
@@ -26,19 +28,19 @@ class StateUnavailable(Exception):
 class DetectorError(Exception):
     """Base for detector failures; ``code`` is the skill error code (skills/docs/skills.md)."""
 
-    code = "detector_error"
+    code = ErrorCode.DETECTOR_ERROR
 
 
 class CameraUnavailable(DetectorError):
-    code = "camera_unavailable"
+    code = ErrorCode.CAMERA_UNAVAILABLE
 
 
 class BadFrame(DetectorError):
-    code = "bad_frame"
+    code = ErrorCode.BAD_FRAME
 
 
 class WeightsMissing(DetectorError):
-    code = "weights_missing"
+    code = ErrorCode.WEIGHTS_MISSING
 
 
 @dataclass
@@ -51,11 +53,11 @@ class DetectResult:
 
 def backend_name() -> str:
     """The configured backend name; raises BackendNotConfigured."""
-    name = os.environ.get(BACKEND_ENV, "")
+    name = os.environ.get(BACKEND, "")
     if name not in BACKENDS:
         if not name:
-            raise BackendNotConfigured(f"{BACKEND_ENV} is not set (expected real or stub)")
-        raise BackendNotConfigured(f"{BACKEND_ENV}={name!r} is not one of real, stub")
+            raise BackendNotConfigured(f"{BACKEND} is not set (expected real or stub)")
+        raise BackendNotConfigured(f"{BACKEND}={name!r} is not one of real, stub")
     return name
 
 

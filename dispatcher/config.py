@@ -23,6 +23,7 @@ from pydantic import (
 )
 
 from skills.coco import COCO_CLASSES
+from skills.stub import FaultKind, StubPosture
 
 from .models import ConfigError
 
@@ -97,12 +98,12 @@ class RobotConfig(_Section):
 
 class FaultConfig(_Section):
     step: StrictInt = Field(ge=1)
-    kind: Literal["error", "hang", "crash", "garbage"]
+    kind: FaultKind
 
 
 class StubConfig(_Section):
     time_scale: FiniteFloat = Field(default=0.1, gt=0)
-    initial_posture: Literal["standing", "sitting"] = "standing"
+    initial_posture: StubPosture = "standing"
     state_file: Path = Path("runs/.stub_state.json")
     detections: dict[str, StrictStr] = {}
     faults: list[FaultConfig] = []
