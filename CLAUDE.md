@@ -54,6 +54,7 @@ Package commands (golden files, fault injection, opt-in tests) live in the folde
   - `dispatcher-dev`: anything under `dispatcher/` or owned by `dispatcher/docs/`.
   - `skills-dev`: anything under `skills/` or owned by `skills/docs/`.
   - `tests-dev`: test infrastructure only (pytest plugin, helpers, markers, golden mechanism, coverage, CI) and `tests/docs/testing.md`. Tests of package behaviour go with the package agent.
+  - `claude-config-dev`: anything under `.claude/` (agents, skills, hooks, settings). `CLAUDE.md` files go with the agent that owns the folder.
   - A task that touches both packages is split into one task per agent, run in sequence (the side that defines the contract first). Each agent stops and reports when it needs a change on the other side.
 - It verifies with commands only (`uv run pytest -q 2>&1 | tail -n 15`, `git status --short`, `git diff --stat`) and commits per task with the `git-commit` skill (`.claude/skills/git-commit/`).
 - It does not read the whole doc set or source itself; that exhausts its context before the work starts.

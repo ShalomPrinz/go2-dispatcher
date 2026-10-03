@@ -8,7 +8,7 @@ New to the project? Read [project](project.md), then [architecture](architecture
 
 Each document owns one topic. Other documents link to the owner instead of repeating it.
 
-Docs live in four folders: shared documents that cover both services in `docs/` (this folder), dispatcher documents in `dispatcher/docs/`, skill documents in `skills/docs/`, and the test-infrastructure document in `tests/docs/`.
+Docs live in five folders: shared documents that cover both services in `docs/` (this folder), dispatcher documents in `dispatcher/docs/`, skill documents in `skills/docs/`, the test-infrastructure document in `tests/docs/`, and the Claude Code hooks document in `.claude/hooks/`.
 
 ### Shared (`docs/`)
 
@@ -51,6 +51,14 @@ The test infrastructure, owned by the `tests-dev` agent.
 | Document | Owns |
 |---|---|
 | [testing.md](../tests/docs/testing.md) | Running the tests: layout, markers and opt-in flags (live LLM, robot), helpers and fakes, golden files. |
+
+### Claude Code (`.claude/`)
+
+The Claude Code setup (agents, skills, hooks, settings), owned by the `claude-config-dev` agent.
+
+| Document | Owns |
+|---|---|
+| [hooks/README.md](../.claude/hooks/README.md) | The Claude Code hooks: what each does, when it blocks, and why they are built that way. |
 
 The repository root also has a short [README](../README.md) (one paragraph, quick start, link here) and `CLAUDE.md` (working instructions for Claude Code sessions on this repo).
 
