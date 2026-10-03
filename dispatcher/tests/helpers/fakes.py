@@ -7,8 +7,9 @@ import time
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from dispatcher.executor import ExecResult
-from dispatcher.models import RobotState, SkillError, SkillResponse, StopMoveResult
+from dispatcher.executor import ExecOutcome, ExecResult, InterruptCause
+from dispatcher.models import Posture, RobotState, SkillError, SkillResponse, StopMoveResult, StopReason
+from dispatcher.registry import SkillDescriptor
 
 FAKE_CLOCK_START = 1000.0
 
@@ -29,34 +30,36 @@ class FakeClock:
             self._t += seconds
 
 
-def state(posture: str) -> RobotState:
+def state(posture: Posture) -> RobotState:
     return RobotState(t=time.time(), backend="stub", posture=posture)
 
 
 def exec_result(
-    outcome: str = "ok",
+    outcome: ExecOutcome = "ok",
     *,
     skill: str = "walk",
     observations: dict | None = None,
-    posture: str | None = None,
+    posture: Posture | None = None,
     error_code: str | None = None,
     error_message: str | None = None,
-    interrupt_cause: str | None = None,
+    interrupt_cause: InterruptCause | None = None,
     stop_move: StopMoveResult | None = None,
 ) -> ExecResult:
     """An ``ExecResult``. ``ok``/``error`` carry a response (with ``state_after`` if
     ``posture`` is given); other outcomes carry none."""
     response = None
-    if outcome in ("ok", "error"):
+    if outcome == "ok" or outcome == "error":
+        error = None
         if outcome == "error":
             error_code = error_code or "sdk_error"
             error_message = error_message or "Move returned 1"
+            error = SkillError(code=error_code, message=error_message)
         response = SkillResponse(
             schema_version=1,
             skill=skill,
             status=outcome,
             observations=observations or {},
-            error=SkillError(code=error_code, message=error_message) if outcome == "error" else None,
+            error=error,
             state_after=state(posture) if posture else None,
         )
     elif outcome != "ok" and error_code is None:
@@ -74,7 +77,9 @@ def exec_result(
     )
 
 
-def stop_move_result(reason: str = "operator", *, ok: bool = True, posture: str | None = None) -> StopMoveResult:
+def stop_move_result(
+    reason: StopReason = "operator", *, ok: bool = True, posture: Posture | None = None
+) -> StopMoveResult:
     response = None
     if posture is not None:
         response = SkillResponse(schema_version=1, skill="stop_move", status="ok", state_after=state(posture))
@@ -103,19 +108,26 @@ class FakeExecutor:
         results: Sequence[ScriptItem] = (),
         *,
         stop_move_ok: bool = True,
-        stop_move_posture: str | None = None,
-        on_kill: Callable[[str], None] | None = None,
+        stop_move_posture: Posture | None = None,
+        on_kill: Callable[[InterruptCause], None] | None = None,
     ):
         self.results = list(results)
         self.stop_move_ok = stop_move_ok
-        self.stop_move_posture = stop_move_posture
+        self.stop_move_posture: Posture | None = stop_move_posture
         self.on_kill = on_kill
         self.runs: list[dict[str, Any]] = []
-        self.kills: list[str] = []
-        self.stop_moves: list[str] = []
+        self.kills: list[InterruptCause] = []
+        self.stop_moves: list[StopReason] = []
 
     def run(
-        self, skill, params: dict, *, fault, timeout_s: float, remaining_task_s: float, stop_event: threading.Event
+        self,
+        skill: SkillDescriptor,
+        params: dict,
+        *,
+        fault: str | None,
+        timeout_s: float,
+        remaining_task_s: float,
+        stop_event: threading.Event,
     ) -> ExecResult:
         call = {
             "skill": skill.name,
@@ -136,13 +148,13 @@ class FakeExecutor:
             return item
         return item(call)
 
-    def kill_current(self, cause: str) -> bool:
+    def kill_current(self, cause: InterruptCause) -> bool:
         self.kills.append(cause)
         if self.on_kill is not None:
             self.on_kill(cause)
         return False
 
-    def stop_move(self, reason: str) -> StopMoveResult:
+    def stop_move(self, reason: StopReason) -> StopMoveResult:
         self.stop_moves.append(reason)
         return stop_move_result(reason, ok=self.stop_move_ok, posture=self.stop_move_posture)
 

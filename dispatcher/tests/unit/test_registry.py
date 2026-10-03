@@ -72,7 +72,8 @@ def test_loads_five_skills_sorted():
     assert list(walk.params) == ["direction", "distance_m"]
     assert walk.params["direction"].required
     assert not walk.params["distance_m"].required and walk.params["distance_m"].default == 0.9
-    assert reg.get("sit").params == {}
+    sit = reg.get("sit")
+    assert sit is not None and sit.params == {}
     assert reg.get("nope") is None
 
 

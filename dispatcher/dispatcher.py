@@ -16,7 +16,7 @@ from .bounds import cut_message, precheck
 from .budget import MotionBudget
 from .config import Config
 from .context import ContextInput, PromptSurface, build_user_message, schema_retry_message
-from .executor import STDERR_TAIL_CHARS, Executor
+from .executor import STDERR_TAIL_CHARS, SkillExecutor
 from .llm import LLMResult, PlannerClient
 from .models import (
     FAILURE_OUTCOMES,
@@ -24,6 +24,7 @@ from .models import (
     LLMInterrupted,
     LLMUnavailable,
     PlanStep,
+    Posture,
     StepDispatch,
     StepRef,
     StepResult,
@@ -83,12 +84,12 @@ class Dispatcher:
         cfg: Config,
         registry: Registry,
         planner: PlannerClient,
-        executor: Executor,
+        executor: SkillExecutor,
         surface: PromptSurface,
         runlog_factory: RunLogFactory,
         *,
         clock: Callable[[], float] = time.monotonic,
-        initial_posture: str = "unknown",
+        initial_posture: Posture = "unknown",
     ):
         self.cfg = cfg
         self.registry = registry
@@ -96,7 +97,7 @@ class Dispatcher:
         self.executor = executor
         self.runlog_factory = runlog_factory
         self.clock = clock
-        self.posture = initial_posture
+        self.posture: Posture = initial_posture
         self.previous: TaskSummary | None = None
 
         self._task_lock = threading.Lock()
@@ -437,6 +438,7 @@ class Dispatcher:
                     return self._end(t, "LLM_INVALID")
 
             plan = res.plan
+            assert plan is not None  # no errors means a parsed plan (LLMResult)
             stop_at = plan.replan_after or len(plan.steps)
             t.log.plan(t.llm_calls, plan, stop_at)
             if plan.status == "DONE":
@@ -490,7 +492,7 @@ class Dispatcher:
     def _run_step(self, t: _Task, steps: list[PlanStep], i: int, step: PlanStep, params: dict) -> TaskOutcome | bool:
         """Dispatch plan step ``i``. Returns the task outcome if the task ended, else
         whether the step failed."""
-        desc = self.registry.get(step.skill)
+        desc = self.registry[step.skill]  # precheck passed, so the skill exists
         t.dispatched_count += 1
         fault = None
         if self.cfg.robot.backend == "stub":

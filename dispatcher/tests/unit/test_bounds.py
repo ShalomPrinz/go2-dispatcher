@@ -99,6 +99,7 @@ def test_empty_string(typed_registry):
 
 def test_string_stripped(typed_registry):
     filled, _ = check_step(step("count", n=1, label="  hi "), typed_registry)
+    assert filled is not None
     assert filled["label"] == "hi"
 
 
@@ -137,6 +138,7 @@ def test_defaults_filled(registry):
 
 def test_number_kept_as_received(registry):
     filled, _ = check_step(step("walk", direction="forward", distance_m=2), registry)
+    assert filled is not None
     assert type(filled["distance_m"]) is int
 
 
@@ -174,6 +176,7 @@ def test_precheck_bounds_violation_last_step(registry):
 def test_precheck_rejection_message_cut(registry):
     plan = make_plan(step("sit", **{f"p{i:02d}": 1 for i in range(20)}))
     r = precheck(plan, 1, registry, MotionBudget(10, 720), call_index=1).rejection
+    assert r is not None and r.error_message is not None
     assert len(r.error_message) == ERROR_MESSAGE_MAX
     assert r.error_message.endswith("…")
 
@@ -186,6 +189,7 @@ def test_precheck_motion_budget_crossing(registry):
     res = precheck(plan, 2, registry, budget, call_index=1)
     r = res.rejection
     assert res.filled == []
+    assert r is not None
     assert (r.ref.plan_step, r.outcome, r.error_code) == (2, "motion_budget_exceeded", "motion_budget_exceeded")
     assert r.ref.params == {"direction": "backward", "distance_m": 1.0}
     assert r.error_message == ("this step needs 1 m of travel but only 0.5 m remain for this task")
@@ -197,6 +201,7 @@ def test_precheck_starts_from_current_usage(registry):
     budget.charge(MotionCost(rotation_deg=60))
     plan = make_plan(step("turn", direction="left", angle_deg=45))
     r = precheck(plan, 1, registry, budget, call_index=1).rejection
+    assert r is not None
     assert r.error_message == "this step needs 45 deg of rotation but only 40 deg remain for this task"
     assert budget.used_rotation_deg == 60
 
@@ -216,6 +221,7 @@ def test_precheck_after_stop_at_bounds_checked_not_budget_checked(registry):
         step("walk", direction="forward", distance_m=1.5), step("walk", direction="sideways"), replan_after=1
     )
     r = precheck(bad, 1, registry, budget, call_index=1).rejection
+    assert r is not None
     assert (r.ref.plan_step, r.outcome) == (2, "rejected")
 
 

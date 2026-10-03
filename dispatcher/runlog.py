@@ -196,12 +196,16 @@ class RunLog:
 
     def plan_invalid(self, call_index: int, res: LLMResult, horizon: int) -> None:
         is_horizon = res.rejection_kind == "horizon"
+        steps_in_plan = None
+        if is_horizon:
+            assert res.tool_input is not None  # horizon implies a steps list
+            steps_in_plan = len(res.tool_input["steps"])
         self._write(
             "plan_invalid",
             call_index=call_index,
             tool_input=res.tool_input,
             rejection_kind=res.rejection_kind,
-            steps_in_plan=len(res.tool_input["steps"]) if is_horizon else None,  # horizon implies a steps list
+            steps_in_plan=steps_in_plan,
             horizon=horizon if is_horizon else None,
             errors=res.errors,
         )

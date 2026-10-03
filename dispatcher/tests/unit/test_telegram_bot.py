@@ -187,7 +187,7 @@ def test_build_application(cfg):
     assert app.post_stop is on_post_stop
     assert app.post_init is on_post_init
     assert app.bot_data["dispatcher"] is d and app.bot_data["cfg"] is cfg
-    asyncio.run(app.post_stop(app))
+    asyncio.run(on_post_stop(app))
     d.shutdown.assert_called_once_with(cfg.robot.stop_move_timeout_s + SHUTDOWN_EXTRA_S)
 
 
@@ -251,7 +251,8 @@ def test_stop_signal_kills_task_before_ptb_waits_for_handlers(cfg, registry, mon
 
     release_after_s = 5.0  # old behaviour: the task only ends at this timeout
     d = _BlockingDispatcher(registry, release_after_s)
-    app = build_application(d, cfg, TOKEN)
+    app = build_application(mock_dispatcher(), cfg, TOKEN)
+    app.bot_data["dispatcher"] = d  # the bot reads its dispatcher from bot_data only
     update = Update.de_json(
         {
             "update_id": 1,

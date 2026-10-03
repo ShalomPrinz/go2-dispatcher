@@ -12,14 +12,13 @@ from . import prompts
 from .bounds import cut_message
 from .budget import MotionBudget
 from .llm import plan_tool_schema
-from .models import PlanStep, StepResult, TaskSummary
+from .models import PlanStep, Posture, StepResult, TaskSummary
 from .registry import Registry, registry_hash
 
 NOT_DISPATCHED_PREFIX = "- rejected before running: "
 NOT_DISPATCHED_OUTCOMES = frozenset({"rejected", "motion_budget_exceeded"})
 BUDGET_DECIMALS = 2  # budget numbers: round(x, 2) then :g (dispatcher/docs/loop-and-context.md)
 
-Posture = Literal["standing", "sitting", "unknown"]
 ReturnReason = Literal["initial", "plan_complete", "checkpoint", "failure"]
 
 

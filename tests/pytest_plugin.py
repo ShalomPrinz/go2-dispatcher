@@ -7,6 +7,9 @@ import socket
 
 import pytest
 
+# what socket.connect accepts: a (host, port, ...) tuple or a Unix socket path
+_Address = tuple[object, ...] | str | bytes
+
 NETWORK_MARKERS = ("live_llm", "robot")  # opted in by --run-live / --run-robot; skipped without the flag
 
 
@@ -71,17 +74,24 @@ def _block_network(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPat
                 "mark the test live_llm (--run-live) or robot (--run-robot) (tests/docs/testing.md)"
             )
 
-    def connect(self: socket.socket, address: object) -> None:
+    def connect(self: socket.socket, address: _Address) -> None:
         check(self, address)
         return real_connect(self, address)
 
-    def connect_ex(self: socket.socket, address: object) -> int:
+    def connect_ex(self: socket.socket, address: _Address) -> int:
         check(self, address)
         return real_connect_ex(self, address)
 
-    def getaddrinfo(host: object, *args: object, **kwargs: object) -> list:
+    def getaddrinfo(
+        host: bytes | str | None,
+        port: bytes | str | int | None,
+        family: int = 0,
+        type: int = 0,
+        proto: int = 0,
+        flags: int = 0,
+    ) -> list:
         check(None, host)
-        return real_getaddrinfo(host, *args, **kwargs)
+        return real_getaddrinfo(host, port, family, type, proto, flags)
 
     monkeypatch.setattr(socket.socket, "connect", connect)
     monkeypatch.setattr(socket.socket, "connect_ex", connect_ex)

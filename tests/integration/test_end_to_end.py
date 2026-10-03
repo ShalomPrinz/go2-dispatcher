@@ -63,6 +63,7 @@ def test_turn_then_detect(tmp_path, registry):
     o = d.run_task("turn left then look for a chair", source="test")
     assert o.outcome == "DONE", o.message
     assert [s.outcome for s in o.steps] == ["ok", "ok"]
+    assert o.steps[1].response is not None
     assert o.steps[1].response.observations["object_found"] is True
 
     recs = read_jsonl(o.log_path)
@@ -94,6 +95,7 @@ def test_fault_at_step_two(tmp_path, registry):
     o = d.run_task("turn twice", source="test")
     assert o.outcome == "DONE"
     assert [s.outcome for s in o.steps] == ["ok", "error"]
+    assert o.steps[1].dispatch is not None
     assert o.steps[1].dispatch.fault == "error"
     assert o.failures == 1
     assert "Your previous plan failed at step 2 (turn): error." in planner.calls[1]["user"]

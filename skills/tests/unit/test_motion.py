@@ -126,14 +126,11 @@ def run_stop_move(sdk, monkeypatch):
 
     def run(argv, client, state=None):
         sdk(client)
-        if isinstance(state, BaseException):
 
-            def sample():
+        def sample():
+            if isinstance(state, BaseException):
                 raise state
-        else:
-
-            def sample():
-                return state or {"posture": "standing"}
+            return state or {"posture": "standing"}
 
         monkeypatch.setattr(backend, "sample_state", sample)
         monkeypatch.setattr(result, "capture_stdout", lambda: None)

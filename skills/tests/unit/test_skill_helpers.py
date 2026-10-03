@@ -62,6 +62,7 @@ def test_capture_stdout_keeps_junk_off_the_response_line(tmp_path, monkeypatch):
             os.write(1, b"junk via os.write(1)\n")
             result.write_raw_stdout(line)
         finally:
+            assert result._saved_stdout_fd is not None
             os.close(result._saved_stdout_fd)
             os.dup2(saved[0], 1)
             os.dup2(saved[1], 2)

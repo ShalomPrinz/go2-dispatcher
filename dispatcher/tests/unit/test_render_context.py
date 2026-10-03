@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -79,8 +81,8 @@ def ok_step(index, skill, params, *, plan_step=None, call_index=1, observations=
     )
 
 
-def make_input(budget=None, **kw) -> ContextInput:
-    base = dict(
+def make_input(budget: MotionBudget | None = None, **kw: Any) -> ContextInput:
+    base = ContextInput(
         task=TASK,
         posture="standing",
         budget=budget or MotionBudget(10.0, 720.0),
@@ -91,8 +93,7 @@ def make_input(budget=None, **kw) -> ContextInput:
         history_k=10,
         return_reason="initial",
     )
-    base.update(kw)
-    return ContextInput(**base)
+    return replace(base, **kw)
 
 
 def used_budget(distance=0.0, rotation=0.0) -> MotionBudget:

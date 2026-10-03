@@ -122,6 +122,10 @@ class Registry:
     def get(self, name: str) -> SkillDescriptor | None:
         return self._skills.get(name)
 
+    def __getitem__(self, name: str) -> SkillDescriptor:
+        """For a name already checked against the registry; raises KeyError otherwise."""
+        return self._skills[name]
+
     def names(self) -> list[str]:
         return sorted(self._skills)
 

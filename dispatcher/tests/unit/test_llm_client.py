@@ -141,7 +141,7 @@ def test_first_submit_plan_block_used(tmp_path):
     text = {"type": "text", "text": "thinking aloud"}
     body = message([thinking, text, tool_use(GOOD_INPUT), tool_use(second, id_="toolu_2")])
     r = Harness(tmp_path, [ok(body)]).plan()
-    assert r.plan.status == "PLAN"
+    assert r.plan is not None and r.plan.status == "PLAN"
     assert [b["type"] for b in r.content] == ["thinking", "text", "tool_use", "tool_use"]
 
 

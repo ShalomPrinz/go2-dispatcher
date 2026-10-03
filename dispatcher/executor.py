@@ -10,12 +10,12 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Protocol
 
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from .config import Config
-from .models import RobotState, SkillResponse, StopMoveResult
+from .models import RobotState, SkillResponse, StopMoveResult, StopReason
 from .registry import SkillDescriptor
 
 SECRET_ENV = frozenset({"ANTHROPIC_API_KEY", "TELEGRAM_BOT_TOKEN"})
@@ -33,8 +33,10 @@ _RESPONSE_ADAPTER = TypeAdapter(SkillResponse)  # built once; validates the stdl
 InterruptCause = Literal["operator", "task_time_limit", "shutdown"]
 KillCause = Literal["operator", "task_time_limit", "shutdown", "step_timeout"]
 
+ExecOutcome = Literal["ok", "error", "timeout", "malformed", "interrupted"]
+
 # kill cause -> (outcome, error_code, error_message template)
-_KILL_OUTCOMES: dict[str, tuple[str, str, str]] = {
+_KILL_OUTCOMES: dict[KillCause, tuple[ExecOutcome, str, str]] = {
     "step_timeout": ("timeout", "timeout", "killed after {timeout_s:g}s timeout"),
     "operator": ("interrupted", "stopped_by_operator", "stopped by operator"),
     "task_time_limit": ("interrupted", "task_time_limit", "task time limit reached"),
@@ -43,7 +45,7 @@ _KILL_OUTCOMES: dict[str, tuple[str, str, str]] = {
 
 
 class ExecResult(BaseModel):
-    outcome: Literal["ok", "error", "timeout", "malformed", "interrupted"]
+    outcome: ExecOutcome
     interrupt_cause: InterruptCause | None = None
     response: SkillResponse | None = None
     exit_code: int | None = None
@@ -53,6 +55,27 @@ class ExecResult(BaseModel):
     error_code: str | None = None
     error_message: str | None = None
     stop_move: StopMoveResult | None = None
+
+
+class SkillExecutor(Protocol):
+    """What the dispatcher and transports need from an executor; ``Executor`` or a test fake."""
+
+    def run(
+        self,
+        skill: SkillDescriptor,
+        params: dict,
+        *,
+        fault: str | None,
+        timeout_s: float,
+        remaining_task_s: float,
+        stop_event: threading.Event,
+    ) -> ExecResult: ...
+
+    def kill_current(self, cause: InterruptCause) -> bool: ...
+
+    def stop_move(self, reason: StopReason) -> StopMoveResult: ...
+
+    def read_state(self) -> RobotState | None: ...
 
 
 class _Readers:
@@ -220,34 +243,33 @@ class Executor:
         duration_ms = _ms(t0)
 
         response = _parse_response(readers.stdout, skill.name)
-        common = dict(
-            exit_code=rc, pid=proc.pid, duration_ms=duration_ms, stderr_tail=readers.stderr_tail, response=response
-        )
 
+        outcome: ExecOutcome
+        interrupt_cause: InterruptCause | None = None
+        stop: StopMoveResult | None = None
         if cause is not None:
-            outcome, code, template = _KILL_OUTCOMES[cause]
+            outcome, error_code, template = _KILL_OUTCOMES[cause]
             stop = self.stop_move(reason=cause)
-            return ExecResult(
-                outcome=outcome,
-                interrupt_cause=None if cause == "step_timeout" else cause,
-                error_code=code,
-                error_message=template.format(timeout_s=timeout_s),
-                stop_move=stop,
-                **common,
-            )
-
-        if response is None:
-            return ExecResult(
-                outcome="malformed",
-                error_code="malformed",
-                error_message=f"skill process exited with code {rc} without a valid response",
-                **common,
-            )
+            interrupt_cause = None if cause == "step_timeout" else cause
+            error_message = template.format(timeout_s=timeout_s)
+        elif response is None:
+            outcome, error_code = "malformed", "malformed"
+            error_message = f"skill process exited with code {rc} without a valid response"
+        else:
+            outcome = response.status
+            error_code = response.error.code if response.error else None
+            error_message = response.error.message if response.error else None
         return ExecResult(
-            outcome=response.status,
-            error_code=response.error.code if response.error else None,
-            error_message=response.error.message if response.error else None,
-            **common,
+            outcome=outcome,
+            interrupt_cause=interrupt_cause,
+            error_code=error_code,
+            error_message=error_message,
+            stop_move=stop,
+            exit_code=rc,
+            pid=proc.pid,
+            duration_ms=duration_ms,
+            stderr_tail=readers.stderr_tail,
+            response=response,
         )
 
     # --- utilities (docs/safety.md) ------------------------------------------------------------
@@ -267,7 +289,7 @@ class Executor:
         tail = (err or "")[-STDERR_TAIL_CHARS:] or None
         return proc.returncode, response, tail, duration_ms
 
-    def stop_move(self, reason: str) -> StopMoveResult:
+    def stop_move(self, reason: StopReason) -> StopMoveResult:
         """Never raises: any failure is returned as ``ok=False`` with the error in stderr_tail."""
         t0 = time.monotonic()
         try:

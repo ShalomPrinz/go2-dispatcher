@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from dispatcher.models import StepDispatch, StepRef, StepResult, TaskOutcome
+from dispatcher.models import StepDispatch, StepOutcome, StepRef, StepResult, TaskOutcome
 from dispatcher.registry import Registry
 from dispatcher.transports import OUTCOME_MAX_CHARS, format_outcome
 from skills.result import MotionCost
@@ -19,7 +19,7 @@ def registry():
 REF = StepRef(call_index=1, plan_step=1, skill="sit", params={})
 
 
-def step(index, outcome="ok", msg=None):
+def step(index: int | None, outcome: StepOutcome = "ok", msg: str | None = None) -> StepResult:
     dispatch = StepDispatch(index=index, timeout_s=10.0, motion_cost=MotionCost()) if index is not None else None
     return StepResult(ref=REF, dispatch=dispatch, outcome=outcome, error_message=msg)
 

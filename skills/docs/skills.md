@@ -72,7 +72,7 @@ python -m skills.<name> '<params-json>'
 
 ## Response schema
 
-Every skill and utility prints one `SkillResponse` (`schema_version` 1). `SkillResponse`, `SkillError` and `RobotState` are defined once, as frozen standard-library dataclasses in `skills/schema.py`; the dispatcher re-exports them from `dispatcher/models.py`. A skill builds the response with `result.build_response` and prints it with `result.to_json` (`json.dumps(dataclasses.asdict(...), allow_nan=False)`). Constructing a `SkillResponse` checks only that `error` is present if and only if `status = "error"`. The dispatcher validates the whole line against the same classes with a pydantic `TypeAdapter`: types, enums, and no unknown keys at any level, including inside `error` and the state objects. A line that fails it is step outcome `malformed`.
+Every skill and utility prints one `SkillResponse` (`schema_version` 1). `SkillResponse`, `SkillError` and `RobotState` are defined once, as frozen standard-library dataclasses in `skills/schema.py`; the dispatcher re-exports them from `dispatcher/models.py`. A skill builds the response with `result.build_response` and prints it with `result.to_json` (`json.dumps(dataclasses.asdict(...), allow_nan=False)`). Constructing a `SkillResponse` checks only that `error` is present if and only if `status = "error"`. `build_response` also raises `ValueError` for `status = "error"` without `error_code` or `error_message`, which `emit` turns into an `exception` error line. The dispatcher validates the whole line against the same classes with a pydantic `TypeAdapter`: types, enums, and no unknown keys at any level, including inside `error` and the state objects. A line that fails it is step outcome `malformed`.
 
 | Field | Meaning |
 |---|---|

@@ -61,7 +61,7 @@ def test_invalid_json(tmp_path):
     proc = run_module("walk", "not json", stub_env(tmp_path))
     resp = RESPONSE.validate_python(single_response(proc))
     assert proc.returncode == 1
-    assert resp.status == "error" and resp.error.code == "invalid_params"
+    assert resp.status == "error" and resp.error is not None and resp.error.code == "invalid_params"
 
 
 def test_backend_not_configured(tmp_path):
@@ -70,6 +70,7 @@ def test_backend_not_configured(tmp_path):
     proc = run_module("walk", VALID["walk"], env)
     resp = RESPONSE.validate_python(single_response(proc))
     assert proc.returncode == 1
+    assert resp.error is not None
     assert resp.error.code == "backend_not_configured"
     assert "Traceback" not in proc.stderr
 
@@ -125,6 +126,7 @@ def test_sit_then_walk_fails(tmp_path):
     env = stub_env(tmp_path)
     resp = run_ok("sit", {}, env)
     assert resp.observations == {"sdk_ret": 0}
+    assert resp.state_before is not None and resp.state_after is not None
     assert resp.state_before.posture == "standing"
     assert resp.state_after.posture == "sitting"
     assert stub.read_posture(state_file(tmp_path)) == "sitting"
@@ -132,6 +134,7 @@ def test_sit_then_walk_fails(tmp_path):
     proc = run_module("walk", VALID["walk"], env)
     walk = RESPONSE.validate_python(single_response(proc))
     assert proc.returncode == 1
+    assert walk.error is not None
     assert walk.status == "error" and walk.error.code == "sdk_error"
     assert walk.error.message == f"Move returned {stub.STUB_ERR_NOT_STANDING}"
     assert walk.observations["sdk_ret"] == stub.STUB_ERR_NOT_STANDING
@@ -148,6 +151,7 @@ def test_stretch_while_sitting_fails(tmp_path):
     proc = run_module("stretch", {}, stub_env(tmp_path))
     resp = RESPONSE.validate_python(single_response(proc))
     assert proc.returncode == 1
+    assert resp.error is not None
     assert resp.error.code == "sdk_error"
     assert resp.error.message == f"Stretch returned {stub.STUB_ERR_NOT_STANDING}"
 
@@ -173,6 +177,7 @@ def test_detect_unsupported_object(tmp_path):
     proc = run_module("detect_object", {"target": "phone"}, stub_env(tmp_path, fault="crash"))
     resp = RESPONSE.validate_python(single_response(proc))  # no detector call was made
     assert proc.returncode == 1
+    assert resp.error is not None
     assert resp.error.code == "unsupported_object"
     assert "cell phone" in resp.error.message
     assert resp.error.message.startswith("'phone' is not a detectable object. Closest supported:")
@@ -181,6 +186,7 @@ def test_detect_unsupported_object(tmp_path):
 def test_detect_unsupported_without_matches(tmp_path):
     proc = run_module("detect_object", {"target": "xqzv"}, stub_env(tmp_path))
     resp = RESPONSE.validate_python(single_response(proc))
+    assert resp.error is not None
     assert resp.error.code == "unsupported_object"
     assert resp.error.message == "'xqzv' is not a detectable object."
 
@@ -194,6 +200,7 @@ def test_fault_error(tmp_path, name):
     proc = run_module(name, VALID[name], stub_env(tmp_path, fault="error"))
     resp = RESPONSE.validate_python(single_response(proc))
     assert proc.returncode == 1 and resp.status == "error"
+    assert resp.error is not None
     if name == "detect_object":
         assert resp.error.code == "camera_unavailable"
     else:

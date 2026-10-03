@@ -146,7 +146,7 @@ def precheck(plan: Plan, stop_at: int, registry: Registry, budget: MotionBudget,
     filled_all: list[dict] = []
     for i, step in enumerate(plan.steps, start=1):
         filled, violations = check_step(step, registry)
-        if violations:
+        if filled is None:
             return PrecheckResult(
                 rejection=StepResult(
                     ref=StepRef(call_index=call_index, plan_step=i, skill=step.skill, params=dict(step.params)),
@@ -160,7 +160,7 @@ def precheck(plan: Plan, stop_at: int, registry: Registry, budget: MotionBudget,
 
     sim = budget.copy()
     for i, (step, filled) in enumerate(zip(plan.steps[:stop_at], filled_all, strict=False), start=1):
-        cost = registry.get(step.skill).policy.motion_cost(filled)
+        cost = registry[step.skill].policy.motion_cost(filled)
         kind = sim.would_exceed(cost)
         if kind is not None:
             return PrecheckResult(

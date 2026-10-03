@@ -21,7 +21,7 @@ def test_valid_plan():
 
 def test_lowercase_status_accepted():
     plan, errors, kind = v({"status": "done", "steps": [], "message": "ok"})
-    assert errors == [] and kind == "none" and plan.status == "DONE"
+    assert errors == [] and kind == "none" and plan is not None and plan.status == "DONE"
 
 
 def test_replan_after_string_rejected_strict():
@@ -93,7 +93,7 @@ def test_extra_top_level_key():
 
 def test_missing_params_defaults_to_empty():
     plan, errors, _ = v({"status": "PLAN", "steps": [{"skill": "sit"}]})
-    assert errors == [] and plan.steps == [PlanStep(skill="sit", params={})]
+    assert errors == [] and plan is not None and plan.steps == [PlanStep(skill="sit", params={})]
 
 
 def test_nested_error_dotted_loc():

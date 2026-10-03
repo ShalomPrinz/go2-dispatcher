@@ -14,9 +14,9 @@ from .. import process_lock
 from ..config import Config, load_config_and_env
 from ..context import PromptSurface, render_step
 from ..dispatcher import Dispatcher
-from ..executor import Executor
+from ..executor import Executor, SkillExecutor
 from ..llm import AnthropicPlanner, PlannerClient
-from ..models import RegistryError, TaskOutcome
+from ..models import Posture, RegistryError, TaskOutcome
 from ..registry import Registry
 from ..runlog import RunLogFactory, SessionInfo
 
@@ -59,7 +59,7 @@ def make_planner(cfg: Config) -> PlannerClient:
     return AnthropicPlanner(key, cfg.llm, cfg.loop.planning_horizon)
 
 
-def initial_posture(cfg: Config, executor: Executor, *, reset: bool) -> str:
+def initial_posture(cfg: Config, executor: SkillExecutor, *, reset: bool) -> Posture:
     """Posture at start-up: from the stub state file or a robot state read (docs/running.md)."""
     if cfg.robot.backend == "stub":
         if reset:

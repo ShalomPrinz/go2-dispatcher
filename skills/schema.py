@@ -8,6 +8,9 @@ from typing import Any, Literal
 
 SCHEMA_VERSION = 1
 
+Posture = Literal["standing", "sitting", "unknown"]
+Status = Literal["ok", "error"]
+
 # read by pydantic when the dispatcher validates; a plain dict so no pydantic import is needed
 _FORBID_EXTRA = {"extra": "forbid"}
 
@@ -26,7 +29,7 @@ class RobotState:
 
     t: float  # unix time when sampled (local clock)
     backend: Literal["real", "stub"]
-    posture: Literal["standing", "sitting", "unknown"]
+    posture: Posture
     mode: int | None = None
     gait_type: int | None = None
     body_height: float | None = None
@@ -44,7 +47,7 @@ class SkillResponse:
 
     schema_version: Literal[1]
     skill: str
-    status: Literal["ok", "error"]
+    status: Status
     observations: dict[str, Any] = field(default_factory=dict)
     error: SkillError | None = None  # present iff status == "error"
     state_before: RobotState | None = None

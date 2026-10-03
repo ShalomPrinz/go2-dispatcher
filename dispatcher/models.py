@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr, model_validato
 from skills.result import MotionCost
 
 # the response schema is owned by skills and re-exported here (skills/docs/skills.md)
+from skills.schema import Posture as Posture
 from skills.schema import RobotState as RobotState
 from skills.schema import SkillError as SkillError
 from skills.schema import SkillResponse as SkillResponse
@@ -77,9 +78,12 @@ StepOutcome = Literal["ok", "error", "timeout", "malformed", "rejected", "motion
 FAILURE_OUTCOMES = frozenset({"error", "timeout", "malformed", "rejected", "motion_budget_exceeded"})
 
 
+StopReason = Literal["operator", "task_time_limit", "step_timeout", "shutdown", "internal_error"]
+
+
 class StopMoveResult(_Model):
     ok: bool
-    reason: Literal["operator", "task_time_limit", "step_timeout", "shutdown", "internal_error"]
+    reason: StopReason
     duration_ms: float
     exit_code: int | None = None
     response: SkillResponse | None = None  # includes state_after sampled after StopMove
@@ -143,7 +147,7 @@ class TaskOutcome(_Model):
     failures: int
     stop_move_failed: bool = False
     duration_ms: float
-    final_posture: Literal["standing", "sitting", "unknown"]
+    final_posture: Posture
     log_path: str
 
 

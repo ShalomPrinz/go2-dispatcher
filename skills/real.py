@@ -19,7 +19,7 @@ from skills.backend import (
     StateUnavailable,
     WeightsMissing,
 )
-from skills.schema import RobotState
+from skills.schema import Posture, RobotState
 
 IFACE_ENV = "GO2_IFACE"
 YOLO_WEIGHTS_ENV = "GO2_YOLO_WEIGHTS"
@@ -120,8 +120,8 @@ class RealDetector:
         height, width = image.shape[:2]
         best = None  # (confidence, x1, y1, x2, y2)
         for res in model.predict(image, imgsz=self.IMGSZ, conf=self.CONF, verbose=False):
-            names = res.names
-            for box in res.boxes:
+            names = res.names  # pyright: ignore[reportAttributeAccessIssue]  # ultralytics types results as Results | Tensor
+            for box in res.boxes:  # pyright: ignore[reportAttributeAccessIssue, reportOptionalIterable]  # always set for a detect model
                 if names[int(box.cls[0])] != target:
                     continue
                 conf = float(box.conf[0])
@@ -206,12 +206,11 @@ def _floats(v, n: int) -> list[float] | None:
         items = [_float(x) for x in list(v)[:n]]
     except TypeError:
         return None
-    if len(items) != n or any(x is None for x in items):
-        return None
-    return items
+    floats = [x for x in items if x is not None]
+    return floats if len(floats) == n else None
 
 
-def derive_posture(body_height: float | None, mode: int | None) -> str:
+def derive_posture(body_height: float | None, mode: int | None) -> Posture:
     """The single posture rule (skills/docs/robot.md): body_height < SITTING_MAX -> "sitting";
     >= STANDING_MIN -> "standing"; otherwise or None -> "unknown". `mode` is unused in v1."""
     del mode  # unused in v1 (skills/docs/robot.md)

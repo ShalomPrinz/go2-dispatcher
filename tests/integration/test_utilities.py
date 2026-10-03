@@ -52,7 +52,7 @@ def test_invalid_params(tmp_path, name):
     proc = run_module(name, "not json", stub_env(tmp_path))
     resp = RESPONSE.validate_python(single_response(proc))
     assert proc.returncode == 1
-    assert resp.status == "error" and resp.error.code == "invalid_params"
+    assert resp.status == "error" and resp.error is not None and resp.error.code == "invalid_params"
 
 
 @pytest.mark.parametrize("name", UTILITIES)
@@ -62,6 +62,7 @@ def test_backend_not_configured(tmp_path, name):
     proc = run_module(name, {}, env)
     resp = RESPONSE.validate_python(single_response(proc))
     assert proc.returncode == 1
+    assert resp.error is not None
     assert resp.error.code == "backend_not_configured"
     assert "Traceback" not in proc.stderr
 

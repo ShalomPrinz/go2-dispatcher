@@ -56,9 +56,9 @@ class RunConfig(_Section):
 
 class LLMConfig(_Section):
     model: StrictStr = "claude-sonnet-5-5"  # (tunable)
-    max_tokens: StrictInt = Field(2048, ge=1)
+    max_tokens: StrictInt = Field(default=2048, ge=1)
     thinking: Literal["between_tools", "adaptive"] = "between_tools"
-    request_timeout_s: FiniteFloat = Field(60.0, gt=0)  # (tunable)
+    request_timeout_s: FiniteFloat = Field(default=60.0, gt=0)  # (tunable)
     infra_backoff_s: list[FiniteFloat] = [1.0, 4.0]  # one sleep per retry; length = retry count
 
     @field_validator("infra_backoff_s")
@@ -71,16 +71,16 @@ class LLMConfig(_Section):
 
 
 class LoopConfig(_Section):
-    planning_horizon: StrictInt = Field(5, ge=1)  # (tunable)
-    max_failures: StrictInt = Field(3, ge=1)  # (tunable)
-    max_llm_calls: StrictInt = Field(20, ge=1)  # (tunable)
-    task_time_limit_s: FiniteFloat = Field(300.0, gt=0)  # (tunable)
-    context_history_k: StrictInt = Field(10, ge=1)  # (tunable)
+    planning_horizon: StrictInt = Field(default=5, ge=1)  # (tunable)
+    max_failures: StrictInt = Field(default=3, ge=1)  # (tunable)
+    max_llm_calls: StrictInt = Field(default=20, ge=1)  # (tunable)
+    task_time_limit_s: FiniteFloat = Field(default=300.0, gt=0)  # (tunable)
+    context_history_k: StrictInt = Field(default=10, ge=1)  # (tunable)
 
 
 class MotionBudgetConfig(_Section):
-    max_distance_m: FiniteFloat = Field(10.0, ge=0)  # (tunable)
-    max_rotation_deg: FiniteFloat = Field(720.0, ge=0)  # (tunable)
+    max_distance_m: FiniteFloat = Field(default=10.0, ge=0)  # (tunable)
+    max_rotation_deg: FiniteFloat = Field(default=720.0, ge=0)  # (tunable)
 
 
 class SkillsConfig(_Section):
@@ -91,8 +91,8 @@ class RobotConfig(_Section):
     backend: Literal["stub", "real"] = "stub"
     network_interface: StrictStr = ""
     yolo_weights: Path = Path("models/yolov8n.pt")
-    stop_move_timeout_s: FiniteFloat = Field(10.0, gt=0)
-    read_state_timeout_s: FiniteFloat = Field(10.0, gt=0)
+    stop_move_timeout_s: FiniteFloat = Field(default=10.0, gt=0)
+    read_state_timeout_s: FiniteFloat = Field(default=10.0, gt=0)
 
 
 class FaultConfig(_Section):
@@ -101,7 +101,7 @@ class FaultConfig(_Section):
 
 
 class StubConfig(_Section):
-    time_scale: FiniteFloat = Field(0.1, gt=0)
+    time_scale: FiniteFloat = Field(default=0.1, gt=0)
     initial_posture: Literal["standing", "sitting"] = "standing"
     state_file: Path = Path("runs/.stub_state.json")
     detections: dict[str, StrictStr] = {}

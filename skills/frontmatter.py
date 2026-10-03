@@ -44,9 +44,9 @@ class ParamSpec(_Frontmatter):
 
     type: Literal["number", "string", "enum"]
     description: NonEmptyStr
-    values: tuple[str, ...] | None = Field(None, strict=False)  # YAML gives a list
-    min: float | None = Field(None, allow_inf_nan=False)
-    max: float | None = Field(None, allow_inf_nan=False)
+    values: tuple[str, ...] | None = Field(default=None, strict=False)  # YAML gives a list
+    min: float | None = Field(default=None, allow_inf_nan=False)
+    max: float | None = Field(default=None, allow_inf_nan=False)
     default: Any = None
     unit: NonEmptyStr | None = None
 
@@ -91,14 +91,14 @@ class ParamSpec(_Frontmatter):
         d = self.default
         if self.type == "number":
             ok = _is_number(d)
+            if ok and ((lo is not None and d < lo) or (hi is not None and d > hi)):
+                raise ValueError(f"default {d!r} is outside its min/max")
         elif self.type == "string":
             ok = _is_nonempty_str(d)
         else:  # enum
             ok = isinstance(d, str) and d in (self.values or ())
         if not ok:
             raise ValueError(f"default {d!r} is not a valid {self.type}")
-        if self.type == "number" and ((lo is not None and d < lo) or (hi is not None and d > hi)):
-            raise ValueError(f"default {d!r} is outside its min/max")
 
 
 class SkillFrontmatter(_Frontmatter):

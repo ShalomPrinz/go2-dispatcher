@@ -13,7 +13,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from typing import NoReturn
 
-from skills.schema import SCHEMA_VERSION, RobotState, SkillError, SkillResponse
+from skills.schema import SCHEMA_VERSION, RobotState, SkillError, SkillResponse, Status
 
 ERROR_MESSAGE_MAX_CHARS = 300
 WATCHDOG_POLL_S = 0.2
@@ -21,7 +21,7 @@ ORPHAN_GRACE_S = 2.0
 ORPHAN_EXIT_CODE = 137
 PARENT_PID_ENV = "GO2_PARENT_PID"
 
-Body = Callable[[dict], tuple[str, dict, "str | None", "str | None", dict]]
+Body = Callable[[dict], tuple[Status, dict, "str | None", "str | None", dict]]
 # returns (status, observations, error_code, error_message, timing) where timing has init_ms, exec_ms
 
 
@@ -137,7 +137,7 @@ def one_line(text: str, limit: int = ERROR_MESSAGE_MAX_CHARS) -> str:
 
 def build_response(
     skill: str,
-    status: str,
+    status: Status,
     *,
     observations: dict | None = None,
     error_code: str | None = None,
@@ -150,7 +150,11 @@ def build_response(
     """The SkillResponse (schema_version=1); only its error-iff-status rule is checked here,
     the dispatcher validates the rest (skills/docs/skills.md).
     error_message: newlines replaced by spaces, collapsed, cut to 300 chars."""
-    error = SkillError(code=error_code, message=one_line(error_message)) if status == "error" else None
+    error = None
+    if status == "error":
+        if error_code is None or error_message is None:
+            raise ValueError("an error response needs error_code and error_message")
+        error = SkillError(code=error_code, message=one_line(error_message))
     return SkillResponse(
         schema_version=SCHEMA_VERSION,
         skill=skill,

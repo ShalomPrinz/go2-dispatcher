@@ -12,7 +12,7 @@ from pathlib import Path
 
 from skills import result
 from skills.backend import CameraUnavailable, DetectResult
-from skills.schema import RobotState
+from skills.schema import Posture, RobotState
 
 STATE_FILE_ENV = "GO2_STUB_STATE_FILE"
 TIME_SCALE_ENV = "GO2_STUB_TIME_SCALE"
@@ -24,7 +24,7 @@ DEFAULT_STATE_FILE = "runs/.stub_state.json"
 DEFAULT_TIME_SCALE = 0.1
 
 POSTURES = ("standing", "sitting")
-DEFAULT_POSTURE = "standing"
+DEFAULT_POSTURE: Posture = "standing"
 
 STUB_ERR_NOT_STANDING = 1
 STUB_ERR_INJECTED = 99
@@ -76,7 +76,7 @@ def sleep(seconds: float) -> None:
 # --- state file -----------------------------------------------------------------
 
 
-def read_posture(path: Path | None = None) -> str:
+def read_posture(path: Path | None = None) -> Posture:
     """Posture from the state file; a missing file means standing."""
     path = path or state_file()
     try:

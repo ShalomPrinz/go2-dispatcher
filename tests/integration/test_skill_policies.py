@@ -17,7 +17,7 @@ REGISTRY = Registry.load(REPO_ROOT / "skills" / "catalog")
 def max_params(name: str) -> dict:
     """Each param at its registry maximum (enums: first value)."""
     out = {}
-    for pname, spec in REGISTRY.get(name).params.items():
+    for pname, spec in REGISTRY[name].params.items():
         out[pname] = spec.max if spec.max is not None else (spec.values or ("chair",))[0]
     return out
 
@@ -39,7 +39,7 @@ def test_policies_cover_catalog():
 @pytest.mark.parametrize("name", sorted(MOTION_S))
 def test_timeout_exceeds_motion_at_max_params(name):
     p = max_params(name)
-    assert REGISTRY.get(name).policy.timeout_s(p) > MOTION_S[name](p)
+    assert REGISTRY[name].policy.timeout_s(p) > MOTION_S[name](p)
 
 
 def test_motion_costs():

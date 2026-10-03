@@ -9,7 +9,7 @@ import os
 import signal
 import sys
 import traceback
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from pathlib import Path
 from typing import Any
 
@@ -58,7 +58,7 @@ NO_ALLOWED_USERS_WARNING = "Warning: telegram.allowed_user_ids is empty; the bot
 UNAUTHORISED_WARNING = "Warning: ignoring Telegram message from unauthorised user {user_id}."
 ERROR_REPLY = "Error: {exception_type}"
 
-Handler = Callable[[Update, ContextTypes.DEFAULT_TYPE], Awaitable[None]]
+Handler = Callable[[Update, ContextTypes.DEFAULT_TYPE], Coroutine[Any, Any, None]]
 
 
 def _dispatcher(context: Any) -> Dispatcher:

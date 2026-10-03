@@ -29,7 +29,7 @@ uv run basedpyright              # type check (settings in [tool.basedpyright] i
 uv run basedpyright <files>      # changed files only; no `--` separator, it is read as a path
 ```
 
-basedpyright in `basic` mode for Python 3.10 checks `dispatcher`, `skills` and `tests`, and must pass on the changed files before a commit. It needs the optional extras installed (`uv sync --extra robot --extra vision`); without them the robot and vision imports in `skills/real.py` are reported as unresolved. The whole repo does not pass yet. A Claude Code hook also type-checks the changed files at the end of each turn ([hooks README](../../.claude/hooks/README.md)).
+basedpyright in `basic` mode for Python 3.10 checks `dispatcher`, `skills` and `tests`, and must pass on the changed files before a commit. It needs the optional extras installed (`uv sync --extra robot --extra vision`); without them the robot and vision imports in `skills/real.py` are reported as unresolved. It passes on the whole repo. A Claude Code hook also type-checks the changed files at the end of each turn ([hooks README](../../.claude/hooks/README.md)).
 
 ### Import boundaries
 

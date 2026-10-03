@@ -11,7 +11,7 @@ from dispatcher import prompts
 from dispatcher.context import PromptSurface
 from dispatcher.dispatcher import Dispatcher
 from dispatcher.executor import STDERR_TAIL_CHARS
-from dispatcher.models import BusyError, LLMInterrupted, LLMUnavailable, Plan, PlanStep
+from dispatcher.models import BusyError, LLMInterrupted, LLMUnavailable, Plan, PlanStep, Posture
 from dispatcher.registry import Registry
 from dispatcher.runlog import RunLog, RunLogFactory, SessionInfo
 from dispatcher.tests.helpers import (
@@ -54,7 +54,16 @@ def done(message="all done"):
 
 class Rig:
     def __init__(
-        self, tmp_path, registry, items, results=(), *, on_call=None, executor=None, posture="standing", **cfg
+        self,
+        tmp_path,
+        registry,
+        items,
+        results=(),
+        *,
+        on_call=None,
+        executor=None,
+        posture: Posture = "standing",
+        **cfg,
     ):
         self.cfg = make_config(tmp_path, **cfg)
         self.planner = ScriptedPlanner(items, on_call=on_call)
@@ -103,7 +112,7 @@ def test_plan_then_done(tmp_path, registry):
     r = Rig(tmp_path, registry, [plan(walk(), turn(), detect()), done()], [exec_result()] * 3)
     o = r.run()
     assert o.outcome == "DONE"
-    assert [s.dispatch.index for s in o.steps] == [1, 2, 3]
+    assert [s.dispatch.index if s.dispatch else None for s in o.steps] == [1, 2, 3]
     assert o.llm_calls == 2
     assert reasons(o) == ["initial", "plan_complete"]
     assert prompts.NOTICES["plan_complete"] in r.user(1)
@@ -227,6 +236,7 @@ def test_motion_budget_rejection(tmp_path, registry):
     assert r.executor.runs == []
     rej = o.steps[0]
     assert (rej.outcome, rej.ref.plan_step) == ("motion_budget_exceeded", 2)
+    assert rej.error_message is not None
     assert "travel" in rej.error_message and "0.5" in rej.error_message
     assert o.failures == 1
 
@@ -420,6 +430,7 @@ def test_previous_task(tmp_path, registry):
     r.run("first task")
     r.run("second task")
     assert "Task: first task\nOutcome: DONE\nMessage: first done" in r.user(1)
+    assert r.d.previous is not None
     assert r.d.previous.task == "second task"
 
 

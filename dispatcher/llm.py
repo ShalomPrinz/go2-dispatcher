@@ -16,6 +16,7 @@ from .models import LLMInterrupted, LLMUnavailable, Plan
 if TYPE_CHECKING:
     import anthropic
     import httpx2  # the anthropic SDK (1.x) runs on httpx2; an injected client must be httpx2
+    from anthropic.types import ThinkingConfigParam
 
 # `anthropic` is imported only inside AnthropicPlanner and the retry helper: it costs about 0.8 s
 # at start-up, and stub runs with the test planner, `catalog`, `state` and `--reset-stub` never
@@ -255,8 +256,12 @@ class AnthropicPlanner:
         on_infra_retry: Callable[[dict], None],
     ) -> LLMResult:
         import anthropic
+        from anthropic.types import ToolParam
 
         cfg = self._cfg
+        thinking: ThinkingConfigParam = (
+            {"type": "adaptive"} if cfg.thinking == "adaptive" else {"type": "between_tools"}
+        )
         t_start = time.monotonic()
         retries = 0
         while True:
@@ -272,9 +277,9 @@ class AnthropicPlanner:
                     model=cfg.model,
                     max_tokens=cfg.max_tokens,
                     system=[{"type": "text", "text": system[0]}, {"type": "text", "text": system[1]}],
-                    tools=[tool_schema],
+                    tools=[ToolParam(**tool_schema)],
                     tool_choice={"type": "auto"},
-                    thinking={"type": cfg.thinking},
+                    thinking=thinking,
                     messages=[{"role": "user", "content": user}],
                 )
             except anthropic.APIError as e:
