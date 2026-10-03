@@ -21,6 +21,7 @@ go2 = "dispatcher.transports.cli:main"
 
 [dependency-groups]
 dev = [
+    "basedpyright>=1.40.1",             # type checker; pip wheel bundles its own Node
     "import-linter>=2.15",
     "pytest",
     "pytest-cov>=7.1",                  # pulls coverage >= 7.10 for [run] patch
@@ -77,6 +78,12 @@ name = "Only the dispatcher and skill tests import the SKILL.md parser"
 type = "protected"                      # a forbidden contract skips skills -> skills.frontmatter as overlapping
 protected_modules = ["skills.frontmatter"]
 allowed_importers = ["dispatcher", "skills.tests"]
+
+[tool.basedpyright]                     # type check: uv run basedpyright (tests/docs/testing.md)
+include = ["dispatcher", "skills", "tests"]
+exclude = ["**/__pycache__", "**/.*"]   # replaces the defaults; .venv and caches sit outside include anyway
+typeCheckingMode = "basic"
+pythonVersion = "3.10"
 
 [tool.ruff]                             # lint and format (tests/docs/testing.md)
 target-version = "py310"

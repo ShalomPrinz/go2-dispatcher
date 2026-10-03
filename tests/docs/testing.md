@@ -22,6 +22,15 @@ uv run ruff format .             # format (ruff defaults, line length 120)
 
 Formatting must be clean and the lint must pass before a commit; both run locally, not in CI. A Claude Code hook also formats and lints the changed files at the end of each turn ([hooks README](../../.claude/hooks/README.md)). `.git-blame-ignore-revs` lists the formatting sweep (`git config blame.ignoreRevsFile .git-blame-ignore-revs`). Rules: pycodestyle, pyflakes, isort, bugbear and pyupgrade (`E`, `F`, `W`, `I`, `B`, `UP`) for Python 3.10, line length 120.
 
+### Type check
+
+```bash
+uv run basedpyright              # type check (settings in [tool.basedpyright] in pyproject.toml)
+uv run basedpyright <files>      # changed files only; no `--` separator, it is read as a path
+```
+
+basedpyright in `basic` mode for Python 3.10 checks `dispatcher`, `skills` and `tests`, and must pass on the changed files before a commit. It needs the optional extras installed (`uv sync --extra robot --extra vision`); without them the robot and vision imports in `skills/real.py` are reported as unresolved. The whole repo does not pass yet.
+
 ### Import boundaries
 
 ```bash
