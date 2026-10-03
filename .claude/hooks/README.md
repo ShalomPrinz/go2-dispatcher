@@ -1,14 +1,15 @@
 # Claude Code hooks
 
-Wired in `.claude/settings.json`; each runs as `python3 .../<hook>.py` with a 120 s timeout. Lint, format, type-check and import-contract rules live in [tests/docs/testing.md](../../tests/docs/testing.md).
+Wired in `.claude/settings.json`; each runs as `python3 .../<hook>.py`, with a 120 s timeout (10 s for `scope.py`). Lint, format, type-check and import-contract rules live in [tests/docs/testing.md](../../tests/docs/testing.md).
 
 | File | Event | Blocks? | What it does |
 |---|---|---|---|
-| `hooklib.py` | — | — | Shared plumbing, stdlib only: stdin payload, `stop_hook_active` guard, tree, changed files, status line, loop breaker. |
+| `hooklib.py` | — | — | Shared plumbing, stdlib only: stdin payload, `stop_hook_active` guard, git, tree, changed files, status line, loop breaker. |
+| `scope.py` | PreToolUse (`Edit\|Write\|NotebookEdit`) | Yes (deny) | Denies a file write outside the calling agent's scope, with a reason naming the agent, the path and the agents whose scope covers it. Silent when it allows. |
 | `lint.py` | Stop, SubagentStop | Yes (exit 2) | Applies `ruff format` and import sorting (`ruff check --select I --fix`) to the changed `.py` files, then runs `ruff check` on them. Status `format ✓ (N files) · lint ✓ (N files)`, or `format - · lint -` with no changes. |
 | `typecheck.py` | Stop, SubagentStop | Yes (exit 2) | Runs `basedpyright` on the changed `.py` files under `dispatcher/`, `skills/` and `tests/`, and `lint-imports` on the whole project, in parallel. Status `types ✓ (N files) · imports ✓`, or `types -` with no changes. |
 
-On a block the failing tool's output goes to stderr, which Claude reads, and the turn continues.
+On a Stop block the failing tool's output goes to stderr, which Claude reads, and the turn continues. A `scope.py` deny prints the PreToolUse JSON form (`hookSpecificOutput.permissionDecision: "deny"` with a `permissionDecisionReason`) and exits 0; Claude sees the reason instead of the tool result.
 
 The type check needs the optional extras installed (`uv sync --extra robot --extra vision`); without them the robot and vision imports in `skills/real.py` are unresolved and touching that file blocks.
 
@@ -21,8 +22,11 @@ The type check needs the optional extras installed (`uv sync --extra robot --ext
 - **One JSON object on stdout.** `report()` prints `{"systemMessage": ..., "suppressOutput": true}`, the only line the user sees, so every hook reports even when idle (`lint -`, `types -`). A hook must print at most one object.
 - **Loop breaker.** With `stop_hook_active` true a hook exits 0 at once. In addition, `block()` stores an md5 of the failure output in `${TMPDIR:-/tmp}/claude-<hook>-<session_id>` (session id reduced to `[A-Za-z0-9_-]`); the same failure a second time reports `<hook> ✗ unchanged since the last block; not blocking again (run <command>)` and exits 0. A clean run deletes the file.
 - **Tree from the payload `cwd`** (fallback `git rev-parse --show-toplevel`; exit 0 outside a repo), never `$CLAUDE_PROJECT_DIR`, so a session in a git worktree checks its own tree, not the main checkout.
+- **Scope allow-lists in `scope.py`, keyed by `agent_type`.** A subagent's payload carries `agent_id` and `agent_type` (the agent file's `name:`); the main session's carries neither. Each project agent has a list of repo-relative prefixes taken from the Scope section of its `.claude/agents/<name>.md`, plus the folder `CLAUDE.md` it owns and the shared `docs/` files that section names; a trailing `/` is a folder, `**/name` that file name at any depth (`tests-dev`'s `**/conftest.py`, for "any `conftest.py`"), anything else one file. `reviewer` has an empty list. The main session and any agent without a list (built-ins such as `general-purpose`, `Explore`, `Plan`) are denied only `dispatcher/` and `skills/`, so the main session cannot route a package edit through a built-in agent. A change to an agent's Scope section must change its list in the same commit.
+- **Scope path resolution.** `file_path` (or `notebook_path`) is resolved against the payload `cwd` and `realpath`, then made relative to the git top level of the file's own location, so a worktree is checked like the main checkout. A path outside any git tree, or in a repo with a different `--git-common-dir` from the session's tree (a scratch repo), is always allowed. Bad or empty payloads (including a `tool_input` that is not an object) are allowed: the hook is a guard rail, not the safety boundary.
 - **System `python3`, tools through `uv run`.** The hooks are stdlib only, so they skip the venv start-up; ruff, basedpyright and lint-imports still run from the project environment.
 
 ## Design decisions
 
+- **Agent scope enforced by a PreToolUse hook with per-agent allow-lists.** The Scope sections and the CLAUDE.md working pattern were prose only; the hook makes them hard for file-edit tools. Ambiguous Scope wording is read the way the ownership table in [docs/README.md](../../docs/README.md) reads: root `tests/` "where the task is cross-service" is `tests/integration/` only; "shared docs, notably ..." is the named files only; `tests-dev` gets `dispatcher/tests/` and `skills/tests/`, since its Scope allows brief-named mechanical edits there that the hook cannot tell apart. Known gap, accepted: writes through Bash (`sed -i`, heredocs, redirects) are not checked. Rejected: `Edit(...)`/`Write(...)` deny rules in `settings.json`, which apply to every session and subagent alike and cannot tell agents apart.
 - **Python over bash, on one shared module.** The payload parsing, tree lookup, changed-file list, status line and loop breaker live once in `hooklib.py` instead of being copied into each hook. Rejected: bash scripts with inline `python3 -c` snippets for the JSON handling, which duplicated that plumbing in every hook and needed a second language for it anyway.

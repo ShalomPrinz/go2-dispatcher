@@ -1,4 +1,4 @@
-"""Shared plumbing for the Stop/SubagentStop hooks; stdlib only (.claude/hooks/README.md)."""
+"""Shared plumbing for the hooks; stdlib only (.claude/hooks/README.md)."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ def stop_hook_active() -> bool:
     return payload().get("stop_hook_active") is True
 
 
-def _git(*args: str, cwd: str | None = None) -> subprocess.CompletedProcess[bytes]:
+def git(*args: str, cwd: str | None = None) -> subprocess.CompletedProcess[bytes]:
     return subprocess.run(["git", *args], cwd=cwd, capture_output=True)
 
 
@@ -39,7 +39,7 @@ def tree() -> Path:
     cwd = payload().get("cwd")
     for where in (cwd if isinstance(cwd, str) and cwd else ".", None):
         try:
-            done = _git("rev-parse", "--show-toplevel", cwd=where)
+            done = git("rev-parse", "--show-toplevel", cwd=where)
         except OSError:
             continue
         if done.returncode == 0 and done.stdout.strip():
@@ -52,7 +52,7 @@ def changed_files(suffix: str = ".py") -> list[str]:
     root = tree()
     names: list[str] = []
     for args in (("diff", "-z", "--name-only", "HEAD"), ("ls-files", "-z", "--others", "--exclude-standard")):
-        names += [os.fsdecode(n) for n in _git(*args, cwd=str(root)).stdout.split(b"\0") if n]
+        names += [os.fsdecode(n) for n in git(*args, cwd=str(root)).stdout.split(b"\0") if n]
     return [n for n in dict.fromkeys(names) if n.endswith(suffix) and (root / n).is_file()]
 
 

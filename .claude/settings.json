@@ -23,6 +23,14 @@
     ]
   },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          { "type": "command", "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/scope.py", "timeout": 10 }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [
