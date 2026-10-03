@@ -5,12 +5,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Literal, get_args
+from typing import Any, Literal
 
 SCHEMA_VERSION = 1
 
 Posture = Literal["standing", "sitting", "unknown"]
-POSTURES: tuple[Posture, ...] = get_args(Posture)
 Status = Literal["ok", "error"]
 
 
