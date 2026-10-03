@@ -12,6 +12,7 @@ from pathlib import Path
 
 from skills import result
 from skills.backend import CameraUnavailable, DetectResult
+from skills.schema import RobotState
 
 STATE_FILE_ENV = "GO2_STUB_STATE_FILE"
 TIME_SCALE_ENV = "GO2_STUB_TIME_SCALE"
@@ -186,19 +187,11 @@ def get_detector() -> StubDetector:
     return StubDetector()
 
 
-def sample_state() -> dict:
+def sample_state() -> RobotState:
     posture = read_posture()
-    return {
-        "t": time.time(),
-        "backend": "stub",
-        "posture": posture,
-        "mode": None,
-        "gait_type": None,
-        "body_height": BODY_HEIGHT_STANDING_M if posture == "standing" else BODY_HEIGHT_SITTING_M,
-        "position": None,
-        "velocity": None,
-        "yaw_speed": None,
-        "imu_rpy": None,
-        "foot_force": None,
-        "error_code": None,
-    }
+    return RobotState(
+        t=time.time(),
+        backend="stub",
+        posture=posture,
+        body_height=BODY_HEIGHT_STANDING_M if posture == "standing" else BODY_HEIGHT_SITTING_M,
+    )

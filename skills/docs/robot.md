@@ -54,7 +54,7 @@ Robot state is sampled:
 
 **How.** On the first sample in a process, the backend subscribes to `rt/sportmodestate`. A sample waits up to `STATE_WAIT_S` for a message that arrived *after* the sample was requested; if none arrives, it uses the latest earlier message; if there is none at all, the sample fails. A failed sample does not fail the step: it is reported in `state_error` and the state is `null` ([skills.md](skills.md#response-schema)).
 
-**Fields.** Each sample is a `RobotState`:
+**Fields.** Each sample is a `RobotState` (`skills/schema.py`), which rejects unknown keys, so a new field is added there first ([skills.md](skills.md#response-schema)):
 
 | Field | Source in `SportModeState` |
 |---|---|

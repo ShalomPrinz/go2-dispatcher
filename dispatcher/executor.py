@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from .config import Config
 from .models import RobotState, SkillResponse, StopMoveResult
@@ -27,6 +27,8 @@ UTILITY_SKILL_NAMES = {STOP_MOVE_MODULE: "stop_move", READ_STATE_MODULE: "read_s
 POLL_INTERVAL_S = 0.05  # wait-loop poll period (docs/safety.md)
 READER_JOIN_TIMEOUT_S = 2.0  # join timeout per reader thread (docs/safety.md)
 STDERR_TAIL_CHARS = 2000  # stderr kept for the log (skills/docs/skills.md)
+
+_RESPONSE_ADAPTER = TypeAdapter(SkillResponse)  # built once; validates the stdlib dataclass
 
 InterruptCause = Literal["operator", "task_time_limit", "shutdown"]
 KillCause = Literal["operator", "task_time_limit", "shutdown", "step_timeout"]
@@ -99,8 +101,8 @@ def _parse_response(stdout: str, skill_name: str) -> SkillResponse | None:
     if not lines:
         return None
     try:
-        resp = SkillResponse.model_validate(json.loads(lines[-1]))
-    except (ValueError, ValidationError):
+        resp = _RESPONSE_ADAPTER.validate_json(lines[-1])
+    except ValidationError:
         return None
     return resp if resp.skill == skill_name else None
 

@@ -76,7 +76,7 @@ A plan is accepted only with no errors at all. Two more invalid replies are dete
 5. Ranges (only for params whose type passed): `parameter '{p}' for skill {s} is {v:g}, outside {min:g} to {max:g}` (or `below the minimum {min:g}` / `above the maximum {max:g}` when one side is open).
 6. Defaults are filled in for absent optional params, in frontmatter order.
 
-The filled, normalised params are what is dispatched, logged and shown in the context. Skills do no param checks of their own: these step bounds and the whole-plan pre-check are the only param validation, and the dispatcher's `SkillResponse` model is the only check on a skill's response shape ([skills.md](../../skills/docs/skills.md)).
+The filled, normalised params are what is dispatched, logged and shown in the context. Skills do no param checks of their own: these step bounds and the whole-plan pre-check are the only param validation, and the dispatcher's parse of the response line against `SkillResponse` (defined in `skills/schema.py`, re-exported by `dispatcher/models.py`) is the only full check on a skill's response shape ([skills.md](../../skills/docs/skills.md)).
 
 ## Whole-plan pre-check
 

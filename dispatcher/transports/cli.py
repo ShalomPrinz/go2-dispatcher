@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import atexit
+import dataclasses
 import json
 import signal
 import sys
@@ -112,7 +113,7 @@ def cmd_state(cfg) -> int:
     if state is None:
         print("Robot state unavailable.", file=sys.stderr)
         return EXIT_FAIL
-    print(state.model_dump_json(indent=2))
+    print(json.dumps(dataclasses.asdict(state), indent=2))
     return EXIT_OK
 
 

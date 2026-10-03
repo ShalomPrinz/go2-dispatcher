@@ -6,12 +6,15 @@ from __future__ import annotations
 import json
 
 import pytest
+from pydantic import TypeAdapter
 
-from dispatcher.models import SkillResponse
 from skills import stub
+from skills.schema import SkillResponse
 from tests.helpers import run_module, single_response, stub_env
 
 pytestmark = pytest.mark.integration
+
+RESPONSE = TypeAdapter(SkillResponse)
 
 UTILITIES = ["stop_move", "read_state"]
 
@@ -19,7 +22,7 @@ UTILITIES = ["stop_move", "read_state"]
 @pytest.mark.parametrize("name", UTILITIES)
 def test_contract_valid(tmp_path, name):
     proc = run_module(name, {}, stub_env(tmp_path))
-    resp = SkillResponse.model_validate(single_response(proc))
+    resp = RESPONSE.validate_python(single_response(proc))
     assert proc.returncode == 0, proc.stderr
     assert resp.skill == name and resp.status == "ok"
     assert resp.state_before is None
@@ -47,7 +50,7 @@ def test_reports_sitting_from_state_file(tmp_path, name):
 @pytest.mark.parametrize("name", UTILITIES)
 def test_invalid_params(tmp_path, name):
     proc = run_module(name, "not json", stub_env(tmp_path))
-    resp = SkillResponse.model_validate(single_response(proc))
+    resp = RESPONSE.validate_python(single_response(proc))
     assert proc.returncode == 1
     assert resp.status == "error" and resp.error.code == "invalid_params"
 
@@ -57,7 +60,7 @@ def test_backend_not_configured(tmp_path, name):
     """The three bad values are tested in process (skills/tests/unit/test_skill_helpers.py)."""
     env = stub_env(tmp_path, GO2_BACKEND="simulator")
     proc = run_module(name, {}, env)
-    resp = SkillResponse.model_validate(single_response(proc))
+    resp = RESPONSE.validate_python(single_response(proc))
     assert proc.returncode == 1
     assert resp.error.code == "backend_not_configured"
     assert "Traceback" not in proc.stderr
@@ -67,7 +70,7 @@ def test_backend_not_configured(tmp_path, name):
 def test_utilities_ignore_faults(tmp_path, name):
     """One `os.environ.pop` covers every kind; hang is the one whose failure is dangerous."""
     proc = run_module(name, {}, stub_env(tmp_path, fault="hang"), timeout=10)
-    resp = SkillResponse.model_validate(single_response(proc))
+    resp = RESPONSE.validate_python(single_response(proc))
     assert proc.returncode == 0 and resp.status == "ok"
 
 

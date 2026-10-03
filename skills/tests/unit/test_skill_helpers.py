@@ -4,7 +4,6 @@ One subprocess case per mechanism stays in tests/integration."""
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 
@@ -49,7 +48,7 @@ def test_backend_not_configured(monkeypatch, value):
 def test_capture_stdout_keeps_junk_off_the_response_line(tmp_path, monkeypatch):
     """Junk via print() and os.write(1) after capture_stdout() goes to stderr; stdout holds only the line."""
     out_path, err_path = tmp_path / "stdout", tmp_path / "stderr"
-    line = json.dumps(result.build_response("walk", "ok")) + "\n"
+    line = result.to_json(result.build_response("walk", "ok")) + "\n"
     saved = os.dup(1), os.dup(2)
     monkeypatch.setattr(result, "_saved_stdout_fd", None)
     with open(out_path, "wb") as out, open(err_path, "wb") as err:

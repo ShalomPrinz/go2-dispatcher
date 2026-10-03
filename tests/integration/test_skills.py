@@ -10,12 +10,15 @@ import sys
 import time
 
 import pytest
+from pydantic import TypeAdapter
 
-from dispatcher.models import SkillResponse
 from skills import stub
+from skills.schema import SkillResponse
 from tests.helpers import REPO_ROOT, run_module, single_response, stub_env
 
 pytestmark = pytest.mark.integration
+
+RESPONSE = TypeAdapter(SkillResponse)
 
 VALID = {
     "walk": {"direction": "forward", "distance_m": 0.3},
@@ -33,7 +36,7 @@ def state_file(tmp_path):
 
 def run_ok(name, params, env):
     proc = run_module(name, params, env)
-    resp = SkillResponse.model_validate(single_response(proc))
+    resp = RESPONSE.validate_python(single_response(proc))
     assert proc.returncode == 0, proc.stderr
     assert resp.status == "ok", resp
     return resp
@@ -56,7 +59,7 @@ def test_invalid_json(tmp_path):
     """parse_params is tested in process (skills/tests/unit/test_skill_helpers.py); this proves the
     mapping to invalid_params and exit 1."""
     proc = run_module("walk", "not json", stub_env(tmp_path))
-    resp = SkillResponse.model_validate(single_response(proc))
+    resp = RESPONSE.validate_python(single_response(proc))
     assert proc.returncode == 1
     assert resp.status == "error" and resp.error.code == "invalid_params"
 
@@ -65,7 +68,7 @@ def test_backend_not_configured(tmp_path):
     env = stub_env(tmp_path)
     env.pop("GO2_BACKEND")
     proc = run_module("walk", VALID["walk"], env)
-    resp = SkillResponse.model_validate(single_response(proc))
+    resp = RESPONSE.validate_python(single_response(proc))
     assert proc.returncode == 1
     assert resp.error.code == "backend_not_configured"
     assert "Traceback" not in proc.stderr
@@ -127,7 +130,7 @@ def test_sit_then_walk_fails(tmp_path):
     assert stub.read_posture(state_file(tmp_path)) == "sitting"
 
     proc = run_module("walk", VALID["walk"], env)
-    walk = SkillResponse.model_validate(single_response(proc))
+    walk = RESPONSE.validate_python(single_response(proc))
     assert proc.returncode == 1
     assert walk.status == "error" and walk.error.code == "sdk_error"
     assert walk.error.message == f"Move returned {stub.STUB_ERR_NOT_STANDING}"
@@ -143,7 +146,7 @@ def test_sit_while_sitting_is_ok(tmp_path):
 def test_stretch_while_sitting_fails(tmp_path):
     stub.write_posture("sitting", state_file(tmp_path))
     proc = run_module("stretch", {}, stub_env(tmp_path))
-    resp = SkillResponse.model_validate(single_response(proc))
+    resp = RESPONSE.validate_python(single_response(proc))
     assert proc.returncode == 1
     assert resp.error.code == "sdk_error"
     assert resp.error.message == f"Stretch returned {stub.STUB_ERR_NOT_STANDING}"
@@ -168,7 +171,7 @@ def test_detect_not_found_is_ok(tmp_path):
 
 def test_detect_unsupported_object(tmp_path):
     proc = run_module("detect_object", {"target": "phone"}, stub_env(tmp_path, fault="crash"))
-    resp = SkillResponse.model_validate(single_response(proc))  # no detector call was made
+    resp = RESPONSE.validate_python(single_response(proc))  # no detector call was made
     assert proc.returncode == 1
     assert resp.error.code == "unsupported_object"
     assert "cell phone" in resp.error.message
@@ -177,7 +180,7 @@ def test_detect_unsupported_object(tmp_path):
 
 def test_detect_unsupported_without_matches(tmp_path):
     proc = run_module("detect_object", {"target": "xqzv"}, stub_env(tmp_path))
-    resp = SkillResponse.model_validate(single_response(proc))
+    resp = RESPONSE.validate_python(single_response(proc))
     assert resp.error.code == "unsupported_object"
     assert resp.error.message == "'xqzv' is not a detectable object."
 
@@ -189,7 +192,7 @@ def test_detect_unsupported_without_matches(tmp_path):
 def test_fault_error(tmp_path, name):
     """walk: move loop; sit: single action; detect_object: camera_unavailable."""
     proc = run_module(name, VALID[name], stub_env(tmp_path, fault="error"))
-    resp = SkillResponse.model_validate(single_response(proc))
+    resp = RESPONSE.validate_python(single_response(proc))
     assert proc.returncode == 1 and resp.status == "error"
     if name == "detect_object":
         assert resp.error.code == "camera_unavailable"
@@ -239,7 +242,7 @@ def test_orphaned_motion_loop_breaks_and_stops(tmp_path, name, params):
     env = stub_env(tmp_path, GO2_STUB_TIME_SCALE="1", GO2_PARENT_PID=str(os.getppid() or 1))
     t0 = time.monotonic()
     proc = run_module(name, params, env, timeout=10)
-    resp = SkillResponse.model_validate(single_response(proc))
+    resp = RESPONSE.validate_python(single_response(proc))
     assert time.monotonic() - t0 < 3.0
     assert resp.status == "ok"
     assert resp.observations["orphaned"] is True

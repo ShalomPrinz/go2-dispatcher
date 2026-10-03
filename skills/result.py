@@ -10,10 +10,11 @@ import threading
 import time
 import traceback
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import NoReturn
 
-SCHEMA_VERSION = 1
+from skills.schema import SCHEMA_VERSION, RobotState, SkillError, SkillResponse
+
 ERROR_MESSAGE_MAX_CHARS = 300
 WATCHDOG_POLL_S = 0.2
 ORPHAN_GRACE_S = 2.0
@@ -135,51 +136,50 @@ def one_line(text: str, limit: int = ERROR_MESSAGE_MAX_CHARS) -> str:
 
 
 def build_response(
-    skill,
-    status,
+    skill: str,
+    status: str,
     *,
-    observations=None,
-    error_code=None,
-    error_message=None,
-    state_before=None,
-    state_after=None,
-    state_error=None,
-    timing=None,
-) -> dict:
-    """Pure function returning the SkillResponse dict (schema_version=1). It only assembles the dict;
-    the dispatcher's SkillResponse model validates it (skills/docs/skills.md).
+    observations: dict | None = None,
+    error_code: str | None = None,
+    error_message: str | None = None,
+    state_before: RobotState | None = None,
+    state_after: RobotState | None = None,
+    state_error: str | None = None,
+    timing: dict | None = None,
+) -> SkillResponse:
+    """The SkillResponse (schema_version=1); only its error-iff-status rule is checked here,
+    the dispatcher validates the rest (skills/docs/skills.md).
     error_message: newlines replaced by spaces, collapsed, cut to 300 chars."""
-    error = {"code": error_code, "message": one_line(error_message)} if status == "error" else None
-    return {
-        "schema_version": SCHEMA_VERSION,
-        "skill": skill,
-        "status": status,
-        "observations": dict(observations or {}),
-        "error": error,
-        "state_before": state_before,
-        "state_after": state_after,
-        "state_error": state_error,
-        "timing": {k: float(v) for k, v in (timing or {}).items()},
-    }
+    error = SkillError(code=error_code, message=one_line(error_message)) if status == "error" else None
+    return SkillResponse(
+        schema_version=SCHEMA_VERSION,
+        skill=skill,
+        status=status,
+        observations=dict(observations or {}),
+        error=error,
+        state_before=state_before,
+        state_after=state_after,
+        state_error=state_error,
+        timing={k: float(v) for k, v in (timing or {}).items()},
+    )
+
+
+def to_json(response: SkillResponse) -> str:
+    """The response as one compact JSON line; NaN and infinity raise ValueError."""
+    return json.dumps(asdict(response), ensure_ascii=False, separators=(",", ":"), allow_nan=False)
 
 
 def emit(skill, status, **kwargs) -> NoReturn:
-    """line = json.dumps(build_response(...), ensure_ascii=False, separators=(",", ":"), allow_nan=False)
-    Write line + "\\n" to the saved stdout fd, os.fsync it, then os._exit(0 if ok else 1).
+    """line = to_json(build_response(...)). Write line + "\\n" to the saved stdout fd, os.fsync it,
+    then os._exit(0 if ok else 1).
     os._exit is required: DDS/SDK threads can hang normal interpreter shutdown."""
     try:
-        line = json.dumps(
-            build_response(skill, status, **kwargs), ensure_ascii=False, separators=(",", ":"), allow_nan=False
-        )
+        line = to_json(build_response(skill, status, **kwargs))
     except Exception as e:  # a bug in the skill: still emit one valid line
         traceback.print_exc(file=sys.stderr)
         status = "error"
         code, message = error_from_exception(e)
-        line = json.dumps(
-            build_response(skill, status, error_code=code, error_message=message),
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
+        line = to_json(build_response(skill, status, error_code=code, error_message=message))
     for stream in (sys.stdout, sys.stderr):
         try:
             stream.flush()
@@ -228,7 +228,7 @@ def ms_since(t0: float) -> float:
     return round((time.monotonic() - t0) * 1000.0, 3)
 
 
-def sample_state_safe(errors: list[str], label: str) -> tuple[dict | None, float]:
+def sample_state_safe(errors: list[str], label: str) -> tuple[RobotState | None, float]:
     """Sample state; on failure append "<label>: <Type>: <msg>" to errors.
     BackendNotConfigured propagates. Returns (state or None, elapsed seconds)."""
     from skills import backend

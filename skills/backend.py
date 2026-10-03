@@ -81,5 +81,5 @@ def _forward(name: str):
 
 get_sport_client = _forward("get_sport_client")  # object with Move, StopMove, StandDown, Stretch -> int
 get_detector = _forward("get_detector")  # object with detect(target) -> DetectResult
-sample_state = _forward("sample_state")  # RobotState as a plain dict
+sample_state = _forward("sample_state")  # -> skills.schema.RobotState
 sleep = _forward("sleep")  # real: time.sleep(seconds); stub: scaled by time_scale

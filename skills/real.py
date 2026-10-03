@@ -19,6 +19,7 @@ from skills.backend import (
     StateUnavailable,
     WeightsMissing,
 )
+from skills.schema import RobotState
 
 IFACE_ENV = "GO2_IFACE"
 YOLO_WEIGHTS_ENV = "GO2_YOLO_WEIGHTS"
@@ -223,27 +224,27 @@ def derive_posture(body_height: float | None, mode: int | None) -> str:
     return "unknown"
 
 
-def _state_from_msg(msg) -> dict:
+def _state_from_msg(msg) -> RobotState:
     imu = getattr(msg, "imu_state", None)
     body_height = _float(getattr(msg, "body_height", None))
     mode = _int(getattr(msg, "mode", None))
-    return {
-        "t": time.time(),
-        "backend": "real",
-        "posture": derive_posture(body_height, mode),
-        "mode": mode,
-        "gait_type": _int(getattr(msg, "gait_type", None)),
-        "body_height": body_height,
-        "position": _floats(getattr(msg, "position", None), 3),
-        "velocity": _floats(getattr(msg, "velocity", None), 3),
-        "yaw_speed": _float(getattr(msg, "yaw_speed", None)),
-        "imu_rpy": _floats(getattr(imu, "rpy", None), 3),
-        "foot_force": _floats(getattr(msg, "foot_force", None), 4),
-        "error_code": _int(getattr(msg, "error_code", None)),
-    }
+    return RobotState(
+        t=time.time(),
+        backend="real",
+        posture=derive_posture(body_height, mode),
+        mode=mode,
+        gait_type=_int(getattr(msg, "gait_type", None)),
+        body_height=body_height,
+        position=_floats(getattr(msg, "position", None), 3),
+        velocity=_floats(getattr(msg, "velocity", None), 3),
+        yaw_speed=_float(getattr(msg, "yaw_speed", None)),
+        imu_rpy=_floats(getattr(imu, "rpy", None), 3),
+        foot_force=_floats(getattr(msg, "foot_force", None), 4),
+        error_code=_int(getattr(msg, "error_code", None)),
+    )
 
 
-def sample_state() -> dict:
+def sample_state() -> RobotState:
     """Wait up to STATE_WAIT_S for a message that arrived after this call; else use
     the latest earlier one; else raise StateUnavailable."""
     called = time.monotonic()

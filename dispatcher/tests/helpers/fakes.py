@@ -8,7 +8,7 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 from dispatcher.executor import ExecResult
-from dispatcher.models import RobotState, SkillResponse, StopMoveResult
+from dispatcher.models import RobotState, SkillError, SkillResponse, StopMoveResult
 
 FAKE_CLOCK_START = 1000.0
 
@@ -56,7 +56,7 @@ def exec_result(
             skill=skill,
             status=outcome,
             observations=observations or {},
-            error={"code": error_code, "message": error_message} if outcome == "error" else None,
+            error=SkillError(code=error_code, message=error_message) if outcome == "error" else None,
             state_after=state(posture) if posture else None,
         )
     elif outcome != "ok" and error_code is None:
