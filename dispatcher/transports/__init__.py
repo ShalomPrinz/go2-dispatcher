@@ -9,7 +9,7 @@ import sys
 from skills import stub
 
 from .. import process_lock, prompts
-from ..config import Config, load_config_and_env
+from ..config import API_KEY_ENV, Config, load_config_and_env
 from ..context import PromptSurface, render_step
 from ..dispatcher import Dispatcher
 from ..executor import Executor, SkillExecutor
@@ -29,7 +29,6 @@ __all__ = [
     "OUTCOME_MAX_CHARS",
 ]
 
-API_KEY_ENV = "ANTHROPIC_API_KEY"
 TEST_PLANNER_ENV = "GO2_TEST_PLANNER"  # "module:factory" (tests only)
 MISSING_API_KEY = f"Missing {API_KEY_ENV}."
 OUTCOME_MAX_CHARS = 4000  # Telegram's limit is 4096 (docs/running.md)

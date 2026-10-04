@@ -27,7 +27,7 @@ from telegram.ext import (
 from skills import stop_move
 
 from .. import prompts
-from ..config import Config
+from ..config import TOKEN_ENV, Config
 from ..dispatcher import Dispatcher
 from ..models import BusyError, StartupError
 from . import build_dispatcher, format_outcome, load_config_and_env, startup_error_text
@@ -50,7 +50,6 @@ __all__ = [
 ]
 
 SOURCE = "telegram"
-TOKEN_ENV = "TELEGRAM_BOT_TOKEN"
 STOP_WORD = "stop"  # matched after strip().lower() (docs/safety.md)
 SHUTDOWN_EXTRA_S = 5.0  # post_stop waits the stop_move POLICY timeout + this (docs/running.md)
 SHUTDOWN_SOURCE = "shutdown"  # request_stop source on SIGINT/SIGTERM (as shutdown())

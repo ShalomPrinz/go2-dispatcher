@@ -34,6 +34,9 @@ else:  # pragma: no cover - exercised only on 3.10
 
 DEFAULT_CONFIG_PATH = Path("config.toml")
 ENV_FILE_NAME = ".env"
+API_KEY_ENV = "ANTHROPIC_API_KEY"  # secrets read from .env (docs/configuration.md)
+TOKEN_ENV = "TELEGRAM_BOT_TOKEN"
+SECRET_ENV = frozenset({API_KEY_ENV, TOKEN_ENV})  # never passed to skill children (docs/safety.md)
 DETECTION_VALUE_RE = re.compile(r"^(left|center|right):(near|medium|far)$")
 
 

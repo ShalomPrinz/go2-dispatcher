@@ -21,11 +21,9 @@ from skills.env import child_env
 from skills.policy import SkillPolicy
 
 from . import prompts
-from .config import Config
+from .config import SECRET_ENV, Config
 from .models import RobotState, SkillResponse, StopCause, StopMoveResult
 from .registry import SkillDescriptor
-
-SECRET_ENV = frozenset({"ANTHROPIC_API_KEY", "TELEGRAM_BOT_TOKEN"})
 
 POLL_INTERVAL_S = 0.05  # wait-loop poll period (docs/safety.md)
 READER_JOIN_TIMEOUT_S = 2.0  # join timeout per reader thread (docs/safety.md)
