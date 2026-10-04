@@ -36,7 +36,7 @@ from .models import (
     TaskSummary,
 )
 from .registry import Registry
-from .runlog import NullLog, RunLog, RunLogFactory, SessionInfo
+from .runlog import NullLog, RunLog, RunLogFactory, SessionInfo, TaskLog
 
 __all__ = ["Dispatcher"]
 
@@ -62,7 +62,7 @@ class _Task:
     ts_start: str
     deadline: float
     budget: MotionBudget
-    log: RunLog = field(default_factory=NullLog)
+    log: TaskLog = field(default_factory=NullLog)
     steps: list[StepResult] = field(default_factory=list)
     dispatched_count: int = 0
     failures: int = 0
@@ -326,7 +326,7 @@ class Dispatcher:
             stop_move_failed=t.stop_move_failed,
             duration_ms=duration_ms,
             final_posture=self.posture,
-            log_path=str(t.log.path),
+            log_path=str(t.log.path) if t.log.path is not None else "",
         )
         try:
             t.log.task_end(
@@ -341,9 +341,9 @@ class Dispatcher:
                 f"go2-dispatcher: failed to write task_end for run {t.run_id}: {type(e).__name__}: {e}", file=sys.stderr
             )
         finally:
-            if not isinstance(t.log, NullLog):
+            if t.log.path is not None:  # the index row points at the task's log file
                 self.runlog_factory.append_index(
-                    t.log, result, ts_start=t.ts_start, source=t.source, usage_totals=t.usage_totals
+                    t.log.path, result, ts_start=t.ts_start, source=t.source, usage_totals=t.usage_totals
                 )
         self.previous = TaskSummary(
             task=t.task, outcome=outcome, message=text, last_step=dispatched[-1] if dispatched else None

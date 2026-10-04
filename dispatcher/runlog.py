@@ -16,9 +16,10 @@ from typing import TYPE_CHECKING, Any, TextIO
 
 from pydantic import BaseModel
 
+from .config import Config
+
 if TYPE_CHECKING:
     from .budget import MotionBudget
-    from .config import Config
     from .context import PromptSurface
     from .llm import LLMResult, PlanCheck
     from .models import Plan, Posture, StepDispatch, StepRef, StepResult, StopMoveResult, TaskOutcome, TaskSummary
@@ -65,7 +66,7 @@ class SessionInfo(BaseModel):
     """The ``task_start`` fields that are constant for the process, collected once at startup."""
 
     condition: str
-    config: dict[str, Any]
+    config: Config
     registry_hash: str
     system_text: str
     catalog_text: str
@@ -78,7 +79,7 @@ class SessionInfo(BaseModel):
     def collect(cls, cfg: Config, surface: PromptSurface) -> SessionInfo:
         return cls(
             condition=cfg.run.condition,
-            config=cfg.model_dump(mode="json"),
+            config=cfg,
             registry_hash=surface.registry_hash,
             system_text=surface.system[0],
             catalog_text=surface.catalog_text,
@@ -151,7 +152,7 @@ class RunLog:
             source=source,
             sender_id=sender_id,
             condition=s.condition,
-            config=s.config,
+            config=s.config.model_dump(mode="json"),
             registry_hash=s.registry_hash,
             system_text=s.system_text,
             catalog_text=s.catalog_text,
@@ -254,16 +255,50 @@ class RunLog:
         )
 
 
-class NullLog(RunLog):
-    """Stands in until the task's log file is open (or if opening it failed): every record is dropped."""
+class NullLog:
+    """Stands in for ``RunLog`` until the task's log file is open (or if opening it failed): every record is
+    dropped, and ``path`` is None, so no index row is written (dispatcher/docs/run-log.md)."""
 
-    def __init__(self) -> None:
-        self.path = ""  # TaskOutcome.log_path stays empty
-        self._lock = threading.Lock()
-        self._f = None
+    path: None = None
 
-    def task_start(self, *args: Any, **kwargs: Any) -> None:
-        pass  # the only record that reads the session info
+    def llm_request(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def llm_retry(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def llm_response(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def llm_error(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def llm_interrupted(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def plan(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def plan_invalid(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def step_start(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def step_result(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def stop_move(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def exception(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def task_end(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+
+TaskLog = RunLog | NullLog  # a task's log: the open file, or the stand-in before it opens
 
 
 def _dispatched(result: TaskOutcome) -> int:
@@ -290,22 +325,22 @@ class RunLogFactory:
             clock=clock,
         )
 
-    def append_index(self, log: RunLog, result: TaskOutcome, *, ts_start: str, source: str, usage_totals: dict) -> None:
-        """One ``index.jsonl`` row for a finished task (dispatcher/docs/run-log.md)."""
+    def append_index(self, path: Path, result: TaskOutcome, *, ts_start: str, source: str, usage_totals: dict) -> None:
+        """One ``index.jsonl`` row for a finished task whose log file is ``path`` (dispatcher/docs/run-log.md)."""
         cfg = self.session.config
         row = {
             "run_id": result.run_id,
-            "file": log.path.name,
+            "file": path.name,
             "ts_start": ts_start,
             "task": result.task,
             "source": source,
             "outcome": result.outcome,
             "condition": self.session.condition,
-            "backend": cfg["robot"]["backend"],
-            "model": cfg["llm"]["model"],
-            "thinking": cfg["llm"]["thinking"],
-            "planning_horizon": cfg["loop"]["planning_horizon"],
-            "max_llm_calls": cfg["loop"]["max_llm_calls"],
+            "backend": cfg.robot.backend,
+            "model": cfg.llm.model,
+            "thinking": cfg.llm.thinking,
+            "planning_horizon": cfg.loop.planning_horizon,
+            "max_llm_calls": cfg.loop.max_llm_calls,
             "registry_hash": self.session.registry_hash,
             "llm_calls": result.llm_calls,
             "failures": result.failures,

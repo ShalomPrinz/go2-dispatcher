@@ -13,7 +13,7 @@ from dispatcher.dispatcher import Dispatcher
 from dispatcher.executor import STDERR_TAIL_CHARS
 from dispatcher.models import BusyError, LLMInterrupted, LLMUnavailable, Plan, PlanStep, Posture
 from dispatcher.registry import Registry
-from dispatcher.runlog import RunLog
+from dispatcher.runlog import RunLog, RunLogFactory
 from dispatcher.tests.helpers import (
     FakeClock,
     FakeExecutor,
@@ -563,3 +563,15 @@ def test_shutdown_task_ends_within_wait(tmp_path, registry):
     assert out["o"].outcome == "STOPPED"
     assert executor.kills == ["operator"]
     assert executor.stop_moves == ["operator"]
+
+
+def test_log_open_fails_internal_error_without_index_row(tmp_path, registry, monkeypatch):
+    def open_fails(self, *args, **kwargs):
+        raise OSError("read-only file system")
+
+    monkeypatch.setattr(RunLogFactory, "open", open_fails)
+    r = Rig(tmp_path, registry, [done()])
+    o = r.run()
+    assert o.outcome == "INTERNAL_ERROR" and o.log_path == ""
+    assert not (r.cfg.log.dir / "index.jsonl").exists()
+    assert not r.d.is_busy()
