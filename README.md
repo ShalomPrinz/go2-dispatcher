@@ -3,7 +3,6 @@
 [![tests](https://github.com/ShalomPrinz/go2-dispatcher/actions/workflows/tests.yml/badge.svg)](https://github.com/ShalomPrinz/go2-dispatcher/actions/workflows/tests.yml)
 ![Python 3.10](https://img.shields.io/badge/python-3.10-blue)
 [![uv](https://img.shields.io/badge/managed%20with-uv-6340ac)](https://docs.astral.sh/uv/)
-[![Ruff](https://img.shields.io/badge/lint-ruff-d7ff64)](https://docs.astral.sh/ruff/)
 
 **Natural-language control for the Unitree Go2 EDU quadruped.** Tell the robot what to do in plain words; an LLM plans it, the dispatcher validates and runs it, and every task is logged as research data.
 
