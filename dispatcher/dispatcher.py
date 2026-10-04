@@ -456,14 +456,11 @@ class Dispatcher:
         desc = self.registry[ref.skill]  # precheck passed, so the skill exists
         params = ref.params
         t.dispatched_count += 1
-        fault = None
-        if self.cfg.robot.backend == "stub":
-            fault = next((f.kind for f in self.cfg.stub.faults if f.step == t.dispatched_count), None)
         dispatch = StepDispatch(
             index=t.dispatched_count,
             timeout_s=desc.policy.timeout_s(params),
             motion_cost=desc.policy.motion_cost(params),
-            fault=fault,
+            fault=self.cfg.stub.fault_at(t.dispatched_count),
         )
         t.budget.charge(dispatch.motion_cost)
 

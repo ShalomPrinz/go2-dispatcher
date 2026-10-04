@@ -124,6 +124,10 @@ class StubConfig(_Section):
             raise ValueError("fault steps must be unique")
         return v
 
+    def fault_at(self, index: int) -> FaultKind | None:
+        """Fault configured for the dispatched step ``index``, if any (empty under the real backend)."""
+        return next((f.kind for f in self.faults if f.step == index), None)
+
 
 class LogConfig(_Section):
     dir: Path = Path("runs")
