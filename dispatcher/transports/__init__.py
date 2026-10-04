@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import atexit
 import importlib
 import os
 import sys
@@ -15,12 +14,13 @@ from ..context import PromptSurface, render_step
 from ..dispatcher import Dispatcher
 from ..executor import Executor, SkillExecutor
 from ..llm import AnthropicPlanner, PlannerClient
-from ..models import Posture, RegistryError, TaskOutcome
+from ..models import ConfigError, Posture, RegistryError, StartupError, TaskOutcome
 from ..registry import Registry
 
 __all__ = [
     "load_config_and_env",
     "build_dispatcher",
+    "startup_error_text",
     "format_outcome",
     "make_planner",
     "initial_posture",
@@ -37,23 +37,28 @@ OUTCOME_MAX_CHARS = 4000  # Telegram's limit is 4096 (docs/running.md)
 OMITTED_LINES = "({n} earlier lines omitted)"
 
 
-def _exit2(message: str) -> None:
-    print(message, file=sys.stderr)
-    raise SystemExit(2)
+def startup_error_text(e: StartupError) -> str:
+    """Stderr line for a start-up error; the entry point prints it and exits 2 (docs/running.md)."""
+    if isinstance(e, ConfigError):
+        return f"Config error: {e}"
+    if isinstance(e, RegistryError):
+        return f"Registry error: {e}"
+    return str(e)
 
 
 def make_planner(cfg: Config, surface: PromptSurface) -> PlannerClient:
-    """Choose the planner for ``surface``: test planner or Anthropic (docs/running.md)."""
+    """Choose the planner for ``surface``: test planner or Anthropic (docs/running.md).
+    Raises ``StartupError`` for a malformed test planner spec or a missing API key."""
     spec = os.environ.get(TEST_PLANNER_ENV)
     if spec:
         module_name, sep, attr = spec.partition(":")
         if not sep or not module_name or not attr:
-            _exit2(f"{TEST_PLANNER_ENV} must be module:factory, got {spec!r}.")
+            raise StartupError(f"{TEST_PLANNER_ENV} must be module:factory, got {spec!r}.")
         factory = getattr(importlib.import_module(module_name), attr)
         return factory(surface)
     key = os.environ.get(API_KEY_ENV, "").strip()
     if not key:
-        _exit2(MISSING_API_KEY)
+        raise StartupError(MISSING_API_KEY)
     return AnthropicPlanner(key, cfg.llm, surface)
 
 
@@ -67,27 +72,23 @@ def initial_posture(executor: SkillExecutor) -> Posture:
 
 
 def build_dispatcher(cfg: Config, *, reset_stub: bool) -> Dispatcher:
-    """Lock, registry, stub reset, planner, executor, dispatcher (docs/running.md)."""
+    """Lock, registry, stub reset, planner, executor, dispatcher (docs/running.md).
+    Raises ``StartupError``; process-lifetime hooks are the caller's."""
     process_lock.acquire(cfg.log.dir)
-    try:
-        registry = Registry.load(cfg.skills.dir)
-    except RegistryError as e:
-        _exit2(f"Registry error: {e}")
+    registry = Registry.load(cfg.skills.dir)
     if reset_stub and cfg.robot.backend == "stub":
         stub.reset(cfg.stub.initial_posture, cfg.stub.state_file)
     surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
     planner = make_planner(cfg, surface)
     executor = Executor(cfg, cfg.base_dir)
     posture = initial_posture(executor)
-    dispatcher = Dispatcher(
+    return Dispatcher(
         cfg,
         registry,
         planner,
         executor,
         initial_posture=posture,
     )
-    atexit.register(dispatcher.shutdown, 0)
-    return dispatcher
 
 
 def format_outcome(outcome: TaskOutcome, registry: Registry) -> str:

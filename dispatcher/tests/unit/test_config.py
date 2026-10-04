@@ -45,13 +45,6 @@ def test_explicit_missing_config_is_error(tmp_path):
         load_config(tmp_path / "nope.toml")
 
 
-def test_explicit_missing_config_exits_2(tmp_path, capsys):
-    with pytest.raises(SystemExit) as exc:
-        load_config_and_env(tmp_path / "nope.toml")
-    assert exc.value.code == 2
-    assert capsys.readouterr().err.startswith("Config error: ")
-
-
 def test_unknown_key_named(tmp_path):
     p = write(tmp_path / "c.toml", "[loop]\nplanning_horizon = 3\nbogus_key = 1\n")
     with pytest.raises(ConfigError, match="loop.bogus_key: unknown key"):

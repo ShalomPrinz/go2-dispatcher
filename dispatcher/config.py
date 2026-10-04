@@ -7,7 +7,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Annotated, Any, Literal, NoReturn
+from typing import Annotated, Any, Literal
 
 from pydantic import (
     BaseModel,
@@ -288,17 +288,8 @@ def load_env_file(base_dir: Path) -> dict[str, str]:
     return applied
 
 
-def config_error_exit(message: str) -> NoReturn:
-    print(f"Config error: {message}", file=sys.stderr)
-    raise SystemExit(2)
-
-
 def load_config_and_env(config_path: Path | str | None, overrides: dict[str, Any] | None = None) -> Config:
-    """Load config and the base-dir ``.env``. Config errors print
-    ``Config error: <message>`` to stderr and exit with code 2 (docs/configuration.md)."""
-    try:
-        cfg = load_config(config_path, overrides)
-    except ConfigError as e:
-        config_error_exit(str(e))
+    """Load config and the base-dir ``.env``; raises ``ConfigError`` (docs/configuration.md)."""
+    cfg = load_config(config_path, overrides)
     load_env_file(cfg.base_dir)
     return cfg

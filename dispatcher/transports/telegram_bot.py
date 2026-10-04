@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import atexit
 import functools
 import os
 import signal
@@ -28,8 +29,8 @@ from skills import stop_move
 from .. import prompts
 from ..config import Config
 from ..dispatcher import Dispatcher
-from ..models import BusyError
-from . import build_dispatcher, format_outcome, load_config_and_env
+from ..models import BusyError, StartupError
+from . import build_dispatcher, format_outcome, load_config_and_env, startup_error_text
 
 __all__ = [
     "build_application",
@@ -183,7 +184,15 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    cfg = load_config_and_env(args.config, {})
+    try:
+        return _serve(args.config)
+    except StartupError as e:
+        print(startup_error_text(e), file=sys.stderr)
+        return 2
+
+
+def _serve(config_path: Path | None) -> int:
+    cfg = load_config_and_env(config_path, {})
     token = os.environ.get(TOKEN_ENV, "").strip()
     if not token:
         print(MISSING_TOKEN, file=sys.stderr)
@@ -191,6 +200,7 @@ def main(argv: list[str] | None = None) -> int:
     if not cfg.telegram.allowed_user_ids:
         print(NO_ALLOWED_USERS_WARNING, file=sys.stderr)
     dispatcher = build_dispatcher(cfg, reset_stub=True)
+    atexit.register(dispatcher.shutdown, 0)
     build_application(dispatcher, cfg, token).run_polling()
     return 0
 

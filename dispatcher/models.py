@@ -18,11 +18,15 @@ from skills.schema import SkillResponse as SkillResponse
 # --- Exceptions (docs/architecture.md) -------------------------------------------------------
 
 
-class ConfigError(Exception):
+class StartupError(Exception):
+    """The dispatcher cannot start; the entry point prints it and exits 2 (docs/running.md)."""
+
+
+class ConfigError(StartupError):
     """Invalid configuration (unknown key, invalid value, missing explicit file)."""
 
 
-class RegistryError(Exception):
+class RegistryError(StartupError):
     """Invalid skill set; the message names the offending file."""
 
 

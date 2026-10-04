@@ -6,7 +6,7 @@ from __future__ import annotations
 import pytest
 
 from dispatcher.context import PromptSurface
-from dispatcher.models import RobotState
+from dispatcher.models import RobotState, StartupError
 from dispatcher.registry import Registry
 from dispatcher.tests.helpers import FakeExecutor, make_config
 from dispatcher.tests.helpers.fakes import state
@@ -14,6 +14,7 @@ from dispatcher.transports import (
     API_KEY_ENV,
     MISSING_API_KEY,
     TEST_PLANNER_ENV,
+    cli,
     initial_posture,
     make_planner,
 )
@@ -32,18 +33,24 @@ def no_planner_env(monkeypatch):
     return monkeypatch
 
 
-def test_missing_api_key_exits_2(tmp_path, surface, no_planner_env, capsys):
-    with pytest.raises(SystemExit) as ei:
+def test_missing_api_key_raises(tmp_path, surface, no_planner_env):
+    with pytest.raises(StartupError) as ei:
         make_planner(make_config(tmp_path), surface)
-    assert ei.value.code == 2
-    assert capsys.readouterr().err.strip() == MISSING_API_KEY
+    assert str(ei.value) == MISSING_API_KEY
 
 
-def test_malformed_test_planner_exits_2(tmp_path, surface, no_planner_env):
+def test_malformed_test_planner_raises(tmp_path, surface, no_planner_env):
     no_planner_env.setenv(TEST_PLANNER_ENV, "planner_factory")
-    with pytest.raises(SystemExit) as ei:
+    with pytest.raises(StartupError, match=TEST_PLANNER_ENV):
         make_planner(make_config(tmp_path), surface)
-    assert ei.value.code == 2
+
+
+@pytest.mark.parametrize("argv", [["--config", "{cfg}", "catalog"], ["bot", "--config", "{cfg}"]])
+def test_entry_point_prints_startup_error_and_returns_2(tmp_path, capsys, argv):
+    # "bot" goes through cli.main to telegram_bot.main, which has its own handler
+    missing = tmp_path / "nope.toml"
+    assert cli.main([a.format(cfg=missing) for a in argv]) == 2
+    assert capsys.readouterr().err.strip() == f"Config error: config file not found: {missing}"
 
 
 def test_failed_state_read_is_unknown_with_warning(capsys):

@@ -15,13 +15,12 @@ from typing import Any
 from skills import stub
 
 from .. import process_lock, prompts
-from ..config import config_error_exit
 from ..context import PromptSurface
 from ..dispatcher import Dispatcher
 from ..executor import Executor
-from ..models import RegistryError, TaskOutcome
+from ..models import ConfigError, StartupError, TaskOutcome
 from ..registry import Registry
-from . import build_dispatcher, format_outcome, load_config_and_env
+from . import build_dispatcher, format_outcome, load_config_and_env, startup_error_text
 
 SOURCE = "cli"
 JOIN_POLL_S = 0.2  # main thread join period, so signals are handled (docs/running.md)
@@ -73,7 +72,7 @@ def _parse_fault(text: str) -> dict[str, Any]:
             raise ValueError
         return {"step": int(step), "kind": kind}
     except ValueError:
-        config_error_exit(f"--fault must be STEP:KIND, got {text!r}")
+        raise ConfigError(f"--fault must be STEP:KIND, got {text!r}") from None
 
 
 def _overrides(args: argparse.Namespace) -> dict[str, Any]:
@@ -91,11 +90,7 @@ def _overrides(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def cmd_catalog(cfg) -> int:
-    try:
-        registry = Registry.load(cfg.skills.dir)
-    except RegistryError as e:
-        print(f"Registry error: {e}", file=sys.stderr)
-        return EXIT_USAGE
+    registry = Registry.load(cfg.skills.dir)
     surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
     print(surface.system[0])
     print()
@@ -138,6 +133,7 @@ class _Runner:
         self.stop_requested = False
 
     def install(self) -> None:
+        atexit.register(self.d.shutdown, 0)
         signal.signal(signal.SIGINT, self._on_sigint)
         signal.signal(signal.SIGTERM, self._on_sigterm)
 
@@ -233,6 +229,14 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--reset-stub takes no command")
     if not args.reset_stub and args.command is None:
         parser.error("a command is required (run, batch, catalog, state) or --reset-stub")
+    try:
+        return _run_command(args)
+    except StartupError as e:
+        print(startup_error_text(e), file=sys.stderr)
+        return EXIT_USAGE
+
+
+def _run_command(args: argparse.Namespace) -> int:
     cfg = load_config_and_env(args.config, _overrides(args))
     if args.reset_stub:
         return cmd_reset_stub(cfg)
