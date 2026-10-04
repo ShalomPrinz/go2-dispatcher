@@ -118,7 +118,6 @@ _KILLS: dict[StopCause, StepKill] = {
     StopCause.SHUTDOWN: StepKill("interrupted", "shutdown", "dispatcher shutting down"),
 }
 KILLED_OUTCOMES = frozenset(k.outcome for k in _KILLS.values())  # posture unknown after these
-StopReason = StopCause  # old name, still imported by dispatcher/tests/helpers/fakes.py
 
 
 class StopMoveResult(_Model):

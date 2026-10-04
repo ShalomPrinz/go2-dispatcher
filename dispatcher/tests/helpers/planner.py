@@ -6,22 +6,17 @@ import threading
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from dispatcher.llm import TOOL_NAME, LLMResult, validate_tool_input
+from dispatcher.llm import TOOL_NAME, LLMResult
 from dispatcher.models import Plan
 
 SCRIPTED_USAGE = {"input_tokens": 100, "output_tokens": 20}
 
 
-def _horizon_of(tool_schema: dict) -> int:
-    return tool_schema["input_schema"]["properties"]["steps"]["maxItems"]
-
-
 class ScriptedPlanner:
     """Returns ``items`` in order, one per ``plan()`` call:
 
-    - a ``Plan`` -> a valid ``LLMResult`` (not re-validated);
-    - a ``dict`` -> raw tool input, validated with ``validate_tool_input`` against the
-      horizon in the ``tool_schema`` kwarg (``maxItems``);
+    - a ``Plan`` -> its dump as raw tool input (the loop re-validates it);
+    - a ``dict`` -> raw tool input (the loop validates it);
     - an exception instance -> raised.
 
     ``calls`` records every call's kwargs. ``on_call(call_index)`` runs before returning
@@ -67,20 +62,13 @@ class ScriptedPlanner:
         if isinstance(item, BaseException):
             raise item
         if isinstance(item, Plan):
-            plan: Plan | None = item
             tool_input: Any = item.model_dump(exclude_none=True)
-            errors: list[str] = []
-            kind = "none"
         elif isinstance(item, dict):
             tool_input = item
-            plan, errors, kind = validate_tool_input(item, _horizon_of(tool_schema))
         else:
             raise TypeError(f"unsupported scripted item: {item!r}")
         return LLMResult(
-            plan=plan,
             tool_input=tool_input,
-            errors=errors,
-            rejection_kind=kind,
             usage=dict(SCRIPTED_USAGE),
             stop_reason="tool_use",
             content=[{"type": "tool_use", "id": f"toolu_scripted_{n + 1}", "name": TOOL_NAME, "input": tool_input}],

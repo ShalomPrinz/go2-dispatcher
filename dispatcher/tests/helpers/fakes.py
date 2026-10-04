@@ -7,8 +7,8 @@ import time
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from dispatcher.executor import ExecOutcome, ExecResult, InterruptCause
-from dispatcher.models import Posture, RobotState, SkillError, SkillResponse, StopMoveResult, StopReason
+from dispatcher.executor import ExecOutcome, ExecResult
+from dispatcher.models import Posture, RobotState, SkillError, SkillResponse, StopCause, StopMoveResult
 from dispatcher.registry import SkillDescriptor
 
 FAKE_CLOCK_START = 1000.0
@@ -42,7 +42,7 @@ def exec_result(
     posture: Posture | None = None,
     error_code: str | None = None,
     error_message: str | None = None,
-    interrupt_cause: InterruptCause | None = None,
+    interrupt_cause: StopCause | None = None,
     stop_move: StopMoveResult | None = None,
 ) -> ExecResult:
     """An ``ExecResult``. ``ok``/``error`` carry a response (with ``state_after`` if
@@ -78,7 +78,7 @@ def exec_result(
 
 
 def stop_move_result(
-    reason: StopReason = "operator", *, ok: bool = True, posture: Posture | None = None
+    reason: StopCause = StopCause.OPERATOR, *, ok: bool = True, posture: Posture | None = None
 ) -> StopMoveResult:
     response = None
     if posture is not None:
@@ -109,15 +109,15 @@ class FakeExecutor:
         *,
         stop_move_ok: bool = True,
         stop_move_posture: Posture | None = None,
-        on_kill: Callable[[InterruptCause], None] | None = None,
+        on_kill: Callable[[StopCause], None] | None = None,
     ):
         self.results = list(results)
         self.stop_move_ok = stop_move_ok
         self.stop_move_posture: Posture | None = stop_move_posture
         self.on_kill = on_kill
         self.runs: list[dict[str, Any]] = []
-        self.kills: list[InterruptCause] = []
-        self.stop_moves: list[StopReason] = []
+        self.kills: list[StopCause] = []
+        self.stop_moves: list[StopCause] = []
 
     def run(
         self,
@@ -148,13 +148,13 @@ class FakeExecutor:
             return item
         return item(call)
 
-    def kill_current(self, cause: InterruptCause) -> bool:
+    def kill_current(self, cause: StopCause) -> bool:
         self.kills.append(cause)
         if self.on_kill is not None:
             self.on_kill(cause)
         return False
 
-    def stop_move(self, reason: StopReason) -> StopMoveResult:
+    def stop_move(self, reason: StopCause) -> StopMoveResult:
         self.stop_moves.append(reason)
         return stop_move_result(reason, ok=self.stop_move_ok, posture=self.stop_move_posture)
 

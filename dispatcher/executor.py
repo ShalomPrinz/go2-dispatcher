@@ -32,7 +32,6 @@ STDERR_TAIL_CHARS = 2000  # stderr kept for the log (skills/docs/skills.md)
 
 _RESPONSE_ADAPTER = TypeAdapter(SkillResponse)  # built once; validates the stdlib dataclass
 
-InterruptCause = StopCause  # old name, still imported by dispatcher/tests/helpers/fakes.py
 
 ExecOutcome = Literal["ok", "error", "timeout", "malformed", "interrupted"]
 
