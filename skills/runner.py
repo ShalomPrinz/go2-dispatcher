@@ -16,8 +16,6 @@ from skills import backend, process
 from skills.policy import SkillPolicy
 from skills.schema import SCHEMA_VERSION, ErrorCode, RobotState, SkillError, SkillResponse, Status
 
-ERROR_MESSAGE_MAX_CHARS = 300
-
 
 @dataclass(frozen=True)
 class SkillOutcome:
@@ -97,15 +95,15 @@ Body = Callable[[dict], SkillOutcome]
 # --- response -----------------------------------------------------------------
 
 
-def one_line(text: str, limit: int = ERROR_MESSAGE_MAX_CHARS) -> str:
-    """Collapse all whitespace (including newlines) to single spaces; cut to ``limit``."""
-    return " ".join(str(text).split())[:limit]
+def one_line(text: str) -> str:
+    """Collapse all whitespace (including newlines) to single spaces; the dispatcher owns the length limit."""
+    return " ".join(str(text).split())
 
 
 def build_response(skill: str, outcome: SkillOutcome, states: StateSampler, total_ms: float) -> SkillResponse:
     """The SkillResponse (schema_version=1), built from the three sources of its fields; only the
     error-iff-status rule is checked here, the dispatcher validates the rest (skills/docs/skills.md).
-    error_message: newlines replaced by spaces, collapsed, cut to 300 chars."""
+    error_message: collapsed to one line, not length-limited."""
     error = None
     if outcome.status == "error":
         if outcome.error_code is None or outcome.error_message is None:
