@@ -316,7 +316,6 @@ class Dispatcher:
         )
         text = prompts.operator_message(outcome, facts, stop_move_failed=t.stop_move_failed)
         duration_ms = (self.clock() - t.t_start) * 1000.0
-        dispatched = [s for s in t.steps if s.dispatch is not None]
         result = TaskOutcome(
             run_id=t.run_id,
             task=t.task,
@@ -347,6 +346,7 @@ class Dispatcher:
                 self.runlog_factory.append_index(
                     t.log.path, result, ts_start=t.ts_start, source=t.source, usage_totals=t.usage_totals
                 )
+        dispatched = result.dispatched_steps
         self.previous = TaskSummary(
             task=t.task, outcome=outcome, message=text, last_step=dispatched[-1] if dispatched else None
         )

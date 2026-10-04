@@ -246,7 +246,7 @@ class RunLog:
             llm_calls=result.llm_calls,
             failures=result.failures,
             steps_recorded=len(result.steps),
-            steps_dispatched=_dispatched(result),
+            steps_dispatched=len(result.dispatched_steps),
             rejections=rejections,
             horizon_rejections=horizon_rejections,
             usage_totals=usage_totals,
@@ -303,10 +303,6 @@ class NullLog:
 TaskLog = RunLog | NullLog  # a task's log: the open file, or the stand-in before it opens
 
 
-def _dispatched(result: TaskOutcome) -> int:
-    return sum(1 for s in result.steps if s.dispatch is not None)
-
-
 class RunLogFactory:
     def __init__(self, log_dir: Path, session_id: str, session: SessionInfo):
         self.log_dir = Path(log_dir)
@@ -346,7 +342,7 @@ class RunLogFactory:
             "registry_hash": self.session.registry_hash,
             "llm_calls": result.llm_calls,
             "failures": result.failures,
-            "steps_dispatched": _dispatched(result),
+            "steps_dispatched": len(result.dispatched_steps),
             "input_tokens": usage_totals.get("input_tokens", 0),
             "output_tokens": usage_totals.get("output_tokens", 0),
             "duration_ms": result.duration_ms,

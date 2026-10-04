@@ -195,6 +195,11 @@ class TaskOutcome(_Model):
     final_posture: Posture
     log_path: str
 
+    @property
+    def dispatched_steps(self) -> list[StepResult]:
+        """Steps that reached the executor, in order."""
+        return [s for s in self.steps if s.dispatch is not None]
+
 
 class TaskSummary(_Model):
     task: str
