@@ -8,33 +8,9 @@ from pathlib import Path
 
 import hooklib
 
-# The ownership map (.claude/hooks/README.md); read from the hook's own checkout, so a worktree uses its copy.
-OWNERSHIP = Path(__file__).resolve().parent.parent / "ownership.json"
-
-
-def load_map() -> tuple[dict[str, tuple[str, ...]], tuple[str, ...]] | None:
-    """Per-agent write prefixes and the package prefixes, or None when the map is missing or malformed."""
-    try:
-        data = json.loads(OWNERSHIP.read_text())
-        agents, packages = data["agents"], data["packages"]
-    except (OSError, ValueError, KeyError, TypeError):
-        return None
-    lists = [*agents.values(), packages] if isinstance(agents, dict) else [None]
-    if not all(isinstance(ps, list) and all(isinstance(p, str) for p in ps) for ps in lists):
-        return None
-    return {a: tuple(ps) for a, ps in agents.items()}, tuple(packages)
-
-
-def covers(prefixes: tuple[str, ...], rel: str) -> bool:
-    return any(
-        rel == p or (p.endswith("/") and rel.startswith(p)) or (p.startswith("**/") and f"/{rel}".endswith(p[2:]))
-        for p in prefixes
-    )
-
-
-def owners(scopes: dict[str, tuple[str, ...]], rel: str) -> str:
-    """The agents whose scope covers `rel`, or the main session if none does."""
-    return ", ".join(a for a, prefixes in scopes.items() if covers(prefixes, rel)) or "the main session"
+# The shared map loader sits next to the map (.claude/ownership.py), so a worktree uses its own copy.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from ownership import covers, load_map, owners  # noqa: E402
 
 
 def main() -> None:

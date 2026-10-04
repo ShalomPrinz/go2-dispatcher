@@ -14,10 +14,10 @@ import pytest
 HOOKS = Path(__file__).resolve().parent.parent
 ROOT = HOOKS.parent.parent
 SESSION = "s1"
-sys.path.insert(0, str(HOOKS))
-import scope  # noqa: E402  (pure `covers` and `load_map` only; the hooks themselves run as subprocesses)
+sys.path.insert(0, str(HOOKS.parent))
+import ownership  # noqa: E402  (the map loader `scope.py` uses; the hooks themselves run as subprocesses)
 
-OWNERSHIP = scope.load_map()
+OWNERSHIP = ownership.load_map()
 MAIN_ONLY = tuple(json.loads((HOOKS.parent / "ownership.json").read_text())["main"])
 
 
@@ -164,5 +164,5 @@ def test_every_indexed_doc_has_one_kind_of_writer() -> None:
     }
     assert docs
     for doc in sorted(docs | set(MAIN_ONLY)):
-        writers = [a for a, ps in scopes.items() if scope.covers(ps, doc)]
+        writers = [a for a, ps in scopes.items() if ownership.covers(ps, doc)]
         assert bool(writers) != (doc in MAIN_ONLY), (doc, writers)

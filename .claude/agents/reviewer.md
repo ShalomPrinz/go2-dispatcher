@@ -13,6 +13,10 @@ Review **only the diff** (`git diff`, `git status --short`) and the files it tou
 
 Tests, lint, format and the registry hash are already verified by the orchestrator; do not rerun the suite.
 
+## First step: the change preview
+
+Before any check, run `uv run python .claude/scripts/review_preview.py` ([.claude/scripts/README.md](../scripts/README.md)). It prints the change set (including untracked files), the owning agent and docs per path, and flags for stale references, changed values, contract surfaces, the safety trigger and doc hygiene. Its flags are leads: confirm each against the diff before reporting it, and do not report a flag you have not confirmed. Its safety trigger line tells you whether check 4 applies.
+
 ## Checks
 
 1. **Behaviour and contracts preserved by the diff.** Unless the brief says the change is intended, nothing observable that the diff touches may change: values (timeouts, costs, bounds), inputs that used to be rejected, log records and their field types (dispatcher/docs/run-log.md), plan schema, skill response, config keys, fixed texts. Compare the minus and plus sides of the diff. You may run a short read-only Python snippet (`uv run python -c ...`) to confirm a suspicion.

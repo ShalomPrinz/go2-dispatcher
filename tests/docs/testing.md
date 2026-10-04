@@ -63,6 +63,7 @@ The default run must pass on any machine after `uv sync` (core + dev dependencie
 | `tests/pytest_plugin.py` | the `--run-live`, `--run-robot` and `--update-golden` options, marker gating, the `update_golden` fixture and the network guard |
 | `tests/test_network_guard.py` | the network guard refuses an outbound connection |
 | `.claude/hooks/tests/` | the Claude Code hooks, run as subprocesses ([hooks README](../../.claude/hooks/README.md)); in `testpaths`, so the default suite runs them |
+| `.claude/scripts/tests/` | the Claude Code helper scripts ([scripts README](../../.claude/scripts/README.md)); in `testpaths`, so the default suite runs them |
 
 A service folder holds unit tests of that service only: `skills/tests/` never imports `dispatcher`, while `dispatcher/tests/` may import `skills` (the dispatcher depends on skills). A test that needs both services, or that runs the services as real subprocesses, lives in the root `tests/` (see design decisions below).
 
