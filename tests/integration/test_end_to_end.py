@@ -34,14 +34,13 @@ def registry():
 def build(tmp_path, registry, items, **cfg_over):
     cfg = make_config(tmp_path, **cfg_over)
     stub.reset(cfg.stub.initial_posture, cfg.stub.state_file)
-    planner = ScriptedPlanner(items)
     surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
+    planner = ScriptedPlanner(items, surface)
     d = Dispatcher(
         cfg,
         registry,
         planner,
         Executor(cfg, cfg.base_dir),
-        surface,
         RunLogFactory(cfg.log.dir, "e2e", SessionInfo.collect(cfg, surface)),
         initial_posture=cfg.stub.initial_posture,
     )

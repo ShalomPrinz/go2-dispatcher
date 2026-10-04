@@ -15,7 +15,7 @@ from . import prompts
 from .bounds import cut_message, precheck
 from .budget import MotionBudget
 from .config import Config
-from .context import ContextInput, Feedback, PromptSurface, build_user_message, schema_retry_message
+from .context import ContextInput, Feedback, build_user_message, schema_retry_message
 from .executor import STDERR_TAIL_CHARS, SkillExecutor
 from .llm import LLMResult, PlanCheck, PlannerClient, check_reply
 from .models import (
@@ -25,7 +25,6 @@ from .models import (
     LLMInterrupted,
     LLMUnavailable,
     Plan,
-    PlanStep,
     Posture,
     StepDispatch,
     StepRef,
@@ -83,7 +82,6 @@ class Dispatcher:
         registry: Registry,
         planner: PlannerClient,
         executor: SkillExecutor,
-        surface: PromptSurface,
         runlog_factory: RunLogFactory,
         *,
         clock: Callable[[], float] = time.monotonic,
@@ -104,7 +102,8 @@ class Dispatcher:
         self._stop_event = threading.Event()
         self._log: RunLog | None = None
 
-        # what the run log records must be what is sent (dispatcher/docs/run-log.md)
+        # what the run log records must be what the planner sends (dispatcher/docs/run-log.md)
+        surface = planner.surface
         session = runlog_factory.session
         logged = (session.system_text, session.catalog_text, session.tool_schema, session.registry_hash, session.skills)
         sent = (
@@ -116,8 +115,6 @@ class Dispatcher:
         )
         if logged != sent:
             raise ValueError("run-log session does not match the prompt surface")
-        self._system = surface.system
-        self._tool_schema = surface.tool_schema
         self.registry_hash = surface.registry_hash
 
     # --- public interface (dispatcher/docs/loop-and-context.md) ------------------------------------------------------
@@ -254,9 +251,7 @@ class Dispatcher:
         t.log.llm_request(call_index, return_reason, retry_of, user)
         try:
             res = self.planner.plan(
-                system=list(self._system),
                 user=user,
-                tool_schema=self._tool_schema,
                 call_index=call_index,
                 remaining_s=lambda: self._remaining_s(t),
                 stop_event=self._stop_event,
@@ -299,7 +294,8 @@ class Dispatcher:
 
     def _stop(self, t: _Task, cause: StopCause) -> TaskOutcome:
         """End the task for an interrupt seen by the loop and send StopMove."""
-        return self._end(t, cause.task_outcome, stop_move=cause)
+        self._set_phase("ending")
+        return self._end(t, cause.task_outcome, stop_move=self.executor.stop_move(cause))
 
     def _apply_stop_move(self, t: _Task, smr: StopMoveResult) -> None:
         t.log.stop_move(smr)
@@ -316,14 +312,11 @@ class Dispatcher:
         message: str | None = None,
         detail: str = "",
         exception_type: str = "Exception",
-        stop_move: StopCause | None = None,
-        stop_move_result: StopMoveResult | None = None,
+        stop_move: StopMoveResult | None = None,
     ) -> TaskOutcome:
         self._set_phase("ending")
         if stop_move is not None:
-            self._apply_stop_move(t, self.executor.stop_move(stop_move))
-        if stop_move_result is not None:
-            self._apply_stop_move(t, stop_move_result)
+            self._apply_stop_move(t, stop_move)
 
         loop = self.cfg.loop
         facts = prompts.OutcomeFacts(
@@ -398,7 +391,7 @@ class Dispatcher:
                 )
         finally:
             # also runs if a BaseException (e.g. KeyboardInterrupt) arrives above; it then propagates
-            outcome = self._end(t, "INTERNAL_ERROR", stop_move_result=smr, exception_type=type(e).__name__)
+            outcome = self._end(t, "INTERNAL_ERROR", stop_move=smr, exception_type=type(e).__name__)
         return outcome
 
     # --- the loop (dispatcher/docs/loop-and-context.md) --------------------------------------------------------------
@@ -454,7 +447,8 @@ class Dispatcher:
         for i, step in enumerate(plan.steps[:stop_at], start=1):
             if (o := self._check_interrupts(t)) is not None:
                 return o
-            sr = self._run_step(t, i, step, pre.filled[i - 1])
+            ref = StepRef(call_index=t.llm_calls, plan_step=i, skill=step.skill, params=pre.filled[i - 1])
+            sr = self._run_step(t, ref)
             if isinstance(sr, TaskOutcome):
                 return sr
             if sr.outcome in FAILURE_OUTCOMES:
@@ -463,9 +457,10 @@ class Dispatcher:
             return Feedback.checkpoint(plan.steps, stop_at)
         return Feedback.plan_complete()
 
-    def _run_step(self, t: _Task, i: int, step: PlanStep, params: dict) -> StepResult | TaskOutcome:
-        """Dispatch plan step ``i``. Returns its recorded result, or the task outcome if the step was interrupted."""
-        desc = self.registry[step.skill]  # precheck passed, so the skill exists
+    def _run_step(self, t: _Task, ref: StepRef) -> StepResult | TaskOutcome:
+        """Dispatch the step ``ref`` names. Returns its recorded result, or the task outcome if it was interrupted."""
+        desc = self.registry[ref.skill]  # precheck passed, so the skill exists
+        params = ref.params
         t.dispatched_count += 1
         fault = None
         if self.cfg.robot.backend == "stub":
@@ -476,7 +471,6 @@ class Dispatcher:
             motion_cost=desc.policy.motion_cost(params),
             fault=fault,
         )
-        ref = StepRef(call_index=t.llm_calls, plan_step=i, skill=step.skill, params=params)
         t.budget.charge(dispatch.motion_cost)
 
         self._set_phase("step")

@@ -44,19 +44,19 @@ def _exit2(message: str) -> None:
     raise SystemExit(2)
 
 
-def make_planner(cfg: Config) -> PlannerClient:
-    """Choose the planner: test planner or Anthropic (docs/running.md)."""
+def make_planner(cfg: Config, surface: PromptSurface) -> PlannerClient:
+    """Choose the planner for ``surface``: test planner or Anthropic (docs/running.md)."""
     spec = os.environ.get(TEST_PLANNER_ENV)
     if spec:
         module_name, sep, attr = spec.partition(":")
         if not sep or not module_name or not attr:
             _exit2(f"{TEST_PLANNER_ENV} must be module:factory, got {spec!r}.")
         factory = getattr(importlib.import_module(module_name), attr)
-        return factory()
+        return factory(surface)
     key = os.environ.get(API_KEY_ENV, "").strip()
     if not key:
         _exit2(MISSING_API_KEY)
-    return AnthropicPlanner(key, cfg.llm)
+    return AnthropicPlanner(key, cfg.llm, surface)
 
 
 def initial_posture(executor: SkillExecutor) -> Posture:
@@ -68,7 +68,7 @@ def initial_posture(executor: SkillExecutor) -> Posture:
     return state.posture
 
 
-def build_dispatcher(cfg: Config, *, reset_stub: bool, planner: PlannerClient | None = None) -> Dispatcher:
+def build_dispatcher(cfg: Config, *, reset_stub: bool) -> Dispatcher:
     """Lock, registry, stub reset, planner, executor, run log factory (docs/running.md)."""
     process_lock.acquire(cfg.log.dir)
     try:
@@ -77,17 +77,15 @@ def build_dispatcher(cfg: Config, *, reset_stub: bool, planner: PlannerClient | 
         _exit2(f"Registry error: {e}")
     if reset_stub and cfg.robot.backend == "stub":
         stub.reset(cfg.stub.initial_posture, cfg.stub.state_file)
-    if planner is None:
-        planner = make_planner(cfg)
+    surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
+    planner = make_planner(cfg, surface)
     executor = Executor(cfg, cfg.base_dir)
     posture = initial_posture(executor)
-    surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
     dispatcher = Dispatcher(
         cfg,
         registry,
         planner,
         executor,
-        surface,
         RunLogFactory(cfg.log.dir, uuid.uuid4().hex, SessionInfo.collect(cfg, surface)),
         initial_posture=posture,
     )

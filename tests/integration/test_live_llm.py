@@ -33,9 +33,8 @@ def test_live_turn_and_find_chair(tmp_path):
     d = Dispatcher(
         cfg,
         registry,
-        AnthropicPlanner(key, cfg.llm),
+        AnthropicPlanner(key, cfg.llm, surface),
         Executor(cfg, cfg.base_dir),
-        surface,
         RunLogFactory(cfg.log.dir, "live", SessionInfo.collect(cfg, surface)),
         initial_posture=cfg.stub.initial_posture,
     )

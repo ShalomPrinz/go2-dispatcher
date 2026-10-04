@@ -66,16 +66,15 @@ class Rig:
         **cfg,
     ):
         self.cfg = make_config(tmp_path, **cfg)
-        self.planner = ScriptedPlanner(items, on_call=on_call)
+        surface = PromptSurface.build(registry, self.cfg.loop.planning_horizon)
+        self.planner = ScriptedPlanner(items, surface, on_call=on_call)
         self.executor = executor or FakeExecutor(results)
         self.clock = FakeClock()
-        surface = PromptSurface.build(registry, self.cfg.loop.planning_horizon)
         self.d = Dispatcher(
             self.cfg,
             registry,
             self.planner,
             self.executor,
-            surface,
             RunLogFactory(self.cfg.log.dir, "s1", SessionInfo.collect(self.cfg, surface)),
             clock=self.clock.now,
             initial_posture=posture,
@@ -104,7 +103,7 @@ def test_session_must_match_prompt_surface(tmp_path, registry):
     session = SessionInfo.collect(cfg, surface).model_copy(update={"catalog_text": "other"})
     with pytest.raises(ValueError, match="prompt surface"):
         Dispatcher(
-            cfg, registry, ScriptedPlanner([]), FakeExecutor(), surface, RunLogFactory(cfg.log.dir, "s1", session)
+            cfg, registry, ScriptedPlanner([], surface), FakeExecutor(), RunLogFactory(cfg.log.dir, "s1", session)
         )
 
 

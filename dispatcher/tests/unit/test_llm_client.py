@@ -8,6 +8,7 @@ import threading
 import httpx2 as httpx  # the SDK's HTTP library (see llm.py)
 import pytest
 
+from dispatcher.context import PromptSurface
 from dispatcher.llm import (
     ERR_MAX_TOKENS,
     ERR_NO_TOOL_CALL,
@@ -20,7 +21,10 @@ from dispatcher.models import LLMInterrupted, LLMUnavailable
 from dispatcher.tests.helpers import make_config
 
 H = 5
-SYSTEM = ["system one", "## Skills\ncatalog"]
+SYSTEM = ("system one", "## Skills\ncatalog")
+SURFACE = PromptSurface(
+    system=SYSTEM, catalog_text="catalog", tool_schema=plan_tool_schema(H), registry_hash="0" * 16, skills=("sit",)
+)
 USER = "## Task\nsit down"
 USAGE = {"input_tokens": 321, "output_tokens": 45}
 GOOD_INPUT = {"status": "PLAN", "steps": [{"skill": "sit", "params": {}}]}
@@ -60,7 +64,7 @@ class Harness:
         cfg = make_config(tmp_path, llm=llm or {})
         transport = httpx.MockTransport(self._handle)
         self.planner = AnthropicPlanner(
-            "test-key", cfg.llm, http_client=httpx.Client(transport=transport), wait=self._wait
+            "test-key", cfg.llm, SURFACE, http_client=httpx.Client(transport=transport), wait=self._wait
         )
 
     def _handle(self, request: httpx.Request) -> httpx.Response:
@@ -77,9 +81,7 @@ class Harness:
 
     def plan(self, remaining=1000.0):
         return self.planner.plan(
-            system=SYSTEM,
             user=USER,
-            tool_schema=plan_tool_schema(H),
             call_index=7,
             remaining_s=lambda: remaining,
             stop_event=self.stop_event,

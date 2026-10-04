@@ -18,6 +18,8 @@ if TYPE_CHECKING:
     import httpx2  # the anthropic SDK (1.x) runs on httpx2; an injected client must be httpx2
     from anthropic.types import ThinkingConfigParam
 
+    from .context import PromptSurface  # context imports this module at run time
+
 # `anthropic` is imported only inside AnthropicPlanner and the retry helper: it costs about 0.8 s
 # at start-up, and stub runs with the test planner, `catalog`, `state` and `--reset-stub` never
 # call the API (dispatcher/docs/llm.md).
@@ -204,12 +206,15 @@ def check_reply(res: LLMResult, horizon: int) -> PlanCheck:
 
 
 class PlannerClient(Protocol):
+    """Sends the fixed ``surface`` it was built with plus a per-call user message (dispatcher/docs/llm.md)."""
+
+    @property
+    def surface(self) -> PromptSurface: ...
+
     def plan(
         self,
         *,
-        system: list[str],
         user: str,
-        tool_schema: dict,
         call_index: int,
         remaining_s: Callable[[], float],
         stop_event: threading.Event,
@@ -253,11 +258,13 @@ class AnthropicPlanner:
         self,
         api_key: str,
         llm_cfg: LLMConfig,
+        surface: PromptSurface,
         *,
         http_client: httpx2.Client | None = None,
         wait: Callable[[threading.Event, float], bool] = _default_wait,
     ):
         self._cfg = llm_cfg
+        self.surface = surface
         self._wait = wait
         import anthropic
 
@@ -266,9 +273,7 @@ class AnthropicPlanner:
     def plan(
         self,
         *,
-        system: list[str],
         user: str,
-        tool_schema: dict,
         call_index: int,
         remaining_s: Callable[[], float],
         stop_event: threading.Event,
@@ -278,6 +283,7 @@ class AnthropicPlanner:
         from anthropic.types import ToolParam
 
         cfg = self._cfg
+        system_text, skills_text = self.surface.system
         thinking: ThinkingConfigParam = (
             {"type": "adaptive"} if cfg.thinking == "adaptive" else {"type": "between_tools"}
         )
@@ -295,8 +301,8 @@ class AnthropicPlanner:
                 resp = self._client.with_options(timeout=attempt_timeout_s).messages.create(
                     model=cfg.model,
                     max_tokens=cfg.max_tokens,
-                    system=[{"type": "text", "text": system[0]}, {"type": "text", "text": system[1]}],
-                    tools=[ToolParam(**tool_schema)],
+                    system=[{"type": "text", "text": system_text}, {"type": "text", "text": skills_text}],
+                    tools=[ToolParam(**self.surface.tool_schema)],
                     tool_choice={"type": "auto"},
                     thinking=thinking,
                     messages=[{"role": "user", "content": user}],

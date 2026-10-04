@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable, Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from dispatcher.llm import TOOL_NAME, LLMResult
 from dispatcher.models import Plan
+
+if TYPE_CHECKING:
+    from dispatcher.context import PromptSurface
 
 SCRIPTED_USAGE = {"input_tokens": 100, "output_tokens": 20}
 
@@ -19,12 +22,19 @@ class ScriptedPlanner:
     - a ``dict`` -> raw tool input (the loop validates it);
     - an exception instance -> raised.
 
+    ``surface`` is the fixed request part it reports (it sends nothing).
     ``calls`` records every call's kwargs. ``on_call(call_index)`` runs before returning
     or raising. Calling more times than scripted raises ``AssertionError``.
     """
 
-    def __init__(self, items: Sequence[Plan | dict | BaseException], on_call: Callable[[int], None] | None = None):
+    def __init__(
+        self,
+        items: Sequence[Plan | dict | BaseException],
+        surface: PromptSurface,
+        on_call: Callable[[int], None] | None = None,
+    ):
         self.items = list(items)
+        self.surface = surface
         self.on_call = on_call
         self.calls: list[dict[str, Any]] = []
 
@@ -35,18 +45,14 @@ class ScriptedPlanner:
     def plan(
         self,
         *,
-        system: list[str],
         user: str,
-        tool_schema: dict,
         call_index: int,
         remaining_s: Callable[[], float],
         stop_event: threading.Event,
         on_infra_retry: Callable[[dict], None],
     ) -> LLMResult:
         kwargs = {
-            "system": system,
             "user": user,
-            "tool_schema": tool_schema,
             "call_index": call_index,
             "remaining_s": remaining_s,
             "stop_event": stop_event,

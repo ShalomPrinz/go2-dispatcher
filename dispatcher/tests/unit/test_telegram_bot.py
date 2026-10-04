@@ -148,14 +148,13 @@ def test_handler_exception_replies_error(cfg, capsys):
 
 def test_normal_task(cfg, registry):
     turn = PlanStep(skill="turn", params={"direction": "left", "angle_deg": 90})
-    planner = ScriptedPlanner([Plan(status="PLAN", steps=[turn]), Plan(status="DONE", message="Turned left.")])
     surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
+    planner = ScriptedPlanner([Plan(status="PLAN", steps=[turn]), Plan(status="DONE", message="Turned left.")], surface)
     d = Dispatcher(
         cfg,
         registry,
         planner,
         FakeExecutor([exec_result("ok", skill="turn")]),
-        surface,
         RunLogFactory(cfg.log.dir, "s1", SessionInfo.collect(cfg, surface)),
         clock=FakeClock().now,
         initial_posture="standing",
