@@ -7,12 +7,7 @@ The main session orchestrates; project agents do the work (CLAUDE.md, Working pa
 
 ### 1. Pick the owner
 
-Use the ownership table in `docs/README.md` and the agent list in CLAUDE.md:
-
-- `dispatcher/` or `dispatcher/docs/` → `dispatcher-dev`
-- `skills/` or `skills/docs/` → `skills-dev`
-- test infrastructure or `tests/docs/testing.md` → `tests-dev`
-- `.claude/` (agents, skills, hooks, settings) → `claude-config-dev`
+The agent whose list in `.claude/ownership.json` covers the files the task changes owns it (`x/` a folder, `**/name` that file name anywhere, else one file); the ownership table in `docs/README.md` says which doc owns which topic. Test infrastructure goes to `tests-dev`, but tests of package behaviour go with the package agent. Paths under `main` in the map are the main session's own: edit those yourself, do not delegate them.
 
 A task that touches two owners becomes one brief per agent, run in sequence, with the side that defines the contract first. Pass the first agent's report into the second brief.
 

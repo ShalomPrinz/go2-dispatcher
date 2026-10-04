@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -11,7 +12,13 @@ from pathlib import Path
 import pytest
 
 HOOKS = Path(__file__).resolve().parent.parent
+ROOT = HOOKS.parent.parent
 SESSION = "s1"
+sys.path.insert(0, str(HOOKS))
+import scope  # noqa: E402  (pure `covers` and `load_map` only; the hooks themselves run as subprocesses)
+
+OWNERSHIP = scope.load_map()
+MAIN_ONLY = tuple(json.loads((HOOKS.parent / "ownership.json").read_text())["main"])
 
 
 def git(*args: str, cwd: Path) -> None:
@@ -130,3 +137,32 @@ def test_touched_records_per_caller_and_only_project_paths(repo: Path, tmpdir_en
 def test_stop_hooks_exit_at_once_when_stop_hook_active(name: str, repo: Path, tmpdir_env: Path) -> None:
     done = hook(name, {"session_id": SESSION, "cwd": str(repo), "stop_hook_active": True}, tmpdir_env)
     assert (done.returncode, done.stdout, done.stderr) == (0, "", "")
+
+
+def test_ownership_paths_exist_in_the_repo() -> None:
+    """Every map path exists; `**/name` patterns are skipped, since they cover files that may not exist yet."""
+    assert OWNERSHIP is not None, "ownership.json missing or malformed"
+    scopes, packages = OWNERSHIP
+    for p in {p for ps in scopes.values() for p in ps} | set(packages) | set(MAIN_ONLY):
+        assert p.startswith("**/") or (ROOT / p).exists(), p
+
+
+def test_ownership_agents_have_agent_files() -> None:
+    assert OWNERSHIP is not None
+    for agent in OWNERSHIP[0]:
+        assert (HOOKS.parent / "agents" / f"{agent}.md").is_file(), agent
+
+
+def test_every_indexed_doc_has_one_kind_of_writer() -> None:
+    """Each doc in the docs/README.md tables is writable by an agent or listed under `main`, never both."""
+    assert OWNERSHIP is not None
+    scopes = OWNERSHIP[0]
+    index = ROOT / "docs" / "README.md"
+    rows = [line for line in index.read_text().splitlines() if line.startswith("| [")]
+    docs = {
+        (index.parent / m).resolve().relative_to(ROOT).as_posix() for r in rows for m in re.findall(r"\]\(([^)]+)\)", r)
+    }
+    assert docs
+    for doc in sorted(docs | set(MAIN_ONLY)):
+        writers = [a for a, ps in scopes.items() if scope.covers(ps, doc)]
+        assert bool(writers) != (doc in MAIN_ONLY), (doc, writers)

@@ -8,7 +8,7 @@ You work on the test infrastructure of the Go2 LLM dispatcher (Python 3.10, mana
 
 ## Scope
 
-- Code: `tests/pytest_plugin.py`, `tests/helpers/`, any `conftest.py`, the `[tool.pytest.*]` and `[tool.coverage.*]` sections and test dependencies in `pyproject.toml`, `.github/workflows/tests.yml`.
+- Write paths: your list in [.claude/ownership.json](../ownership.json), enforced by the `scope.py` hook. In `pyproject.toml`, only the `[tool.pytest.*]` and `[tool.coverage.*]` sections and test dependencies; under `tests/`, the plugin, helpers and fixtures (test files: see below).
 - Docs you own: `tests/docs/testing.md`.
 - Test files (`test_*.py` in `dispatcher/tests/`, `skills/tests/`, `tests/integration/`) belong to the agent that owns the behaviour under test. Edit them only for mechanical, suite-wide changes the brief names (a marker rename, a helper or fixture migration, removing a fixed wait); never change what a test asserts.
 - Do not change `dispatcher/` or `skills/` source, their docs, golden-file contents or fixed texts. If the task needs such a change, stop and report what is needed and which agent owns it.

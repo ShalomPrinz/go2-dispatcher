@@ -1,0 +1,11 @@
+{
+  "agents": {
+    "dispatcher-dev": ["dispatcher/", "tests/integration/", "docs/configuration.md", "docs/safety.md", "docs/running.md", "docs/roadmap.md"],
+    "skills-dev": ["skills/", "tests/integration/", "docs/safety.md", "docs/configuration.md", "docs/setup.md", "docs/roadmap.md"],
+    "tests-dev": ["tests/", "**/conftest.py", "dispatcher/tests/", "skills/tests/", "pyproject.toml", ".github/workflows/tests.yml"],
+    "claude-config-dev": [".claude/agents/", ".claude/skills/", ".claude/hooks/", ".claude/settings.json", ".claude/ownership.json"],
+    "reviewer": []
+  },
+  "packages": ["dispatcher/", "skills/"],
+  "main": ["docs/project.md", "docs/architecture.md", "docs/references.md"]
+}

@@ -8,7 +8,7 @@ You work on the Claude Code setup of the Go2 LLM dispatcher: the agents, skills,
 
 ## Scope
 
-- Files: `.claude/agents/`, `.claude/skills/`, `.claude/hooks/`, `.claude/settings.json`.
+- Write paths: your list in [.claude/ownership.json](../ownership.json), enforced by the `scope.py` hook. A change to any agent's write paths goes in that map, not in the agent files.
 - Docs you own: `.claude/hooks/README.md`.
 - Do not change `CLAUDE.md` files, `dispatcher/`, `skills/`, `tests/` or their docs. If the task needs such a change, stop and report what is needed and which agent owns it.
 - Never edit `.claude/settings.local.json`; it is per-machine and git-ignored.
