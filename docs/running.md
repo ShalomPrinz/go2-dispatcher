@@ -129,12 +129,12 @@ Only `stop` is recognised during a task. Other messages sent during a task are a
 | Motion | none; the stub remembers only standing/sitting in `stub.state_file` | real SDK calls ([robot.md](../skills/docs/robot.md)) |
 | Durations | real durations × `stub.time_scale` | real time |
 | `detect_object` | reports what `stub.detections` lists (confidence 0.9) | front camera + YOLO |
-| Startup posture | reset to `stub.initial_posture` | read with `read_state` (`unknown` if that fails) |
+| Startup posture | reset to `stub.initial_posture`, then read with `read_state` (`unknown` if that fails) | read with `read_state` (`unknown` if that fails) |
 | Faults | `stub.faults` / `--fault` | not allowed (config error) |
 
 The stub replaces only the SDK layer inside the skill process. Processes, timeouts, kills and StopMove run for real.
 
-`go2 --reset-stub` puts the stub back in `stub.initial_posture`. Use it after a `sit`, because there is no `stand` skill. `run`, `batch` and `go2 bot` reset the stub once at startup. The stub is not reset between tasks.
+`go2 --reset-stub` puts the stub back in `stub.initial_posture`. Use it after a `sit`, because there is no `stand` skill. `run`, `batch` and `go2 bot` reset the stub once at startup (through `skills.stub.reset`), then take the start-up posture from the `read_state` utility as on the real robot. If that read fails, they print `Warning: robot state unavailable; posture unknown.` to stderr and start with posture `unknown`. The stub is not reset between tasks.
 
 ## Fault injection
 
@@ -167,3 +167,4 @@ and exit code 2. This stops two processes from driving one robot, overwriting th
 - **`batch` carries the previous task and posture across lines**, because that is how the robot behaves between messages: it remembers. Experiments may need independent tasks later ([roadmap.md](roadmap.md#future-ideas)).
 - **The bot stops a running task on SIGINT/SIGTERM before the Telegram library shuts down.** In python-telegram-bot 22.x, shutdown waits for every in-flight handler, so without this a running task would continue until it ended by itself. The bot replaces the library's signal handlers with one that calls the stop path, keeping `Dispatcher.shutdown()` as the backstop.
 - **Long polling**, so the bot needs no public address on the lab network.
+- **Start-up posture comes from `read_state` on both backends**, and the dispatcher changes stub state only through `skills.stub.reset`. Reading the stub state file directly was rejected: it couples the dispatcher to stub internals (file path and format). The cost is one utility subprocess at stub start-up.

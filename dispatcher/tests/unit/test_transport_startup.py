@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import pytest
 
+from dispatcher.models import RobotState
 from dispatcher.tests.helpers import FakeExecutor, make_config
+from dispatcher.tests.helpers.fakes import state
 from dispatcher.transports import (
     API_KEY_ENV,
     MISSING_API_KEY,
@@ -36,15 +38,14 @@ def test_malformed_test_planner_exits_2(tmp_path, no_planner_env):
     assert ei.value.code == 2
 
 
-def test_real_backend_without_state_is_unknown(tmp_path, capsys):
-    cfg = make_config(tmp_path, robot={"backend": "real", "network_interface": "eth0"})
-    assert initial_posture(cfg, FakeExecutor(), reset=False) == "unknown"
+def test_failed_state_read_is_unknown_with_warning(capsys):
+    assert initial_posture(FakeExecutor()) == "unknown"
     assert "Warning" in capsys.readouterr().err
 
 
-def test_unreadable_stub_state_is_unknown(tmp_path):
-    cfg = make_config(tmp_path)
-    cfg.stub.state_file.parent.mkdir(parents=True, exist_ok=True)
-    cfg.stub.state_file.write_text("{not json", encoding="utf-8")
-    assert initial_posture(cfg, FakeExecutor(), reset=False) == "unknown"
-    assert initial_posture(cfg, FakeExecutor(), reset=True) == cfg.stub.initial_posture
+def test_posture_comes_from_state_read():
+    class SittingExecutor(FakeExecutor):
+        def read_state(self) -> RobotState | None:
+            return state("sitting")
+
+    assert initial_posture(SittingExecutor()) == "sitting"

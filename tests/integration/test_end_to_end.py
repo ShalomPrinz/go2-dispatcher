@@ -33,7 +33,7 @@ def registry():
 
 def build(tmp_path, registry, items, **cfg_over):
     cfg = make_config(tmp_path, **cfg_over)
-    stub.write_posture(cfg.stub.initial_posture, cfg.stub.state_file)
+    stub.reset(cfg.stub.initial_posture, cfg.stub.state_file)
     planner = ScriptedPlanner(items)
     surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
     d = Dispatcher(

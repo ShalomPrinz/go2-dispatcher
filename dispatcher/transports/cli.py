@@ -122,7 +122,7 @@ def cmd_reset_stub(cfg) -> int:
         print('--reset-stub needs robot.backend = "stub".', file=sys.stderr)
         return EXIT_USAGE
     process_lock.acquire(cfg.log.dir)
-    stub.write_posture(cfg.stub.initial_posture, cfg.stub.state_file)
+    stub.reset(cfg.stub.initial_posture, cfg.stub.state_file)
     print(f"Stub reset: {cfg.stub.initial_posture} ({cfg.stub.state_file}).")
     return EXIT_OK
 

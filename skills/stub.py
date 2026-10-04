@@ -107,6 +107,11 @@ def write_posture(posture: StubPosture, path: Path | None = None) -> None:
         raise
 
 
+def reset(posture: StubPosture, path: Path | None = None) -> None:
+    """Put the stub into a known state holding ``posture``; the dispatcher's only write to stub state."""
+    write_posture(posture, path)
+
+
 # --- faults -----------------------------------------------------------------------
 
 

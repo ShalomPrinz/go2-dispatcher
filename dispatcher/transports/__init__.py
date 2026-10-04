@@ -59,16 +59,8 @@ def make_planner(cfg: Config) -> PlannerClient:
     return AnthropicPlanner(key, cfg.llm, cfg.loop.planning_horizon)
 
 
-def initial_posture(cfg: Config, executor: SkillExecutor, *, reset: bool) -> Posture:
-    """Posture at start-up: from the stub state file or a robot state read (docs/running.md)."""
-    if cfg.robot.backend == "stub":
-        if reset:
-            return cfg.stub.initial_posture
-        try:
-            return stub.read_posture(cfg.stub.state_file)
-        except (OSError, ValueError) as e:
-            print(f"Warning: cannot read stub state ({e}); posture unknown.", file=sys.stderr)
-            return "unknown"
+def initial_posture(executor: SkillExecutor) -> Posture:
+    """Posture at start-up from a ``read_state`` call on either backend (docs/running.md)."""
     state = executor.read_state()
     if state is None:
         print("Warning: robot state unavailable; posture unknown.", file=sys.stderr)
@@ -84,11 +76,11 @@ def build_dispatcher(cfg: Config, *, reset_stub: bool, planner: PlannerClient | 
     except RegistryError as e:
         _exit2(f"Registry error: {e}")
     if reset_stub and cfg.robot.backend == "stub":
-        stub.write_posture(cfg.stub.initial_posture, cfg.stub.state_file)
+        stub.reset(cfg.stub.initial_posture, cfg.stub.state_file)
     if planner is None:
         planner = make_planner(cfg)
     executor = Executor(cfg, cfg.base_dir)
-    posture = initial_posture(cfg, executor, reset=reset_stub)
+    posture = initial_posture(executor)
     surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
     dispatcher = Dispatcher(
         cfg,
