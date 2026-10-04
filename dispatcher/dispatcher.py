@@ -203,10 +203,7 @@ class Dispatcher:
     def _record(self, t: _Task, sr: StepResult, stop: StopMoveResult | None = None) -> None:
         """Append a step, update posture and the StopMove flag, log it (and the StopMove of a killed step)."""
         t.steps.append(sr)
-        if sr.dispatch is not None:
-            self._update_posture_from_step(sr, stop)
-        if stop is not None and not stop.ok:
-            t.stop_move_failed = True
+        self._apply_state(t, sr, stop)
         if sr.outcome in FAILURE_OUTCOMES:
             t.failures += 1
             t.last_failure = sr
@@ -216,14 +213,17 @@ class Dispatcher:
         if stop is not None:
             t.log.stop_move(stop)
 
-    def _update_posture_from_step(self, sr: StepResult, stop: StopMoveResult | None) -> None:
-        """Last known posture from the step's state_after (dispatcher/docs/loop-and-context.md)."""
-        if sr.response is not None and sr.response.state_after is not None:
-            self.posture = sr.response.state_after.posture
-        elif stop is not None and stop.response is not None and stop.response.state_after is not None:
-            self.posture = stop.response.state_after.posture
-        elif sr.outcome in KILLED_OUTCOMES:
-            self.posture = "unknown"
+    def _apply_state(self, t: _Task, sr: StepResult | None, stop: StopMoveResult | None) -> None:
+        """Update the last known posture and the StopMove flag (dispatcher/docs/loop-and-context.md)."""
+        for resp in (sr.response if sr else None, stop.response if stop else None):
+            if resp is not None and resp.state_after is not None:
+                self.posture = resp.state_after.posture  # the step's state_after wins over StopMove's
+                break
+        else:
+            if sr is not None and sr.outcome in KILLED_OUTCOMES:
+                self.posture = "unknown"
+        if stop is not None and not stop.ok:
+            t.stop_move_failed = True
 
     def _context(self, t: _Task) -> str:
         loop = self.cfg.loop
@@ -297,13 +297,6 @@ class Dispatcher:
         self._set_phase("ending")
         return self._end(t, cause.task_outcome, stop_move=self.executor.stop_move(cause))
 
-    def _apply_stop_move(self, t: _Task, smr: StopMoveResult) -> None:
-        t.log.stop_move(smr)
-        if smr.response is not None and smr.response.state_after is not None:
-            self.posture = smr.response.state_after.posture
-        if not smr.ok:
-            t.stop_move_failed = True
-
     def _end(
         self,
         t: _Task,
@@ -316,7 +309,8 @@ class Dispatcher:
     ) -> TaskOutcome:
         self._set_phase("ending")
         if stop_move is not None:
-            self._apply_stop_move(t, stop_move)
+            t.log.stop_move(stop_move)
+            self._apply_state(t, None, stop_move)
 
         loop = self.cfg.loop
         facts = prompts.OutcomeFacts(
