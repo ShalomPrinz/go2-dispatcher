@@ -13,7 +13,7 @@ from dispatcher.dispatcher import Dispatcher
 from dispatcher.executor import Executor
 from dispatcher.models import Plan, PlanStep
 from dispatcher.registry import Registry
-from dispatcher.runlog import INDEX_FILE, RunLogFactory, SessionInfo
+from dispatcher.runlog import INDEX_FILE
 from dispatcher.tests.helpers import ScriptedPlanner, make_config
 from skills import stub
 from tests.helpers import REPO_ROOT
@@ -41,7 +41,6 @@ def build(tmp_path, registry, items, **cfg_over):
         registry,
         planner,
         Executor(cfg, cfg.base_dir),
-        RunLogFactory(cfg.log.dir, "e2e", SessionInfo.collect(cfg, surface)),
         initial_posture=cfg.stub.initial_posture,
     )
     return d, planner, cfg

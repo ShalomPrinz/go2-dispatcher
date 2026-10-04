@@ -7,7 +7,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
@@ -36,7 +36,7 @@ from .models import (
     TaskSummary,
 )
 from .registry import Registry
-from .runlog import NullLog, RunLog, RunLogFactory
+from .runlog import NullLog, RunLog, RunLogFactory, SessionInfo
 
 __all__ = ["Dispatcher"]
 
@@ -82,7 +82,6 @@ class Dispatcher:
         registry: Registry,
         planner: PlannerClient,
         executor: SkillExecutor,
-        runlog_factory: RunLogFactory,
         *,
         clock: Callable[[], float] = time.monotonic,
         initial_posture: Posture = "unknown",
@@ -91,7 +90,9 @@ class Dispatcher:
         self.registry = registry
         self.planner = planner
         self.executor = executor
-        self.runlog_factory = runlog_factory
+        # the log copies the surface the planner sends (dispatcher/docs/run-log.md)
+        self.runlog_factory = RunLogFactory(cfg.log.dir, uuid.uuid4().hex, SessionInfo.collect(cfg, planner.surface))
+        self.registry_hash = planner.surface.registry_hash
         self.clock = clock
         self.posture: Posture = initial_posture
         self.previous: TaskSummary | None = None
@@ -101,21 +102,6 @@ class Dispatcher:
         self._phase: Phase = "idle"
         self._stop_event = threading.Event()
         self._log: RunLog | None = None
-
-        # what the run log records must be what the planner sends (dispatcher/docs/run-log.md)
-        surface = planner.surface
-        session = runlog_factory.session
-        logged = (session.system_text, session.catalog_text, session.tool_schema, session.registry_hash, session.skills)
-        sent = (
-            surface.system[0],
-            surface.catalog_text,
-            surface.tool_schema,
-            surface.registry_hash,
-            list(surface.skills),
-        )
-        if logged != sent:
-            raise ValueError("run-log session does not match the prompt surface")
-        self.registry_hash = surface.registry_hash
 
     # --- public interface (dispatcher/docs/loop-and-context.md) ------------------------------------------------------
 
@@ -227,15 +213,18 @@ class Dispatcher:
 
     def _context(self, t: _Task) -> str:
         loop = self.cfg.loop
-        # ContextInput fields that _Task holds under the same name
-        shared = {f.name: getattr(t, f.name) for f in fields(ContextInput) if hasattr(t, f.name)}
         return build_user_message(
             ContextInput(
-                **shared,
+                task=t.task,
                 posture=self.posture,
+                budget=t.budget,
+                failures=t.failures,
                 max_failures=loop.max_failures,
+                llm_calls=t.llm_calls,
                 max_llm_calls=loop.max_llm_calls,
                 history_k=loop.context_history_k,
+                steps=t.steps,
+                feedback=t.feedback,
                 previous=self.previous,
             ),
             self.registry,

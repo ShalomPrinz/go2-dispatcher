@@ -12,7 +12,6 @@ from dispatcher.dispatcher import Dispatcher
 from dispatcher.executor import Executor
 from dispatcher.llm import AnthropicPlanner
 from dispatcher.registry import Registry
-from dispatcher.runlog import RunLogFactory, SessionInfo
 from dispatcher.tests.helpers import make_config
 from skills import stub
 from tests.helpers import REPO_ROOT
@@ -35,7 +34,6 @@ def test_live_turn_and_find_chair(tmp_path):
         registry,
         AnthropicPlanner(key, cfg.llm, surface),
         Executor(cfg, cfg.base_dir),
-        RunLogFactory(cfg.log.dir, "live", SessionInfo.collect(cfg, surface)),
         initial_posture=cfg.stub.initial_posture,
     )
     o = d.run_task(TASK, source="test")

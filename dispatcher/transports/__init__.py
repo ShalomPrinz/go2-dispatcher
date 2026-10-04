@@ -6,7 +6,6 @@ import atexit
 import importlib
 import os
 import sys
-import uuid
 
 from skills import stub
 
@@ -18,7 +17,6 @@ from ..executor import Executor, SkillExecutor
 from ..llm import AnthropicPlanner, PlannerClient
 from ..models import Posture, RegistryError, TaskOutcome
 from ..registry import Registry
-from ..runlog import RunLogFactory, SessionInfo
 
 __all__ = [
     "load_config_and_env",
@@ -69,7 +67,7 @@ def initial_posture(executor: SkillExecutor) -> Posture:
 
 
 def build_dispatcher(cfg: Config, *, reset_stub: bool) -> Dispatcher:
-    """Lock, registry, stub reset, planner, executor, run log factory (docs/running.md)."""
+    """Lock, registry, stub reset, planner, executor, dispatcher (docs/running.md)."""
     process_lock.acquire(cfg.log.dir)
     try:
         registry = Registry.load(cfg.skills.dir)
@@ -86,7 +84,6 @@ def build_dispatcher(cfg: Config, *, reset_stub: bool) -> Dispatcher:
         registry,
         planner,
         executor,
-        RunLogFactory(cfg.log.dir, uuid.uuid4().hex, SessionInfo.collect(cfg, surface)),
         initial_posture=posture,
     )
     atexit.register(dispatcher.shutdown, 0)
