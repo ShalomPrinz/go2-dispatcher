@@ -1,17 +1,20 @@
-"""Every fixed text the dispatcher and transports show to the LLM or the operator (dispatcher/docs/loop-and-context.md).
+"""Every fixed wording the LLM reads, and every operator-facing task text (dispatcher/docs/loop-and-context.md).
 
+Console diagnostics and start-up errors stay in their modules, as do the tool schema and the step-line shapes.
 Wording is draft (docs/roadmap.md) and must stay identical across experimental conditions.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .budget import (
     MOTION_BUDGET_MESSAGE,  # re-exported: defined once, in budget.py (dispatcher/docs/loop-and-context.md)
 )
-from .models import StepResult, TaskOutcomeCode
+
+if TYPE_CHECKING:
+    from .models import StepResult, TaskOutcomeCode  # models imports this module for the kill messages
 
 __all__ = [
     "SYSTEM_TEMPLATE",
@@ -37,7 +40,32 @@ __all__ = [
     "REJECTION_HEADER",
     "REJECTION_FOOTER",
     "rejection_section",
+    "ERR_MAX_TOKENS",
+    "ERR_NO_TOOL_CALL",
+    "HORIZON_EXCEEDED",
+    "PLAN_NEEDS_STEPS",
+    "STATUS_NO_STEPS",
+    "STATUS_NEEDS_MESSAGE",
+    "REPLAN_ONLY_PLAN",
+    "REPLAN_OUT_OF_RANGE",
+    "UNKNOWN_SKILL",
+    "UNKNOWN_PARAM",
+    "MISSING_PARAM",
+    "PARAM_WRONG_TYPE",
+    "EXPECTED_NUMBER",
+    "EXPECTED_STRING",
+    "EXPECTED_ENUM",
+    "PARAM_VALUE",
+    "PARAM_OUTSIDE_RANGE",
+    "PARAM_BELOW_MIN",
+    "PARAM_ABOVE_MAX",
     "MOTION_BUDGET_MESSAGE",
+    "MALFORMED_RESPONSE",
+    "KILL_STEP_TIMEOUT",
+    "KILL_OPERATOR",
+    "KILL_TASK_TIME_LIMIT",
+    "KILL_SHUTDOWN",
+    "NOT_DISPATCHED_PREFIX",
     "OPERATOR_MESSAGES",
     "STOP_MOVE_WARNING",
     "OutcomeFacts",
@@ -49,6 +77,9 @@ __all__ = [
     "EMPTY_TASK",
     "HELP",
     "help_text",
+    "STEPS_LINE",
+    "OMITTED_LINES",
+    "ERROR_REPLY",
 ]
 
 # --- System (S1, S2), dispatcher/docs/loop-and-context.md ---------------------------------------------------
@@ -147,6 +178,40 @@ def rejection_section(errors: list[str]) -> str:
     return "\n".join([REJECTION_HEADER, *lines, REJECTION_FOOTER])
 
 
+# --- Plan validation errors (dispatcher/docs/llm.md) -------------------------------------------
+
+ERR_MAX_TOKENS = "reply was cut off; keep the plan shorter"
+ERR_NO_TOOL_CALL = "no submit_plan call in reply"
+HORIZON_EXCEEDED = "plan has {n} steps; the maximum is {horizon}"
+PLAN_NEEDS_STEPS = "status PLAN needs at least one step"
+STATUS_NO_STEPS = "status {status} must have no steps"
+STATUS_NEEDS_MESSAGE = "status {status} needs a message"
+REPLAN_ONLY_PLAN = "replan_after is only allowed with status PLAN"
+REPLAN_OUT_OF_RANGE = "replan_after must be between 1 and {n}"
+
+# --- Step errors and step lines (dispatcher/docs/loop-and-context.md) -----------------------------
+
+UNKNOWN_SKILL = "unknown skill '{skill}'; available: {available}"
+UNKNOWN_PARAM = "unknown parameter '{param}' for skill {skill}"
+MISSING_PARAM = "missing parameter '{param}' for skill {skill}"
+PARAM_WRONG_TYPE = "parameter '{param}' for skill {skill} must be {expected}, got {value}"
+EXPECTED_NUMBER = "a finite number"
+EXPECTED_STRING = "a non-empty string"
+EXPECTED_ENUM = "one of {values}"
+PARAM_VALUE = "parameter '{param}' for skill {skill} is {value:g}"
+PARAM_OUTSIDE_RANGE = "{where}, outside {lo:g} to {hi:g}"
+PARAM_BELOW_MIN = "{where}, below the minimum {lo:g}"
+PARAM_ABOVE_MAX = "{where}, above the maximum {hi:g}"
+
+MALFORMED_RESPONSE = "skill process exited with code {rc} without a valid response"
+KILL_STEP_TIMEOUT = "killed after {timeout_s:g}s timeout"
+KILL_OPERATOR = "stopped by operator"
+KILL_TASK_TIME_LIMIT = "task time limit reached"
+KILL_SHUTDOWN = "dispatcher shutting down"
+
+NOT_DISPATCHED_PREFIX = "- rejected before running: "
+
+
 # --- Operator messages (TaskOutcome.message) ---------------------------------------------------
 
 OPERATOR_MESSAGES: dict[str, str] = {
@@ -220,3 +285,8 @@ HELP = 'I control the Go2 robot. Send a task in plain words. Send "stop" to stop
 
 def help_text(backend: str) -> str:
     return HELP.format(backend=backend)
+
+
+STEPS_LINE = "Steps: {run} run, {failed} failed"
+OMITTED_LINES = "({n} earlier lines omitted)"
+ERROR_REPLY = "Error: {exception_type}"

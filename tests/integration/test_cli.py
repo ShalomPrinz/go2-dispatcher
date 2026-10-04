@@ -138,7 +138,7 @@ def test_second_run_is_locked_out_then_sigint_stops(cfg_path):
         first.send_signal(signal.SIGINT)
         out, err = first.communicate(timeout=STOP_WITHIN_S)
         assert first.returncode == 1, out + err
-        assert "Stopping..." in out
+        assert "Stopping." in out
         assert "STOPPED:" in out
     finally:
         if first.poll() is None:

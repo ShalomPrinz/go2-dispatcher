@@ -20,6 +20,7 @@ from skills import stop_move as stop_move_utility
 from skills.env import child_env
 from skills.policy import SkillPolicy
 
+from . import prompts
 from .config import Config
 from .models import RobotState, SkillResponse, StopCause, StopMoveResult
 from .registry import SkillDescriptor
@@ -244,7 +245,7 @@ class Executor:
             error_message = template.format(timeout_s=timeout_s)
         elif response is None:
             outcome, error_code = "malformed", "malformed"
-            error_message = f"skill process exited with code {rc} without a valid response"
+            error_message = prompts.MALFORMED_RESPONSE.format(rc=rc)
         else:
             outcome = response.status
             error_code = response.error.code if response.error else None

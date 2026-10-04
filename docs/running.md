@@ -62,7 +62,7 @@ The first line is `{OUTCOME}: {message}`. `Steps:` counts dispatched steps and f
 
 The task runs in a worker thread. The main thread waits in 0.2 s steps so signals are handled quickly.
 
-- **First Ctrl+C while a task runs:** the same as the operator `stop` word. The running skill is killed, StopMove is sent, and the task ends `STOPPED`. `Stopping...` is printed. `run` then prints the outcome and exits 1. `batch` prints the outcome, skips the remaining lines and exits 130.
+- **First Ctrl+C while a task runs:** the same as the operator `stop` word. The running skill is killed, StopMove is sent, and the task ends `STOPPED`. `Stopping.` is printed. `run` then prints the outcome and exits 1. `batch` prints the outcome, skips the remaining lines and exits 130.
 - **Second Ctrl+C, or SIGTERM:** `dispatcher.shutdown(0)` kills the skill and sends StopMove, then the process exits with 130 (SIGINT) or 143 (SIGTERM).
 
 ### `batch` file format

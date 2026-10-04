@@ -15,7 +15,6 @@ from .llm import plan_tool_schema
 from .models import PlanStep, Posture, StepResult, TaskSummary
 from .registry import Registry, registry_hash
 
-NOT_DISPATCHED_PREFIX = "- rejected before running: "
 NOT_DISPATCHED_OUTCOMES = frozenset({"rejected", "motion_budget_exceeded"})
 BUDGET_DECIMALS = 2  # budget numbers: round(x, 2) then :g (dispatcher/docs/loop-and-context.md)
 
@@ -103,7 +102,7 @@ def render_step(sr: StepResult, registry: Registry, *, numbered: bool) -> str:
     Never includes stderr or tracebacks."""
     call = format_call(sr.ref.skill, sr.ref.params, registry)
     if sr.outcome in NOT_DISPATCHED_OUTCOMES or sr.dispatch is None:
-        return f"{NOT_DISPATCHED_PREFIX}{call} -> {_failure_text(sr)}"
+        return f"{prompts.NOT_DISPATCHED_PREFIX}{call} -> {_failure_text(sr)}"
     if sr.outcome == "ok":
         body = f"{call} -> ok{_observations(sr, registry)}"
     else:

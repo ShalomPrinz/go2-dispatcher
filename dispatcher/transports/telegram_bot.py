@@ -59,7 +59,6 @@ _STOPPING_KEY = "stop_signal_received"
 MISSING_TOKEN = f"Missing {TOKEN_ENV}."
 NO_ALLOWED_USERS_WARNING = "Warning: telegram.allowed_user_ids is empty; the bot will answer nobody."
 UNAUTHORISED_WARNING = "Warning: ignoring Telegram message from unauthorised user {user_id}."
-ERROR_REPLY = "Error: {exception_type}"
 
 Handler = Callable[[Update, ContextTypes.DEFAULT_TYPE], Coroutine[Any, Any, None]]
 
@@ -89,7 +88,7 @@ def _guarded(fn: Callable[[Any, Any, Any], Awaitable[None]]) -> Handler:
             await fn(user, message, context)
         except Exception as e:  # noqa: BLE001 - reported to the operator
             traceback.print_exc(file=sys.stderr)
-            await message.reply_text(ERROR_REPLY.format(exception_type=type(e).__name__))
+            await message.reply_text(prompts.ERROR_REPLY.format(exception_type=type(e).__name__))
 
     return handler
 

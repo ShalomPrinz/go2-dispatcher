@@ -29,7 +29,6 @@ EXIT_FAIL = 1
 EXIT_USAGE = 2
 EXIT_SIGINT = 130
 EXIT_SIGTERM = 143
-STOPPING_TEXT = "Stopping..."
 COMMENT_PREFIX = "#"
 TOOL_SCHEMA_HEADER = "## Tool schema"
 REGISTRY_HASH_LINE = "Registry hash: {hash}"
@@ -146,7 +145,7 @@ class _Runner:
         if not self.stop_requested and self.d.is_busy():
             self.stop_requested = True
             self.d.request_stop(SOURCE)
-            print(STOPPING_TEXT, flush=True)
+            print(prompts.STOPPING, flush=True)
             return
         self._hard_exit(EXIT_SIGINT)
 

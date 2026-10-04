@@ -8,10 +8,9 @@ import threading
 import httpx2 as httpx  # the SDK's HTTP library (see llm.py)
 import pytest
 
+from dispatcher import prompts
 from dispatcher.context import PromptSurface
 from dispatcher.llm import (
-    ERR_MAX_TOKENS,
-    ERR_NO_TOOL_CALL,
     TOOL_NAME,
     AnthropicPlanner,
     check_reply,
@@ -161,7 +160,7 @@ def test_text_only_reply_is_no_tool_call(tmp_path):
     r = Harness(tmp_path, [ok(body)]).plan()
     assert r.tool_input is None and r.content[0]["type"] == "text"
     c = check_reply(r, H)
-    assert c.plan is None and c.rejection_kind == "no_tool_call" and c.errors == [ERR_NO_TOOL_CALL]
+    assert c.plan is None and c.rejection_kind == "no_tool_call" and c.errors == [prompts.ERR_NO_TOOL_CALL]
 
 
 def test_max_tokens(tmp_path):
@@ -169,7 +168,7 @@ def test_max_tokens(tmp_path):
     r = Harness(tmp_path, [ok(body)]).plan()
     assert r.stop_reason == "max_tokens" and r.tool_input == {"status": "PLAN"}
     c = check_reply(r, H)
-    assert c.plan is None and c.rejection_kind == "max_tokens" and c.errors == [ERR_MAX_TOKENS]
+    assert c.plan is None and c.rejection_kind == "max_tokens" and c.errors == [prompts.ERR_MAX_TOKENS]
 
 
 def test_529_then_200(tmp_path):

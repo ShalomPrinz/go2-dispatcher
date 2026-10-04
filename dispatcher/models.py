@@ -15,6 +15,8 @@ from skills.schema import RobotState as RobotState
 from skills.schema import SkillError as SkillError
 from skills.schema import SkillResponse as SkillResponse
 
+from . import prompts
+
 # --- Exceptions (docs/architecture.md) -------------------------------------------------------
 
 
@@ -116,10 +118,10 @@ _TASK_OUTCOMES: dict[StopCause, TaskOutcomeCode] = {
     StopCause.TASK_TIME_LIMIT: "TIME_LIMIT_EXCEEDED",
 }
 _KILLS: dict[StopCause, StepKill] = {
-    StopCause.STEP_TIMEOUT: StepKill("timeout", "timeout", "killed after {timeout_s:g}s timeout"),
-    StopCause.OPERATOR: StepKill("interrupted", "stopped_by_operator", "stopped by operator"),
-    StopCause.TASK_TIME_LIMIT: StepKill("interrupted", "task_time_limit", "task time limit reached"),
-    StopCause.SHUTDOWN: StepKill("interrupted", "shutdown", "dispatcher shutting down"),
+    StopCause.STEP_TIMEOUT: StepKill("timeout", "timeout", prompts.KILL_STEP_TIMEOUT),
+    StopCause.OPERATOR: StepKill("interrupted", "stopped_by_operator", prompts.KILL_OPERATOR),
+    StopCause.TASK_TIME_LIMIT: StepKill("interrupted", "task_time_limit", prompts.KILL_TASK_TIME_LIMIT),
+    StopCause.SHUTDOWN: StepKill("interrupted", "shutdown", prompts.KILL_SHUTDOWN),
 }
 KILLED_OUTCOMES = frozenset(k.outcome for k in _KILLS.values())  # posture unknown after these
 

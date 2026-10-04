@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from . import prompts
 from .config import LLMConfig
 from .models import LLMInterrupted, LLMUnavailable, Plan, StopCause
 
@@ -36,8 +37,6 @@ __all__ = [
     "AnthropicPlanner",
     "RETRYABLE_STATUS_CODES",
     "RETRY_AFTER_CAP_S",
-    "ERR_MAX_TOKENS",
-    "ERR_NO_TOOL_CALL",
     "validate_tool_input",
 ]
 
@@ -47,9 +46,6 @@ STEP_REQUIRED = ["skill", "params"]
 
 RETRYABLE_STATUS_CODES = frozenset({408, 409, 429})  # plus every status >= 500
 RETRY_AFTER_CAP_S = 30.0
-
-ERR_MAX_TOKENS = "reply was cut off; keep the plan shorter"
-ERR_NO_TOOL_CALL = "no submit_plan call in reply"
 
 RejectionKind = Literal["none", "schema", "horizon", "semantic", "no_tool_call", "max_tokens"]
 
@@ -120,17 +116,17 @@ def _semantic_errors(plan: Plan) -> list[str]:
     s = plan.status
     n = len(plan.steps)
     if s == "PLAN" and n == 0:
-        errors.append("status PLAN needs at least one step")
+        errors.append(prompts.PLAN_NEEDS_STEPS)
     if s in ("DONE", "ABORT"):
         if n > 0:
-            errors.append(f"status {s} must have no steps")
+            errors.append(prompts.STATUS_NO_STEPS.format(status=s))
         if plan.message is None or not plan.message.strip():
-            errors.append(f"status {s} needs a message")
+            errors.append(prompts.STATUS_NEEDS_MESSAGE.format(status=s))
     if plan.replan_after is not None:
         if s != "PLAN":
-            errors.append("replan_after is only allowed with status PLAN")
+            errors.append(prompts.REPLAN_ONLY_PLAN)
         elif not 1 <= plan.replan_after <= n:
-            errors.append(f"replan_after must be between 1 and {n}")
+            errors.append(prompts.REPLAN_OUT_OF_RANGE.format(n=n))
     return errors
 
 
@@ -143,7 +139,7 @@ def validate_tool_input(raw: Any, horizon: int) -> tuple[Plan | None, list[str],
     kind: RejectionKind = "none"
     if isinstance(raw, dict) and isinstance(raw.get("steps"), list) and len(raw["steps"]) > horizon:
         kind = "horizon"
-        errors.append(f"plan has {len(raw['steps'])} steps; the maximum is {horizon}")
+        errors.append(prompts.HORIZON_EXCEEDED.format(n=len(raw["steps"]), horizon=horizon))
 
     # 2. schema
     plan: Plan | None = None
@@ -198,9 +194,9 @@ class PlanCheck(BaseModel):
 def check_reply(res: LLMResult, horizon: int) -> PlanCheck:
     """Response handling then plan validation, in the order of dispatcher/docs/llm.md."""
     if res.stop_reason == "max_tokens":
-        return PlanCheck(plan=None, errors=[ERR_MAX_TOKENS], rejection_kind="max_tokens")
+        return PlanCheck(plan=None, errors=[prompts.ERR_MAX_TOKENS], rejection_kind="max_tokens")
     if res.tool_input is None:
-        return PlanCheck(plan=None, errors=[ERR_NO_TOOL_CALL], rejection_kind="no_tool_call")
+        return PlanCheck(plan=None, errors=[prompts.ERR_NO_TOOL_CALL], rejection_kind="no_tool_call")
     plan, errors, kind = validate_tool_input(res.tool_input, horizon)
     return PlanCheck(plan=plan, errors=errors, rejection_kind=kind)
 

@@ -8,7 +8,7 @@ import sys
 
 from skills import stub
 
-from .. import process_lock
+from .. import process_lock, prompts
 from ..config import Config, load_config_and_env
 from ..context import PromptSurface, render_step
 from ..dispatcher import Dispatcher
@@ -27,14 +27,12 @@ __all__ = [
     "API_KEY_ENV",
     "TEST_PLANNER_ENV",
     "OUTCOME_MAX_CHARS",
-    "OMITTED_LINES",
 ]
 
 API_KEY_ENV = "ANTHROPIC_API_KEY"
 TEST_PLANNER_ENV = "GO2_TEST_PLANNER"  # "module:factory" (tests only)
 MISSING_API_KEY = f"Missing {API_KEY_ENV}."
 OUTCOME_MAX_CHARS = 4000  # Telegram's limit is 4096 (docs/running.md)
-OMITTED_LINES = "({n} earlier lines omitted)"
 
 
 def startup_error_text(e: StartupError) -> str:
@@ -95,11 +93,11 @@ def format_outcome(outcome: TaskOutcome, registry: Registry) -> str:
     """Plain-text outcome for the operator (docs/running.md); oldest step lines are dropped if the
     whole text would exceed ``OUTCOME_MAX_CHARS``."""
     dispatched = sum(1 for s in outcome.steps if s.dispatch is not None)
-    head = [f"{outcome.outcome}: {outcome.message}", f"Steps: {dispatched} run, {outcome.failures} failed"]
+    head = [f"{outcome.outcome}: {outcome.message}", prompts.STEPS_LINE.format(run=dispatched, failed=outcome.failures)]
     steps = [render_step(s, registry, numbered=True) for s in outcome.steps]
     text = "\n".join(head + steps)
     dropped = 0
     while len(text) > OUTCOME_MAX_CHARS and dropped < len(steps):
         dropped += 1
-        text = "\n".join(head + [OMITTED_LINES.format(n=dropped)] + steps[dropped:])
+        text = "\n".join(head + [prompts.OMITTED_LINES.format(n=dropped)] + steps[dropped:])
     return text

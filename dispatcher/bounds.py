@@ -8,6 +8,7 @@ from typing import Any
 
 from skills.frontmatter import ParamSpec
 
+from . import prompts
 from .budget import MotionBudget
 from .models import Plan, PlanStep, StepRef, StepResult
 from .registry import Registry
@@ -47,10 +48,10 @@ def _finite(value: int | float) -> bool | None:
 
 def _expected(spec: ParamSpec) -> str:
     if spec.type == "number":
-        return "a finite number"
+        return prompts.EXPECTED_NUMBER
     if spec.type == "string":
-        return "a non-empty string"
-    return "one of " + ", ".join(spec.values or ())
+        return prompts.EXPECTED_STRING
+    return prompts.EXPECTED_ENUM.format(values=", ".join(spec.values or ()))
 
 
 def _coerce(spec: ParamSpec, value: Any) -> Any:
@@ -80,12 +81,12 @@ def _range_violation(pname: str, skill: str, spec: ParamSpec, v: float) -> str |
     above = hi is not None and v > hi
     if not (below or above):
         return None
-    where = f"parameter '{pname}' for skill {skill} is {v:g}"
+    where = prompts.PARAM_VALUE.format(param=pname, skill=skill, value=v)
     if lo is not None and hi is not None:
-        return f"{where}, outside {lo:g} to {hi:g}"
+        return prompts.PARAM_OUTSIDE_RANGE.format(where=where, lo=lo, hi=hi)
     if below:
-        return f"{where}, below the minimum {lo:g}"
-    return f"{where}, above the maximum {hi:g}"
+        return prompts.PARAM_BELOW_MIN.format(where=where, lo=lo)
+    return prompts.PARAM_ABOVE_MAX.format(where=where, hi=hi)
 
 
 def check_step(step: PlanStep, registry: Registry) -> tuple[dict | None, list[str]]:
@@ -93,16 +94,16 @@ def check_step(step: PlanStep, registry: Registry) -> tuple[dict | None, list[st
     s = step.skill
     desc = registry.get(s)
     if desc is None:
-        return None, [f"unknown skill '{s}'; available: {', '.join(sorted(registry.names()))}"]
+        return None, [prompts.UNKNOWN_SKILL.format(skill=s, available=", ".join(sorted(registry.names())))]
 
     raw = step.params
     violations: list[str] = []
     for p in raw:
         if p not in desc.params:
-            violations.append(f"unknown parameter '{p}' for skill {s}")
+            violations.append(prompts.UNKNOWN_PARAM.format(param=p, skill=s))
     for p, spec in desc.params.items():
         if spec.required and p not in raw:
-            violations.append(f"missing parameter '{p}' for skill {s}")
+            violations.append(prompts.MISSING_PARAM.format(param=p, skill=s))
 
     typed: dict[str, Any] = {}
     for p, spec in desc.params.items():
@@ -110,8 +111,10 @@ def check_step(step: PlanStep, registry: Registry) -> tuple[dict | None, list[st
             continue
         value = _coerce(spec, raw[p])
         if value is _MISSING or value is _OVERFLOW:
-            expected = "a finite number" if value is _OVERFLOW else _expected(spec)
-            violations.append(f"parameter '{p}' for skill {s} must be {expected}, got {_short_repr(raw[p])}")
+            expected = prompts.EXPECTED_NUMBER if value is _OVERFLOW else _expected(spec)
+            violations.append(
+                prompts.PARAM_WRONG_TYPE.format(param=p, skill=s, expected=expected, value=_short_repr(raw[p]))
+            )
         else:
             typed[p] = value
 
