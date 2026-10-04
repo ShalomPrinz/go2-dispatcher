@@ -56,7 +56,7 @@ def make_planner(cfg: Config) -> PlannerClient:
     key = os.environ.get(API_KEY_ENV, "").strip()
     if not key:
         _exit2(MISSING_API_KEY)
-    return AnthropicPlanner(key, cfg.llm, cfg.loop.planning_horizon)
+    return AnthropicPlanner(key, cfg.llm)
 
 
 def initial_posture(executor: SkillExecutor) -> Posture:

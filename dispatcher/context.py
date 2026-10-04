@@ -4,8 +4,8 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from typing import Any, Literal
 
 from . import prompts
@@ -20,6 +20,7 @@ NOT_DISPATCHED_OUTCOMES = frozenset({"rejected", "motion_budget_exceeded"})
 BUDGET_DECIMALS = 2  # budget numbers: round(x, 2) then :g (dispatcher/docs/loop-and-context.md)
 
 ReturnReason = Literal["initial", "plan_complete", "checkpoint", "failure"]
+RemainingTag = Literal["pending", "abandoned"]
 
 
 # --- prompt surface (dispatcher/docs/loop-and-context.md) ----------------------------------
@@ -109,12 +110,58 @@ def render_step(sr: StepResult, registry: Registry, *, numbered: bool) -> str:
     return f"{sr.dispatch.index}. {body}" if numbered else body
 
 
-def render_remaining(plan_step: int, step: PlanStep, registry: Registry, tag: Literal["pending", "abandoned"]) -> str:
+def render_remaining(plan_step: int, step: PlanStep, registry: Registry, tag: RemainingTag) -> str:
     """A Remaining plan line (dispatcher/docs/loop-and-context.md); raw params."""
     return f"{plan_step}. {format_call(step.skill, step.params, registry)} [{tag}]"
 
 
 # --- user message ----------------------------------------------------------------------------
+
+
+def _numbered_after(steps: Sequence[PlanStep], k: int) -> tuple[tuple[int, PlanStep], ...]:
+    return tuple((j, s) for j, s in enumerate(steps, start=1) if j > k)
+
+
+@dataclass(frozen=True)
+class Feedback:
+    """What the next call is told about the last plan: return reason, Remaining plan and notice values
+    (dispatcher/docs/loop-and-context.md). Build it with the constructor for its reason."""
+
+    return_reason: ReturnReason = "initial"
+    remaining: tuple[tuple[int, PlanStep], ...] = ()  # (plan_step, raw step) of the latest plan
+    remaining_tag: RemainingTag | None = None
+    stop_at: int | None = None  # checkpoint
+    failed: StepResult | None = None  # failure: the failed or rejected step
+    failures: int = 0  # failure: failure count including it
+
+    @classmethod
+    def plan_complete(cls) -> Feedback:
+        return cls("plan_complete")
+
+    @classmethod
+    def checkpoint(cls, steps: Sequence[PlanStep], stop_at: int) -> Feedback:
+        return cls("checkpoint", _numbered_after(steps, stop_at), "pending", stop_at=stop_at)
+
+    @classmethod
+    def failure(cls, steps: Sequence[PlanStep], failed: StepResult, failures: int, *, ran: int) -> Feedback:
+        """``ran``: plan steps that ran, the failed one included (0 for a pre-check rejection)."""
+        return cls("failure", _numbered_after(steps, ran), "abandoned", failed=failed, failures=failures)
+
+    def notice(self, max_failures: int) -> str:
+        if self.return_reason == "checkpoint":
+            return prompts.notice("checkpoint", n=self.stop_at)
+        if self.return_reason == "failure":
+            assert self.failed is not None  # set by Feedback.failure
+            ref = self.failed.ref
+            return prompts.notice(
+                "failure",
+                n=ref.plan_step,
+                skill=ref.skill,
+                outcome=self.failed.outcome,
+                f=self.failures,
+                max_failures=max_failures,
+            )
+        return prompts.notice(self.return_reason)
 
 
 @dataclass(frozen=True)
@@ -129,11 +176,8 @@ class ContextInput:
     llm_calls: int  # completed LLM calls before this request
     max_llm_calls: int
     history_k: int  # cfg.loop.context_history_k
-    return_reason: ReturnReason
     steps: Sequence[StepResult] = ()  # every recorded step of this task, in order
-    remaining: Sequence[tuple[int, PlanStep]] = ()  # (plan_step, raw step) of the latest plan
-    remaining_tag: Literal["pending", "abandoned"] | None = None
-    notice_args: Mapping[str, Any] = field(default_factory=dict)  # n, skill, outcome, f
+    feedback: Feedback = Feedback()
     previous: TaskSummary | None = None
 
 
@@ -179,16 +223,10 @@ def executed_block(steps: Sequence[StepResult], registry: Registry, k: int) -> s
     return "\n".join(lines)
 
 
-def remaining_block(
-    remaining: Sequence[tuple[int, PlanStep]], tag: Literal["pending", "abandoned"] | None, registry: Registry
-) -> str:
+def remaining_block(remaining: Sequence[tuple[int, PlanStep]], tag: RemainingTag | None, registry: Registry) -> str:
     if not remaining or tag is None:
         return prompts.NONE
     return "\n".join(render_remaining(n, step, registry, tag) for n, step in remaining)
-
-
-def notice_block(inp: ContextInput) -> str:
-    return prompts.notice(inp.return_reason, max_failures=inp.max_failures, **inp.notice_args)
 
 
 def build_user_message(inp: ContextInput, registry: Registry) -> str:
@@ -202,8 +240,10 @@ def build_user_message(inp: ContextInput, registry: Registry) -> str:
         _section(prompts.SECTION_TASK, inp.task),
         _section(prompts.SECTION_BUDGET, budget_block(inp)),
         _section(prompts.SECTION_EXECUTED, executed_block(inp.steps, registry, inp.history_k)),
-        _section(prompts.SECTION_REMAINING, remaining_block(inp.remaining, inp.remaining_tag, registry)),
-        _section(prompts.SECTION_NOTICE, notice_block(inp)),
+        _section(
+            prompts.SECTION_REMAINING, remaining_block(inp.feedback.remaining, inp.feedback.remaining_tag, registry)
+        ),
+        _section(prompts.SECTION_NOTICE, inp.feedback.notice(inp.max_failures)),
     ]
     return prompts.SECTION_SEPARATOR.join(sections)
 

@@ -49,10 +49,10 @@ Sonnet 5.5 returns HTTP 400 for three things an earlier design relied on. A 400 
 
 ## Response handling
 
-For each response, in this order:
+`AnthropicPlanner` returns the reply unvalidated: the input of the first `tool_use` block named `submit_plan` (`thinking` and `text` blocks before it are skipped, further calls are ignored), or none. The loop then checks it with `llm.check_reply`, in this order ([loop-and-context.md](loop-and-context.md#design-decisions)):
 
 1. `stop_reason == "max_tokens"` → invalid, `rejection_kind = "max_tokens"`, error `reply was cut off; keep the plan shorter`. The tool input, if any, is logged but not validated.
-2. The first `tool_use` block named `submit_plan` is taken; `thinking` and `text` blocks before it are skipped, and further calls are ignored. No such block (for example a text-only reply) → invalid, `rejection_kind = "no_tool_call"`, error `no submit_plan call in reply`.
+2. No `submit_plan` block (for example a text-only reply) → invalid, `rejection_kind = "no_tool_call"`, error `no submit_plan call in reply`.
 3. The block's input is validated ([loop-and-context.md](loop-and-context.md#plan-validation)); `rejection_kind` is `horizon`, `schema`, `semantic` or `none`.
 
 All content blocks, `usage` (verbatim), `stop_reason`, latency, attempts, `response_id` and `request_id` are logged in the `llm_response` record ([run-log.md](run-log.md)). A reply with `stop_reason = "refusal"` (Sonnet 5.5 safety classifiers) has no `submit_plan` call, so it is handled as `no_tool_call`; there is no special handling and no fallback model.

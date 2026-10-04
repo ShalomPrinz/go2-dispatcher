@@ -5,12 +5,13 @@ Wording is draft (docs/roadmap.md) and must stay identical across experimental c
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from .budget import (
     MOTION_BUDGET_MESSAGE,  # re-exported: defined once, in budget.py (dispatcher/docs/loop-and-context.md)
 )
-from .models import TaskOutcomeCode
+from .models import StepResult, TaskOutcomeCode
 
 __all__ = [
     "SYSTEM_TEMPLATE",
@@ -39,6 +40,7 @@ __all__ = [
     "MOTION_BUDGET_MESSAGE",
     "OPERATOR_MESSAGES",
     "STOP_MOVE_WARNING",
+    "OutcomeFacts",
     "operator_message",
     "BUSY",
     "STOPPING",
@@ -165,12 +167,44 @@ OPERATOR_MESSAGES: dict[str, str] = {
 STOP_MOVE_WARNING = " WARNING: the stop command to the robot failed. Stop the robot manually."
 
 
-def operator_message(outcome: TaskOutcomeCode, *, stop_move_failed: bool = False, **args: Any) -> str:
-    """Operator text for ``outcome``. Arguments by outcome: DONE/ABORTED ``message``;
-    TIME_LIMIT_EXCEEDED ``limit``; FAILURE_BUDGET_EXHAUSTED ``n``, ``skill``,
-    ``error_message``; CALL_BUDGET_EXHAUSTED ``n``; LLM_ERROR ``detail``;
-    INTERNAL_ERROR ``exception_type``, ``run_id``."""
-    text = OPERATOR_MESSAGES[outcome].format(**args)
+@dataclass(frozen=True)
+class OutcomeFacts:
+    """What an operator message is filled from; each outcome's text uses only the fields it names."""
+
+    run_id: str
+    time_limit_s: float
+    max_llm_calls: int
+    failures: int
+    last_failure: StepResult | None = None
+    message: str | None = None  # DONE / ABORTED: the model's message
+    detail: str = ""  # LLM_ERROR
+    exception_type: str = "Exception"  # INTERNAL_ERROR
+
+
+def _operator_args(outcome: TaskOutcomeCode, facts: OutcomeFacts) -> dict[str, Any]:
+    if outcome in ("DONE", "ABORTED"):
+        return {"message": facts.message or ""}
+    if outcome == "TIME_LIMIT_EXCEEDED":
+        return {"limit": facts.time_limit_s}
+    if outcome == "FAILURE_BUDGET_EXHAUSTED":
+        lf = facts.last_failure
+        return {
+            "n": facts.failures,
+            "skill": lf.ref.skill if lf else "",
+            "error_message": (lf.error_message or lf.outcome) if lf else "",
+        }
+    if outcome == "CALL_BUDGET_EXHAUSTED":
+        return {"n": facts.max_llm_calls}
+    if outcome == "LLM_ERROR":
+        return {"detail": facts.detail}
+    if outcome == "INTERNAL_ERROR":
+        return {"exception_type": facts.exception_type, "run_id": facts.run_id}
+    return {}
+
+
+def operator_message(outcome: TaskOutcomeCode, facts: OutcomeFacts, *, stop_move_failed: bool = False) -> str:
+    """Operator text for ``outcome``, plus the StopMove warning if a StopMove failed."""
+    text = OPERATOR_MESSAGES[outcome].format(**_operator_args(outcome, facts))
     return text + STOP_MOVE_WARNING if stop_move_failed else text
 
 

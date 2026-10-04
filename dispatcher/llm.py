@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol
 from pydantic import BaseModel, ValidationError
 
 from .config import LLMConfig
-from .models import LLMInterrupted, LLMUnavailable, Plan
+from .models import LLMInterrupted, LLMUnavailable, Plan, StopCause
 
 if TYPE_CHECKING:
     import anthropic
@@ -28,6 +28,8 @@ __all__ = [
     "STEP_REQUIRED",
     "plan_tool_schema",
     "LLMResult",
+    "PlanCheck",
+    "check_reply",
     "PlannerClient",
     "AnthropicPlanner",
     "RETRYABLE_STATUS_CODES",
@@ -168,10 +170,9 @@ def validate_tool_input(raw: Any, horizon: int) -> tuple[Plan | None, list[str],
 
 
 class LLMResult(BaseModel):
-    plan: Plan | None
-    tool_input: Any | None  # raw tool input as received
-    errors: list[str]  # empty iff plan is valid
-    rejection_kind: RejectionKind
+    """One planner reply, unvalidated: the loop checks it with ``check_reply`` (dispatcher/docs/llm.md)."""
+
+    tool_input: Any | None  # raw submit_plan input as received; None if the reply has no submit_plan call
     usage: dict  # response.usage.model_dump(), verbatim
     stop_reason: str | None
     content: list[dict]  # all response content blocks, model_dump()
@@ -180,6 +181,22 @@ class LLMResult(BaseModel):
     attempts: int  # 1 + infra retries
     response_id: str | None
     request_id: str | None
+
+
+class PlanCheck(BaseModel):
+    plan: Plan | None  # set iff errors is empty
+    errors: list[str]
+    rejection_kind: RejectionKind
+
+
+def check_reply(res: LLMResult, horizon: int) -> PlanCheck:
+    """Response handling then plan validation, in the order of dispatcher/docs/llm.md."""
+    if res.stop_reason == "max_tokens":
+        return PlanCheck(plan=None, errors=[ERR_MAX_TOKENS], rejection_kind="max_tokens")
+    if res.tool_input is None:
+        return PlanCheck(plan=None, errors=[ERR_NO_TOOL_CALL], rejection_kind="no_tool_call")
+    plan, errors, kind = validate_tool_input(res.tool_input, horizon)
+    return PlanCheck(plan=plan, errors=errors, rejection_kind=kind)
 
 
 class PlannerClient(Protocol):
@@ -232,13 +249,11 @@ class AnthropicPlanner:
         self,
         api_key: str,
         llm_cfg: LLMConfig,
-        horizon: int,
         *,
         http_client: httpx2.Client | None = None,
         wait: Callable[[threading.Event, float], bool] = _default_wait,
     ):
         self._cfg = llm_cfg
-        self._horizon = horizon
         self._wait = wait
         import anthropic
 
@@ -267,9 +282,9 @@ class AnthropicPlanner:
         while True:
             remaining = remaining_s()
             if remaining <= 0:
-                raise LLMInterrupted("task_time_limit")
+                raise LLMInterrupted(StopCause.TASK_TIME_LIMIT)
             if stop_event.is_set():
-                raise LLMInterrupted("operator")
+                raise LLMInterrupted(StopCause.OPERATOR)
             attempt_timeout_s = min(cfg.request_timeout_s, remaining)
             t_attempt = time.monotonic()
             try:
@@ -292,7 +307,7 @@ class AnthropicPlanner:
                 if retry_after is not None:
                     sleep_s = min(max(sleep_s, retry_after), RETRY_AFTER_CAP_S)
                 if sleep_s >= remaining_s():
-                    raise LLMInterrupted("task_time_limit") from e
+                    raise LLMInterrupted(StopCause.TASK_TIME_LIMIT) from e
                 on_infra_retry(
                     {
                         "call_index": call_index,
@@ -304,7 +319,7 @@ class AnthropicPlanner:
                     }
                 )
                 if self._wait(stop_event, sleep_s):
-                    raise LLMInterrupted("operator") from e
+                    raise LLMInterrupted(StopCause.OPERATOR) from e
                 retries += 1
                 continue
             latency_ms = (time.monotonic() - t_attempt) * 1000.0
@@ -315,22 +330,11 @@ class AnthropicPlanner:
         )
 
     def _result(self, resp: Any, *, latency_ms: float, total_ms: float, attempts: int) -> LLMResult:
-        """Response handling (dispatcher/docs/llm.md). Thinking and text blocks are skipped when choosing the
-        tool_use block; all blocks are kept in ``content``."""
+        """Takes the first submit_plan tool_use block, skipping thinking and text blocks; all blocks are kept
+        in ``content`` (dispatcher/docs/llm.md)."""
         block = next((b for b in resp.content if b.type == "tool_use" and b.name == TOOL_NAME), None)
-        tool_input = block.input if block is not None else None
-        plan: Plan | None = None
-        if resp.stop_reason == "max_tokens":
-            errors, kind = [ERR_MAX_TOKENS], "max_tokens"
-        elif block is None:
-            errors, kind = [ERR_NO_TOOL_CALL], "no_tool_call"
-        else:
-            plan, errors, kind = validate_tool_input(tool_input, self._horizon)
         return LLMResult(
-            plan=plan,
-            tool_input=tool_input,
-            errors=errors,
-            rejection_kind=kind,
+            tool_input=block.input if block is not None else None,
             usage=resp.usage.model_dump(),
             stop_reason=resp.stop_reason,
             content=[b.model_dump() for b in resp.content],

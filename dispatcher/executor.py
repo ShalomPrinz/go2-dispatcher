@@ -21,7 +21,7 @@ from skills.env import child_env
 from skills.policy import SkillPolicy
 
 from .config import Config
-from .models import RobotState, SkillResponse, StopMoveResult, StopReason
+from .models import RobotState, SkillResponse, StopCause, StopMoveResult
 from .registry import SkillDescriptor
 
 SECRET_ENV = frozenset({"ANTHROPIC_API_KEY", "TELEGRAM_BOT_TOKEN"})
@@ -32,23 +32,14 @@ STDERR_TAIL_CHARS = 2000  # stderr kept for the log (skills/docs/skills.md)
 
 _RESPONSE_ADAPTER = TypeAdapter(SkillResponse)  # built once; validates the stdlib dataclass
 
-InterruptCause = Literal["operator", "task_time_limit", "shutdown"]
-KillCause = Literal["operator", "task_time_limit", "shutdown", "step_timeout"]
+InterruptCause = StopCause  # old name, still imported by dispatcher/tests/helpers/fakes.py
 
 ExecOutcome = Literal["ok", "error", "timeout", "malformed", "interrupted"]
-
-# kill cause -> (outcome, error_code, error_message template)
-_KILL_OUTCOMES: dict[KillCause, tuple[ExecOutcome, str, str]] = {
-    "step_timeout": ("timeout", "timeout", "killed after {timeout_s:g}s timeout"),
-    "operator": ("interrupted", "stopped_by_operator", "stopped by operator"),
-    "task_time_limit": ("interrupted", "task_time_limit", "task time limit reached"),
-    "shutdown": ("interrupted", "shutdown", "dispatcher shutting down"),
-}
 
 
 class ExecResult(BaseModel):
     outcome: ExecOutcome
-    interrupt_cause: InterruptCause | None = None
+    interrupt_cause: StopCause | None = None  # set iff outcome is interrupted
     response: SkillResponse | None = None
     exit_code: int | None = None
     pid: int | None = None
@@ -73,9 +64,9 @@ class SkillExecutor(Protocol):
         stop_event: threading.Event,
     ) -> ExecResult: ...
 
-    def kill_current(self, cause: InterruptCause) -> bool: ...
+    def kill_current(self, cause: StopCause) -> bool: ...
 
-    def stop_move(self, reason: StopReason) -> StopMoveResult: ...
+    def stop_move(self, reason: StopCause) -> StopMoveResult: ...
 
     def read_state(self) -> RobotState | None: ...
 
@@ -149,7 +140,7 @@ class Executor:
         self.base_dir = Path(base_dir)
         self._lock = threading.Lock()
         self._current: subprocess.Popen | None = None
-        self._kill_cause: KillCause | None = None
+        self._kill_cause: StopCause | None = None
 
     # --- environment and process start (skills/docs/skills.md) ----------------------------------
 
@@ -183,17 +174,22 @@ class Executor:
 
     # --- kill (docs/safety.md) --------------------------------------------------------------
 
-    def _kill_locked(self, proc: subprocess.Popen, cause: KillCause) -> bool:
+    def _kill_locked(self, proc: subprocess.Popen, cause: StopCause) -> bool:
         with self._lock:
             if self._current is not proc or self._kill_cause is not None:
                 return False
             if proc.poll() is not None:
                 return False
-            self._kill_cause = cause
+            self._kill_cause = StopCause(cause)
             _killpg(proc.pid)
             return True
 
-    def kill_current(self, cause: InterruptCause) -> bool:
+    def _release_locked(self) -> StopCause | None:
+        """Clear the current process (caller holds the lock); returns why it was killed, if it was."""
+        cause, self._current, self._kill_cause = self._kill_cause, None, None
+        return cause
+
+    def kill_current(self, cause: StopCause) -> bool:
         """Kill the running skill process, if any; returns whether one was killed."""
         with self._lock:
             proc = self._current
@@ -224,17 +220,15 @@ class Executor:
             with self._lock:
                 rc = proc.poll()
                 if rc is not None:
-                    cause = self._kill_cause
-                    self._current = None
-                    self._kill_cause = None
+                    cause = self._release_locked()
                     break
             elapsed = time.monotonic() - t0
             if stop_event.is_set():
-                self._kill_locked(proc, "operator")
+                self._kill_locked(proc, StopCause.OPERATOR)
             elif elapsed >= remaining_task_s:
-                self._kill_locked(proc, "task_time_limit")
+                self._kill_locked(proc, StopCause.TASK_TIME_LIMIT)
             elif elapsed >= timeout_s:
-                self._kill_locked(proc, "step_timeout")
+                self._kill_locked(proc, StopCause.STEP_TIMEOUT)
             time.sleep(POLL_INTERVAL_S)
         readers.join()
         duration_ms = _ms(t0)
@@ -242,12 +236,12 @@ class Executor:
         response = _parse_response(readers.stdout, skill.name)
 
         outcome: ExecOutcome
-        interrupt_cause: InterruptCause | None = None
+        interrupt_cause: StopCause | None = None
         stop: StopMoveResult | None = None
         if cause is not None:
-            outcome, error_code, template = _KILL_OUTCOMES[cause]
+            outcome, error_code, template = cause.kill
             stop = self.stop_move(reason=cause)
-            interrupt_cause = None if cause == "step_timeout" else cause
+            interrupt_cause = cause if outcome == "interrupted" else None
             error_message = template.format(timeout_s=timeout_s)
         elif response is None:
             outcome, error_code = "malformed", "malformed"
@@ -287,7 +281,7 @@ class Executor:
         tail = (err or "")[-STDERR_TAIL_CHARS:] or None
         return proc.returncode, response, tail, duration_ms
 
-    def stop_move(self, reason: StopReason) -> StopMoveResult:
+    def stop_move(self, reason: StopCause) -> StopMoveResult:
         """Never raises: any failure is returned as ``ok=False`` with the error in stderr_tail."""
         t0 = time.monotonic()
         try:

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from enum import Enum
+from typing import Any, Literal, NamedTuple
 
 from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr, model_validator
 
@@ -38,11 +39,11 @@ class LLMUnavailable(Exception):
 
 
 class LLMInterrupted(Exception):
-    """Stop or task deadline hit while waiting to retry an LLM call."""
+    """Stop (``OPERATOR``) or task deadline (``TASK_TIME_LIMIT``) hit while waiting to retry an LLM call."""
 
-    def __init__(self, cause: Literal["operator", "task_time_limit"]):
+    def __init__(self, cause: StopCause):
         super().__init__(cause)
-        self.cause = cause
+        self.cause = StopCause(cause)
 
 
 class _Model(BaseModel):
@@ -78,12 +79,51 @@ StepOutcome = Literal["ok", "error", "timeout", "malformed", "rejected", "motion
 FAILURE_OUTCOMES = frozenset({"error", "timeout", "malformed", "rejected", "motion_budget_exceeded"})
 
 
-StopReason = Literal["operator", "task_time_limit", "step_timeout", "shutdown", "internal_error"]
+class StopCause(str, Enum):
+    """Why a task or a running step is cut short; the one place its mappings live
+    (dispatcher/docs/loop-and-context.md). Values are the logged strings."""
+
+    OPERATOR = "operator"
+    SHUTDOWN = "shutdown"
+    TASK_TIME_LIMIT = "task_time_limit"
+    STEP_TIMEOUT = "step_timeout"
+    INTERNAL_ERROR = "internal_error"
+
+    @property
+    def task_outcome(self) -> TaskOutcomeCode:
+        """How the task ends when this cause interrupts it (OPERATOR, SHUTDOWN, TASK_TIME_LIMIT only)."""
+        return _TASK_OUTCOMES[self]
+
+    @property
+    def kill(self) -> StepKill:
+        """What a skill process killed for this cause reports (all but INTERNAL_ERROR)."""
+        return _KILLS[self]
+
+
+class StepKill(NamedTuple):
+    outcome: Literal["timeout", "interrupted"]
+    error_code: str
+    error_message: str  # template; {timeout_s} is the step timeout
+
+
+_TASK_OUTCOMES: dict[StopCause, TaskOutcomeCode] = {
+    StopCause.OPERATOR: "STOPPED",
+    StopCause.SHUTDOWN: "STOPPED",
+    StopCause.TASK_TIME_LIMIT: "TIME_LIMIT_EXCEEDED",
+}
+_KILLS: dict[StopCause, StepKill] = {
+    StopCause.STEP_TIMEOUT: StepKill("timeout", "timeout", "killed after {timeout_s:g}s timeout"),
+    StopCause.OPERATOR: StepKill("interrupted", "stopped_by_operator", "stopped by operator"),
+    StopCause.TASK_TIME_LIMIT: StepKill("interrupted", "task_time_limit", "task time limit reached"),
+    StopCause.SHUTDOWN: StepKill("interrupted", "shutdown", "dispatcher shutting down"),
+}
+KILLED_OUTCOMES = frozenset(k.outcome for k in _KILLS.values())  # posture unknown after these
+StopReason = StopCause  # old name, still imported by dispatcher/tests/helpers/fakes.py
 
 
 class StopMoveResult(_Model):
     ok: bool
-    reason: StopReason
+    reason: StopCause
     duration_ms: float
     exit_code: int | None = None
     response: SkillResponse | None = None  # includes state_after sampled after StopMove

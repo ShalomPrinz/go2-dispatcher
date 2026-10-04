@@ -11,6 +11,7 @@ import pytest
 from dispatcher.budget import MotionBudget
 from dispatcher.context import (
     ContextInput,
+    Feedback,
     build_user_message,
     format_value,
     render_remaining,
@@ -91,7 +92,6 @@ def make_input(budget: MotionBudget | None = None, **kw: Any) -> ContextInput:
         llm_calls=0,
         max_llm_calls=20,
         history_k=10,
-        return_reason="initial",
     )
     return replace(base, **kw)
 
@@ -205,10 +205,7 @@ def test_after_checkpoint(registry, update_golden):
         budget=used_budget(distance=1.5),
         llm_calls=1,
         steps=steps,
-        remaining=[(2, plan[1]), (3, plan[2])],
-        remaining_tag="pending",
-        return_reason="checkpoint",
-        notice_args={"n": 1},
+        feedback=Feedback.checkpoint(plan, stop_at=1),
     )
     text = build_user_message(inp, registry)
     assert "2. detect_object(target=chair) [pending]" in text
@@ -229,15 +226,13 @@ def test_after_failure(registry, update_golden):
             stderr_tail="SECRET traceback",
         ),
     ]
+    plan = [PlanStep(skill="turn"), PlanStep(skill="walk"), PlanStep(skill="sit")]
     inp = make_input(
         budget=used_budget(distance=2.0, rotation=90.0),
         failures=1,
         llm_calls=1,
         steps=steps,
-        remaining=[(3, PlanStep(skill="sit"))],
-        remaining_tag="abandoned",
-        return_reason="failure",
-        notice_args={"n": 2, "skill": "walk", "outcome": "error", "f": 1},
+        feedback=Feedback.failure(plan, steps[1], 1, ran=2),
     )
     text = build_user_message(inp, registry)
     assert "3. sit() [abandoned]" in text
@@ -263,10 +258,7 @@ def test_after_rejection(registry, update_golden):
         failures=1,
         llm_calls=2,
         steps=steps,
-        remaining=list(enumerate(plan, start=1)),
-        remaining_tag="abandoned",
-        return_reason="failure",
-        notice_args={"n": 2, "skill": "walk", "outcome": "rejected", "f": 1},
+        feedback=Feedback.failure(plan, rejection, 1, ran=0),
     )
     text = build_user_message(inp, registry)
     assert "- rejected before running: walk(direction=up, distance_m=9) -> rejected: " in text
@@ -277,7 +269,7 @@ def test_after_rejection(registry, update_golden):
 
 def test_truncation_keeps_last_k(registry):
     steps = [ok_step(i, "sit", {}) for i in range(1, 16)]
-    inp = make_input(steps=steps, history_k=10, llm_calls=1, return_reason="plan_complete")
+    inp = make_input(steps=steps, history_k=10, llm_calls=1, feedback=Feedback.plan_complete())
     text = build_user_message(inp, registry)
     body = text.split("## Executed so far\n", 1)[1].split("\n\n", 1)[0].splitlines()
     assert len(body) == 1 + 10

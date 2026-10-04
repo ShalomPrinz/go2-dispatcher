@@ -4,26 +4,32 @@
 from __future__ import annotations
 
 import typing
+from dataclasses import replace
 
 import pytest
 
 from dispatcher import prompts
-from dispatcher.models import TaskOutcomeCode
+from dispatcher.models import StepRef, StepResult, TaskOutcomeCode
 from tests.helpers import REPO_ROOT
 
 GOLDEN = REPO_ROOT / "dispatcher" / "tests" / "golden" / "fixed_texts.txt"
 ALL_OUTCOMES = typing.get_args(TaskOutcomeCode)
 
-OUTCOME_ARGS = {
-    "DONE": {"message": "Walked 1 m."},
-    "ABORTED": {"message": "Which chair?"},
-    "STOPPED": {},
-    "TIME_LIMIT_EXCEEDED": {"limit": 300.0},
-    "FAILURE_BUDGET_EXHAUSTED": {"n": 3, "skill": "walk", "error_message": "Move returned 3104"},
-    "CALL_BUDGET_EXHAUSTED": {"n": 20},
-    "LLM_INVALID": {},
-    "LLM_ERROR": {"detail": "overloaded"},
-    "INTERNAL_ERROR": {"exception_type": "KeyError", "run_id": "abc123"},
+FACTS = prompts.OutcomeFacts(
+    run_id="abc123",
+    time_limit_s=300.0,
+    max_llm_calls=20,
+    failures=3,
+    last_failure=StepResult(
+        ref=StepRef(call_index=1, plan_step=1, skill="walk", params={}),
+        outcome="error",
+        error_message="Move returned 3104",
+    ),
+    detail="overloaded",
+    exception_type="KeyError",
+)
+OUTCOME_FACTS = {
+    code: replace(FACTS, message={"DONE": "Walked 1 m.", "ABORTED": "Which chair?"}.get(code)) for code in ALL_OUTCOMES
 }
 
 NOTICE_ARGS = {
@@ -38,11 +44,11 @@ def render_fixed_texts() -> str:
     """Every fixed text from prompts.py, rendered with example arguments and labelled."""
     parts: list[tuple[str, str]] = []
     for code in ALL_OUTCOMES:
-        parts.append((f"operator_message {code}", prompts.operator_message(code, **OUTCOME_ARGS[code])))
+        parts.append((f"operator_message {code}", prompts.operator_message(code, OUTCOME_FACTS[code])))
         parts.append(
             (
                 f"operator_message {code} stop_move_failed",
-                prompts.operator_message(code, stop_move_failed=True, **OUTCOME_ARGS[code]),
+                prompts.operator_message(code, OUTCOME_FACTS[code], stop_move_failed=True),
             )
         )
     for reason in prompts.NOTICES:
@@ -68,10 +74,9 @@ def test_fixed_texts_match_golden(update_golden):
 
 def test_every_outcome_has_operator_message():
     assert set(prompts.OPERATOR_MESSAGES) == set(ALL_OUTCOMES)
-    assert set(OUTCOME_ARGS) == set(ALL_OUTCOMES)
     assert set(NOTICE_ARGS) == set(prompts.NOTICES)
     for code in ALL_OUTCOMES:
-        text = prompts.operator_message(code, **OUTCOME_ARGS[code])
+        text = prompts.operator_message(code, OUTCOME_FACTS[code])
         assert text and "{" not in text
 
 

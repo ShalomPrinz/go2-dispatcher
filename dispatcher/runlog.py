@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from .budget import MotionBudget
     from .config import Config
     from .context import PromptSurface
-    from .llm import LLMResult
+    from .llm import LLMResult, PlanCheck
     from .models import Plan, Posture, StepDispatch, StepRef, StepResult, StopMoveResult, TaskOutcome, TaskSummary
 
 INDEX_FILE = "index.jsonl"
@@ -194,20 +194,20 @@ class RunLog:
     def plan(self, call_index: int, plan: Plan, stop_at: int) -> None:
         self._write("plan", call_index=call_index, plan=plan.model_dump(mode="json"), stop_at=stop_at)
 
-    def plan_invalid(self, call_index: int, res: LLMResult, horizon: int) -> None:
-        is_horizon = res.rejection_kind == "horizon"
+    def plan_invalid(self, call_index: int, tool_input: Any, check: PlanCheck, horizon: int) -> None:
+        is_horizon = check.rejection_kind == "horizon"
         steps_in_plan = None
         if is_horizon:
-            assert res.tool_input is not None  # horizon implies a steps list
-            steps_in_plan = len(res.tool_input["steps"])
+            assert tool_input is not None  # horizon implies a steps list
+            steps_in_plan = len(tool_input["steps"])
         self._write(
             "plan_invalid",
             call_index=call_index,
-            tool_input=res.tool_input,
-            rejection_kind=res.rejection_kind,
+            tool_input=tool_input,
+            rejection_kind=check.rejection_kind,
             steps_in_plan=steps_in_plan,
             horizon=horizon if is_horizon else None,
-            errors=res.errors,
+            errors=check.errors,
         )
 
     def step_start(self, ref: StepRef, dispatch: StepDispatch) -> None:

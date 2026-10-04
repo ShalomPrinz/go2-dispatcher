@@ -13,6 +13,7 @@ from dispatcher.llm import (
     ERR_NO_TOOL_CALL,
     TOOL_NAME,
     AnthropicPlanner,
+    check_reply,
     plan_tool_schema,
 )
 from dispatcher.models import LLMInterrupted, LLMUnavailable
@@ -59,7 +60,7 @@ class Harness:
         cfg = make_config(tmp_path, llm=llm or {})
         transport = httpx.MockTransport(self._handle)
         self.planner = AnthropicPlanner(
-            "test-key", cfg.llm, H, http_client=httpx.Client(transport=transport), wait=self._wait
+            "test-key", cfg.llm, http_client=httpx.Client(transport=transport), wait=self._wait
         )
 
     def _handle(self, request: httpx.Request) -> httpx.Response:
@@ -115,9 +116,10 @@ def test_request_thinking_adaptive(tmp_path):
 def test_valid_tool_use_parsed(tmp_path):
     h = Harness(tmp_path, [ok()])
     r = h.plan()
-    assert r.errors == [] and r.rejection_kind == "none"
-    assert r.plan is not None and r.plan.steps[0].skill == "sit"
     assert r.tool_input == GOOD_INPUT
+    c = check_reply(r, H)
+    assert c.errors == [] and c.rejection_kind == "none"
+    assert c.plan is not None and c.plan.steps[0].skill == "sit"
     assert {k: r.usage[k] for k in USAGE} == USAGE
     assert r.attempts == 1
     assert r.stop_reason == "tool_use"
@@ -141,36 +143,37 @@ def test_first_submit_plan_block_used(tmp_path):
     text = {"type": "text", "text": "thinking aloud"}
     body = message([thinking, text, tool_use(GOOD_INPUT), tool_use(second, id_="toolu_2")])
     r = Harness(tmp_path, [ok(body)]).plan()
-    assert r.plan is not None and r.plan.status == "PLAN"
+    assert r.tool_input == GOOD_INPUT
     assert [b["type"] for b in r.content] == ["thinking", "text", "tool_use", "tool_use"]
 
 
 def test_invalid_tool_input_validated(tmp_path):
     body = message([tool_use({"status": "PLAN", "steps": [{"skill": "sit"}] * (H + 1)})])
-    r = Harness(tmp_path, [ok(body)]).plan()
-    assert r.plan is None and r.rejection_kind == "horizon"
-    assert r.errors == [f"plan has {H + 1} steps; the maximum is {H}"]
+    c = check_reply(Harness(tmp_path, [ok(body)]).plan(), H)
+    assert c.plan is None and c.rejection_kind == "horizon"
+    assert c.errors == [f"plan has {H + 1} steps; the maximum is {H}"]
 
 
 def test_text_only_reply_is_no_tool_call(tmp_path):
     body = message([{"type": "text", "text": "I would sit down."}], stop_reason="end_turn")
     r = Harness(tmp_path, [ok(body)]).plan()
-    assert r.plan is None and r.rejection_kind == "no_tool_call"
-    assert r.errors == [ERR_NO_TOOL_CALL] and r.tool_input is None
-    assert r.content[0]["type"] == "text"
+    assert r.tool_input is None and r.content[0]["type"] == "text"
+    c = check_reply(r, H)
+    assert c.plan is None and c.rejection_kind == "no_tool_call" and c.errors == [ERR_NO_TOOL_CALL]
 
 
 def test_max_tokens(tmp_path):
     body = message([tool_use({"status": "PLAN"})], stop_reason="max_tokens")
     r = Harness(tmp_path, [ok(body)]).plan()
-    assert r.plan is None and r.rejection_kind == "max_tokens"
-    assert r.errors == [ERR_MAX_TOKENS] and r.stop_reason == "max_tokens"
+    assert r.stop_reason == "max_tokens" and r.tool_input == {"status": "PLAN"}
+    c = check_reply(r, H)
+    assert c.plan is None and c.rejection_kind == "max_tokens" and c.errors == [ERR_MAX_TOKENS]
 
 
 def test_529_then_200(tmp_path):
     h = Harness(tmp_path, [httpx.Response(529, json={"type": "error"}), ok()])
     r = h.plan()
-    assert r.attempts == 2 and r.plan is not None
+    assert r.attempts == 2 and r.tool_input == GOOD_INPUT
     assert h.sleeps == [1.0]
     assert len(h.retries) == 1
     rec = h.retries[0]

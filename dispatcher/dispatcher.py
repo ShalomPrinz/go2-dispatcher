@@ -9,25 +9,28 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field, fields
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 
 from . import prompts
 from .bounds import cut_message, precheck
 from .budget import MotionBudget
 from .config import Config
-from .context import ContextInput, PromptSurface, build_user_message, schema_retry_message
+from .context import ContextInput, Feedback, PromptSurface, build_user_message, schema_retry_message
 from .executor import STDERR_TAIL_CHARS, SkillExecutor
-from .llm import LLMResult, PlannerClient
+from .llm import LLMResult, PlanCheck, PlannerClient, check_reply
 from .models import (
     FAILURE_OUTCOMES,
+    KILLED_OUTCOMES,
     BusyError,
     LLMInterrupted,
     LLMUnavailable,
+    Plan,
     PlanStep,
     Posture,
     StepDispatch,
     StepRef,
     StepResult,
+    StopCause,
     StopMoveResult,
     TaskOutcome,
     TaskOutcomeCode,
@@ -38,8 +41,6 @@ from .runlog import NullLog, RunLog, RunLogFactory
 
 __all__ = ["Dispatcher"]
 
-KILLED_OUTCOMES = frozenset({"timeout", "interrupted"})
-STOP_CAUSES = frozenset({"operator", "shutdown"})  # interrupted -> STOPPED; else TIME_LIMIT
 EXCEPTION_WHERE = "run_task"
 
 Phase = Literal["idle", "llm_call", "step", "between", "ending"]
@@ -69,10 +70,7 @@ class _Task:
     llm_calls: int = 0
     rejections: int = 0
     horizon_rejections: int = 0
-    remaining: list[tuple[int, PlanStep]] = field(default_factory=list)
-    remaining_tag: Literal["pending", "abandoned"] | None = None
-    return_reason: str = "initial"
-    notice_args: dict = field(default_factory=dict)
+    feedback: Feedback = field(default_factory=Feedback)
     last_failure: StepResult | None = None
     stop_move_failed: bool = False
     usage_totals: dict[str, float] = field(default_factory=dict)
@@ -134,7 +132,7 @@ class Dispatcher:
             self._stop_event.set()
             if self._log is not None:
                 self._log.stop_requested(source, self._phase)
-        self.executor.kill_current("operator")
+        self.executor.kill_current(StopCause.OPERATOR)
         return "stopping"
 
     def shutdown(self, wait_s: float) -> None:
@@ -145,8 +143,8 @@ class Dispatcher:
         if acquired:
             self._task_lock.release()
             return
-        self.executor.kill_current("shutdown")
-        smr = self.executor.stop_move("shutdown")
+        self.executor.kill_current(StopCause.SHUTDOWN)
+        smr = self.executor.stop_move(StopCause.SHUTDOWN)
         with self._state_lock:
             if self._log is not None:
                 self._log.stop_move(smr)
@@ -267,7 +265,7 @@ class Dispatcher:
         except LLMInterrupted as e:
             self._set_phase("between")
             t.log.llm_interrupted(call_index, e.cause)
-            return self._end(t, "STOPPED" if e.cause == "operator" else "TIME_LIMIT_EXCEEDED", stop_move=True)
+            return self._stop(t, e.cause)
         except LLMUnavailable as e:
             self._set_phase("between")
             t.log.llm_error(call_index, e.detail)
@@ -285,40 +283,23 @@ class Dispatcher:
             return o
         return res
 
-    def _log_invalid(self, t: _Task, res: LLMResult) -> None:
-        if res.rejection_kind == "horizon":
+    def _log_invalid(self, t: _Task, res: LLMResult, check: PlanCheck) -> None:
+        if check.rejection_kind == "horizon":
             t.horizon_rejections += 1
-        t.log.plan_invalid(t.llm_calls, res, self.cfg.loop.planning_horizon)
+        t.log.plan_invalid(t.llm_calls, res.tool_input, check, self.cfg.loop.planning_horizon)
 
     # --- interrupts and end ----------------------------------------------------------------------
 
     def _check_interrupts(self, t: _Task) -> TaskOutcome | None:
         if self._stop_event.is_set():
-            return self._end(t, "STOPPED", stop_move=True)
+            return self._stop(t, StopCause.OPERATOR)
         if self._remaining_s(t) <= 0:
-            return self._end(t, "TIME_LIMIT_EXCEEDED", stop_move=True)
+            return self._stop(t, StopCause.TASK_TIME_LIMIT)
         return None
 
-    def _operator_args(self, t: _Task, outcome: TaskOutcomeCode, message: str | None, extra: dict) -> dict:
-        loop = self.cfg.loop
-        if outcome in ("DONE", "ABORTED"):
-            return {"message": message or ""}
-        if outcome == "TIME_LIMIT_EXCEEDED":
-            return {"limit": loop.task_time_limit_s}
-        if outcome == "FAILURE_BUDGET_EXHAUSTED":
-            lf = t.last_failure
-            return {
-                "n": t.failures,
-                "skill": lf.ref.skill if lf else "",
-                "error_message": (lf.error_message or lf.outcome) if lf else "",
-            }
-        if outcome == "CALL_BUDGET_EXHAUSTED":
-            return {"n": loop.max_llm_calls}
-        if outcome == "LLM_ERROR":
-            return {"detail": extra.get("detail", "")}
-        if outcome == "INTERNAL_ERROR":
-            return {"exception_type": extra.get("exception_type", "Exception"), "run_id": t.run_id}
-        return {}
+    def _stop(self, t: _Task, cause: StopCause) -> TaskOutcome:
+        """End the task for an interrupt seen by the loop and send StopMove."""
+        return self._end(t, cause.task_outcome, stop_move=cause)
 
     def _apply_stop_move(self, t: _Task, smr: StopMoveResult) -> None:
         t.log.stop_move(smr)
@@ -333,20 +314,29 @@ class Dispatcher:
         outcome: TaskOutcomeCode,
         *,
         message: str | None = None,
-        stop_move: bool = False,
+        detail: str = "",
+        exception_type: str = "Exception",
+        stop_move: StopCause | None = None,
         stop_move_result: StopMoveResult | None = None,
-        **extra: Any,
     ) -> TaskOutcome:
         self._set_phase("ending")
-        if stop_move:
-            reason = "operator" if outcome == "STOPPED" else "task_time_limit"
-            self._apply_stop_move(t, self.executor.stop_move(reason))
+        if stop_move is not None:
+            self._apply_stop_move(t, self.executor.stop_move(stop_move))
         if stop_move_result is not None:
             self._apply_stop_move(t, stop_move_result)
 
-        text = prompts.operator_message(
-            outcome, stop_move_failed=t.stop_move_failed, **self._operator_args(t, outcome, message, extra)
+        loop = self.cfg.loop
+        facts = prompts.OutcomeFacts(
+            run_id=t.run_id,
+            time_limit_s=loop.task_time_limit_s,
+            max_llm_calls=loop.max_llm_calls,
+            failures=t.failures,
+            last_failure=t.last_failure,
+            message=message,
+            detail=detail,
+            exception_type=exception_type,
         )
+        text = prompts.operator_message(outcome, facts, stop_move_failed=t.stop_move_failed)
         duration_ms = (self.clock() - t.t_start) * 1000.0
         dispatched = [s for s in t.steps if s.dispatch is not None]
         result = TaskOutcome(
@@ -393,16 +383,16 @@ class Dispatcher:
             except Exception:  # noqa: BLE001
                 pass
             try:
-                self.executor.kill_current("shutdown")
+                self.executor.kill_current(StopCause.SHUTDOWN)
             except Exception:  # noqa: BLE001
                 pass
             t0 = self.clock()
             try:
-                smr = self.executor.stop_move("internal_error")
+                smr = self.executor.stop_move(StopCause.INTERNAL_ERROR)
             except Exception as se:  # noqa: BLE001 - Executor.stop_move never raises; fakes might
                 smr = StopMoveResult(
                     ok=False,
-                    reason="internal_error",
+                    reason=StopCause.INTERNAL_ERROR,
                     duration_ms=(self.clock() - t0) * 1000.0,
                     stderr_tail=f"{type(se).__name__}: {se}"[-STDERR_TAIL_CHARS:],
                 )
@@ -414,84 +404,67 @@ class Dispatcher:
     # --- the loop (dispatcher/docs/loop-and-context.md) --------------------------------------------------------------
 
     def _loop(self, t: _Task) -> TaskOutcome:
-        loop = self.cfg.loop
         while True:
             if (o := self._check_interrupts(t)) is not None:
                 return o
-            if t.llm_calls >= loop.max_llm_calls:
-                return self._end(t, "CALL_BUDGET_EXHAUSTED")
+            plan = self._get_valid_plan(t)
+            if isinstance(plan, TaskOutcome):
+                return plan
+            feedback = self._execute_plan(t, plan)
+            if isinstance(feedback, TaskOutcome):
+                return feedback
+            if feedback.return_reason == "failure" and t.failures >= self.cfg.loop.max_failures:
+                return self._end(t, "FAILURE_BUDGET_EXHAUSTED")
+            t.feedback = feedback
 
-            user = self._context(t)
-            res = self._call(t, user, t.return_reason)
+    def _get_valid_plan(self, t: _Task) -> Plan | TaskOutcome:
+        """The request, then at most one schema retry (dispatcher/docs/llm.md). Returns a valid plan, or the
+        task outcome if the task ended."""
+        user = self._context(t)
+        request, return_reason, retry_of = user, t.feedback.return_reason, None
+        while True:
+            if t.llm_calls >= self.cfg.loop.max_llm_calls:
+                return self._end(t, "CALL_BUDGET_EXHAUSTED")
+            res = self._call(t, request, return_reason, retry_of)
             if isinstance(res, TaskOutcome):
                 return res
+            check = check_reply(res, self.cfg.loop.planning_horizon)
+            if check.plan is not None:
+                return check.plan
+            self._log_invalid(t, res, check)
+            if retry_of is not None:
+                return self._end(t, "LLM_INVALID")
+            request, return_reason, retry_of = schema_retry_message(user, check.errors), "schema_retry", return_reason
 
-            if res.errors:
-                self._log_invalid(t, res)
-                if t.llm_calls >= loop.max_llm_calls:
-                    return self._end(t, "CALL_BUDGET_EXHAUSTED")
-                res = self._call(t, schema_retry_message(user, res.errors), "schema_retry", retry_of=t.return_reason)
-                if isinstance(res, TaskOutcome):
-                    return res
-                if res.errors:
-                    self._log_invalid(t, res)
-                    return self._end(t, "LLM_INVALID")
+    def _execute_plan(self, t: _Task, plan: Plan) -> Feedback | TaskOutcome:
+        """Run a valid plan up to ``stop_at``. Returns the feedback for the next call, or the task outcome if
+        the task ended."""
+        stop_at = plan.replan_after or len(plan.steps)
+        t.log.plan(t.llm_calls, plan, stop_at)
+        if plan.status == "DONE":
+            return self._end(t, "DONE", message=plan.message)
+        if plan.status == "ABORT":
+            return self._end(t, "ABORTED", message=plan.message)
 
-            plan = res.plan
-            assert plan is not None  # no errors means a parsed plan (LLMResult)
-            stop_at = plan.replan_after or len(plan.steps)
-            t.log.plan(t.llm_calls, plan, stop_at)
-            if plan.status == "DONE":
-                return self._end(t, "DONE", message=plan.message)
-            if plan.status == "ABORT":
-                return self._end(t, "ABORTED", message=plan.message)
+        pre = precheck(plan, stop_at, self.registry, t.budget, call_index=t.llm_calls)
+        if pre.rejection is not None:
+            self._record(t, pre.rejection)
+            return Feedback.failure(plan.steps, pre.rejection, t.failures, ran=0)
 
-            pre = precheck(plan, stop_at, self.registry, t.budget, call_index=t.llm_calls)
-            if pre.rejection is not None:
-                rej = pre.rejection
-                self._record(t, rej)
-                t.remaining = list(enumerate(plan.steps, start=1))
-                t.remaining_tag = "abandoned"
-                t.notice_args = {
-                    "n": rej.ref.plan_step,
-                    "skill": rej.ref.skill,
-                    "outcome": rej.outcome,
-                    "f": t.failures,
-                }
-                if t.failures >= loop.max_failures:
-                    return self._end(t, "FAILURE_BUDGET_EXHAUSTED")
-                t.return_reason = "failure"
-                continue
+        for i, step in enumerate(plan.steps[:stop_at], start=1):
+            if (o := self._check_interrupts(t)) is not None:
+                return o
+            sr = self._run_step(t, i, step, pre.filled[i - 1])
+            if isinstance(sr, TaskOutcome):
+                return sr
+            if sr.outcome in FAILURE_OUTCOMES:
+                return Feedback.failure(plan.steps, sr, t.failures, ran=i)
+        if stop_at < len(plan.steps):
+            return Feedback.checkpoint(plan.steps, stop_at)
+        return Feedback.plan_complete()
 
-            failed = False
-            for i, step in enumerate(plan.steps[:stop_at], start=1):
-                if (o := self._check_interrupts(t)) is not None:
-                    return o
-                o = self._run_step(t, plan.steps, i, step, pre.filled[i - 1])
-                if isinstance(o, TaskOutcome):
-                    return o
-                if o:
-                    failed = True
-                    break
-
-            if failed:
-                if t.failures >= loop.max_failures:
-                    return self._end(t, "FAILURE_BUDGET_EXHAUSTED")
-                t.return_reason = "failure"
-            elif stop_at < len(plan.steps):
-                t.remaining = [(j, s) for j, s in enumerate(plan.steps, start=1) if j > stop_at]
-                t.remaining_tag = "pending"
-                t.notice_args = {"n": stop_at}
-                t.return_reason = "checkpoint"
-            else:
-                t.remaining = []
-                t.remaining_tag = None
-                t.notice_args = {}
-                t.return_reason = "plan_complete"
-
-    def _run_step(self, t: _Task, steps: list[PlanStep], i: int, step: PlanStep, params: dict) -> TaskOutcome | bool:
-        """Dispatch plan step ``i``. Returns the task outcome if the task ended, else
-        whether the step failed."""
+    def _run_step(self, t: _Task, i: int, step: PlanStep, params: dict) -> StepResult | TaskOutcome:
+        """Dispatch plan step ``i``. Returns its recorded result, or the task outcome if the step was interrupted."""
         desc = self.registry[step.skill]  # precheck passed, so the skill exists
         t.dispatched_count += 1
         fault = None
@@ -526,11 +499,6 @@ class Dispatcher:
         self._record(t, sr, ex.stop_move)
 
         if sr.outcome == "interrupted":
-            # StopMove was already sent by the executor
-            return self._end(t, "STOPPED" if ex.interrupt_cause in STOP_CAUSES else "TIME_LIMIT_EXCEEDED")
-        if sr.outcome in FAILURE_OUTCOMES:
-            t.remaining = [(j, s) for j, s in enumerate(steps, start=1) if j > i]
-            t.remaining_tag = "abandoned"
-            t.notice_args = {"n": i, "skill": sr.ref.skill, "outcome": sr.outcome, "f": t.failures}
-            return True
-        return False
+            assert ex.interrupt_cause is not None  # set iff interrupted (ExecResult)
+            return self._end(t, ex.interrupt_cause.task_outcome)  # the executor already sent StopMove
+        return sr
