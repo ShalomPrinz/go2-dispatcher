@@ -92,8 +92,6 @@ class RobotConfig(_Section):
     backend: Literal["stub", "real"] = "stub"
     network_interface: StrictStr = ""
     yolo_weights: Path = Path("models/yolov8n.pt")
-    stop_move_timeout_s: FiniteFloat = Field(default=10.0, gt=0)
-    read_state_timeout_s: FiniteFloat = Field(default=10.0, gt=0)
 
 
 class FaultConfig(_Section):

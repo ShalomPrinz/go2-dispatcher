@@ -9,12 +9,14 @@ from __future__ import annotations
 
 import time
 
-from skills import backend, runner, stub
+from skills import backend, policy, runner, stub
 from skills.runner import SkillOutcome, StateSampler
 from skills.schema import ErrorCode
 
-SKILL = "stop_move"
+TIMEOUT_S = 10.0
 SETTLE_S = 0.5
+
+POLICY = policy.SkillPolicy(name="stop_move", timeout=TIMEOUT_S)  # utility: zero cost, no observations
 
 
 def body(states: StateSampler) -> SkillOutcome:
@@ -40,7 +42,7 @@ def body(states: StateSampler) -> SkillOutcome:
 
 
 def main() -> None:
-    runner.run_main(SKILL, body, watchdog=False)
+    runner.run_main(POLICY.name, body, watchdog=False)
 
 
 if __name__ == "__main__":

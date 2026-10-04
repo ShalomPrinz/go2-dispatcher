@@ -173,8 +173,6 @@ def test_integers_at_least_one(tmp_path, section, key):
     [
         ("loop", "task_time_limit_s"),
         ("llm", "request_timeout_s"),
-        ("robot", "stop_move_timeout_s"),
-        ("robot", "read_state_timeout_s"),
         ("stub", "time_scale"),
     ],
 )
@@ -277,8 +275,6 @@ FLOAT_FIELDS = [
     ("loop", "task_time_limit_s"),
     ("motion_budget", "max_distance_m"),
     ("motion_budget", "max_rotation_deg"),
-    ("robot", "stop_move_timeout_s"),
-    ("robot", "read_state_timeout_s"),
     ("stub", "time_scale"),
 ]
 

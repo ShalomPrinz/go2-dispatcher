@@ -81,8 +81,6 @@ There is no `temperature` key (adding one is an unknown-key error), and `tool_ch
 | `backend` | `"stub"` \| `"real"` | `"stub"` | | Which backend the skill processes use. |
 | `network_interface` | str | `""` | required (non-blank) when `backend = "real"` | NIC connected to the robot, for example `"enp0s31f6"`. Passed to skills as `GO2_IFACE`. |
 | `yolo_weights` | path | `"models/yolov8n.pt"` | | YOLO weights for `detect_object` on the real backend. Never downloaded automatically. |
-| `stop_move_timeout_s` | float | `10.0` | > 0 | Time limit for the `stop_move` utility process. |
-| `read_state_timeout_s` | float | `10.0` | > 0 | Time limit for the `read_state` utility process. |
 
 ### `[stub]`
 
@@ -127,7 +125,7 @@ Each failure below is a config error:
 - `stub.faults[].kind` not one of `error | hang | crash | garbage`; `stub.faults[].step` not an integer ≥ 1; the same step listed twice.
 - `stub.detections` key not in `COCO_CLASSES`, or a value that does not match `position:closeness`.
 - Integers ≥ 1: `planning_horizon`, `max_failures`, `max_llm_calls`, `context_history_k`, `max_tokens`.
-- Floats > 0: `task_time_limit_s`, `request_timeout_s`, `stop_move_timeout_s`, `read_state_timeout_s`, `stub.time_scale`.
+- Floats > 0: `task_time_limit_s`, `request_timeout_s`, `stub.time_scale`.
 - Floats ≥ 0: `max_distance_m`, `max_rotation_deg`, every value in `infra_backoff_s`.
 - `llm.thinking` not one of `between_tools`, `adaptive`.
 - Any float key given a boolean, a string, `nan` or `±inf`.

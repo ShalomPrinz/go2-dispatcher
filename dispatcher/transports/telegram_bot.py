@@ -23,6 +23,8 @@ from telegram.ext import (
     filters,
 )
 
+from skills import stop_move
+
 from .. import prompts
 from ..config import Config
 from ..dispatcher import Dispatcher
@@ -49,7 +51,7 @@ __all__ = [
 SOURCE = "telegram"
 TOKEN_ENV = "TELEGRAM_BOT_TOKEN"
 STOP_WORD = "stop"  # matched after strip().lower() (docs/safety.md)
-SHUTDOWN_EXTRA_S = 5.0  # post_stop waits stop_move_timeout_s + this (docs/running.md)
+SHUTDOWN_EXTRA_S = 5.0  # post_stop waits the stop_move POLICY timeout + this (docs/running.md)
 SHUTDOWN_SOURCE = "shutdown"  # request_stop source on SIGINT/SIGTERM (as shutdown())
 STOP_SIGNALS = (signal.SIGINT, signal.SIGTERM)
 _STOPPING_KEY = "stop_signal_received"
@@ -152,8 +154,7 @@ async def on_post_init(app: Application) -> None:
 async def on_post_stop(app: Application) -> None:
     """Backstop (docs/running.md): waits for / force-ends a task still running."""
     dispatcher: Dispatcher = app.bot_data["dispatcher"]
-    cfg: Config = app.bot_data["cfg"]
-    await asyncio.to_thread(dispatcher.shutdown, cfg.robot.stop_move_timeout_s + SHUTDOWN_EXTRA_S)
+    await asyncio.to_thread(dispatcher.shutdown, stop_move.POLICY.timeout_s({}) + SHUTDOWN_EXTRA_S)
 
 
 def build_application(dispatcher: Dispatcher, cfg: Config, token: str) -> Application:

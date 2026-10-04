@@ -7,7 +7,7 @@ import math
 import pytest
 
 from dispatcher.registry import Registry
-from skills import detect_object, sit, stretch, turn, walk
+from skills import detect_object, read_state, sit, stop_move, stretch, turn, walk
 from skills.policy import MotionCost
 from tests.helpers import REPO_ROOT
 
@@ -34,6 +34,13 @@ MOTION_S = {
 
 def test_policies_cover_catalog():
     assert sorted(MOTION_S) == REGISTRY.names()
+
+
+def test_utility_policies_stay_out_of_registry():
+    for module in (stop_move, read_state):
+        assert module.POLICY.name == module.__name__.rpartition(".")[2]
+        assert module.POLICY.name not in REGISTRY.names()
+        assert module.POLICY.motion_cost({}) == MotionCost()
 
 
 @pytest.mark.parametrize("name", sorted(MOTION_S))

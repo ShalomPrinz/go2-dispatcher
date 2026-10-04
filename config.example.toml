@@ -29,8 +29,6 @@ dir = "skills/catalog"
 backend = "stub"                    # "stub" | "real"
 network_interface = ""              # required when backend = "real", e.g. "enp0s31f6"
 yolo_weights = "models/yolov8n.pt"
-stop_move_timeout_s = 10.0
-read_state_timeout_s = 10.0
 
 [stub]
 time_scale = 0.1                    # multiplies every simulated duration

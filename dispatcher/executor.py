@@ -10,20 +10,21 @@ import sys
 import threading
 import time
 from pathlib import Path
+from types import ModuleType
 from typing import Literal, Protocol
 
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
+from skills import read_state as read_state_utility
+from skills import stop_move as stop_move_utility
 from skills.env import child_env
+from skills.policy import SkillPolicy
 
 from .config import Config
 from .models import RobotState, SkillResponse, StopMoveResult, StopReason
 from .registry import SkillDescriptor
 
 SECRET_ENV = frozenset({"ANTHROPIC_API_KEY", "TELEGRAM_BOT_TOKEN"})
-STOP_MOVE_MODULE = "skills.stop_move"
-READ_STATE_MODULE = "skills.read_state"
-UTILITY_SKILL_NAMES = {STOP_MOVE_MODULE: "stop_move", READ_STATE_MODULE: "read_state"}
 
 POLL_INTERVAL_S = 0.05  # wait-loop poll period (docs/safety.md)
 READER_JOIN_TIMEOUT_S = 2.0  # join timeout per reader thread (docs/safety.md)
@@ -270,18 +271,19 @@ class Executor:
 
     # --- utilities (docs/safety.md) ------------------------------------------------------------
 
-    def _run_utility(self, module: str, timeout_s: float) -> tuple[int | None, SkillResponse | None, str | None, float]:
-        """Run a utility (never registered as current). Returns
-        (exit_code, response, stderr_tail, duration_ms)."""
+    def _run_utility(self, utility: ModuleType) -> tuple[int | None, SkillResponse | None, str | None, float]:
+        """Run a utility module (never registered as current) with its POLICY name and timeout.
+        Returns (exit_code, response, stderr_tail, duration_ms)."""
+        policy: SkillPolicy = utility.POLICY
         t0 = time.monotonic()
-        proc = self._popen(module, {}, self._env(None))
+        proc = self._popen(utility.__name__, {}, self._env(None))
         try:
-            out, err = proc.communicate(timeout=timeout_s)
+            out, err = proc.communicate(timeout=policy.timeout_s({}))
         except subprocess.TimeoutExpired:
             _killpg(proc.pid)
             out, err = proc.communicate()
         duration_ms = _ms(t0)
-        response = _parse_response(out or "", UTILITY_SKILL_NAMES[module])
+        response = _parse_response(out or "", policy.name)
         tail = (err or "")[-STDERR_TAIL_CHARS:] or None
         return proc.returncode, response, tail, duration_ms
 
@@ -289,7 +291,7 @@ class Executor:
         """Never raises: any failure is returned as ``ok=False`` with the error in stderr_tail."""
         t0 = time.monotonic()
         try:
-            rc, response, tail, duration_ms = self._run_utility(STOP_MOVE_MODULE, self.cfg.robot.stop_move_timeout_s)
+            rc, response, tail, duration_ms = self._run_utility(stop_move_utility)
         except Exception as e:  # noqa: BLE001 - the stop path must not raise (docs/safety.md)
             return StopMoveResult(
                 ok=False,
@@ -303,5 +305,5 @@ class Executor:
         )
 
     def read_state(self) -> RobotState | None:
-        _, response, _, _ = self._run_utility(READ_STATE_MODULE, self.cfg.robot.read_state_timeout_s)
+        _, response, _, _ = self._run_utility(read_state_utility)
         return response.state_after if response is not None else None

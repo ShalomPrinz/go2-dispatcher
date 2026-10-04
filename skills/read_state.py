@@ -8,11 +8,13 @@ from __future__ import annotations
 import sys
 import traceback
 
-from skills import backend, runner, stub
+from skills import backend, policy, runner, stub
 from skills.runner import SkillOutcome, StateSampler
 from skills.schema import ErrorCode
 
-SKILL = "read_state"
+TIMEOUT_S = 10.0
+
+POLICY = policy.SkillPolicy(name="read_state", timeout=TIMEOUT_S)  # utility: zero cost, no observations
 
 
 def body(states: StateSampler) -> SkillOutcome:
@@ -30,7 +32,7 @@ def body(states: StateSampler) -> SkillOutcome:
 
 
 def main() -> None:
-    runner.run_main(SKILL, body, watchdog=False)
+    runner.run_main(POLICY.name, body, watchdog=False)
 
 
 if __name__ == "__main__":

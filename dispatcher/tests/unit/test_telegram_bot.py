@@ -38,6 +38,7 @@ from dispatcher.transports.telegram_bot import (
     on_stop,
     on_text,
 )
+from skills import stop_move
 from tests.helpers import REPO_ROOT
 
 USER = 42
@@ -188,7 +189,7 @@ def test_build_application(cfg):
     assert app.post_init is on_post_init
     assert app.bot_data["dispatcher"] is d and app.bot_data["cfg"] is cfg
     asyncio.run(on_post_stop(app))
-    d.shutdown.assert_called_once_with(cfg.robot.stop_move_timeout_s + SHUTDOWN_EXTRA_S)
+    d.shutdown.assert_called_once_with(stop_move.POLICY.timeout_s({}) + SHUTDOWN_EXTRA_S)
 
 
 class _BlockingDispatcher:
