@@ -8,7 +8,11 @@
       "Bash(git stash*)"
     ],
     "ask": [
-      "Bash(*--run-live*)"
+      "Bash(*--run-live*)",
+      "Edit(//**/dispatcher/prompts.py)",
+      "Write(//**/dispatcher/prompts.py)",
+      "Edit(//**/skills/catalog/**/SKILL.md)",
+      "Write(//**/skills/catalog/**/SKILL.md)"
     ],
     "allow": [
       "Bash(uv run pytest *)",

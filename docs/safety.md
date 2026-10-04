@@ -10,7 +10,7 @@ Everything that limits or stops the robot. The dispatcher bounds what the LLM ca
 - After a `sit`, stand the robot up with the remote: no skill can stand it up ([robot.md](../skills/docs/robot.md)).
 - If an outcome ends with `WARNING: the stop command to the robot failed. Stop the robot manually.`, use the remote at once.
 - Do not raise `motion_budget.*`, the walk/turn ranges in `SKILL.md`, or the policy timeouts without recording the reason in the owning document.
-- Coding agents never run the real backend or robot tests. `.claude/settings.json` denies Claude Code commands containing `--backend real` or `--run-robot`, denies reading `.env`, and asks before `--run-live`.
+- Coding agents never run the real backend or robot tests. `.claude/settings.json` denies Claude Code commands containing `--backend real` or `--run-robot`, denies reading `.env`, and asks before `--run-live`. It also asks before editing the fixed texts (`dispatcher/prompts.py`, catalog `SKILL.md` files), since that changes the registry hash ([skills.md](../skills/docs/skills.md)).
 
 ## The stop path
 
