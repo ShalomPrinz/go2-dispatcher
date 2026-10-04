@@ -8,7 +8,7 @@ import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from .config import LLMConfig
 from .models import LLMInterrupted, LLMUnavailable, Plan, StopCause
@@ -172,6 +172,8 @@ def validate_tool_input(raw: Any, horizon: int) -> tuple[Plan | None, list[str],
 class LLMResult(BaseModel):
     """One planner reply, unvalidated: the loop checks it with ``check_reply`` (dispatcher/docs/llm.md)."""
 
+    model_config = ConfigDict(extra="forbid")
+
     tool_input: Any | None  # raw submit_plan input as received; None if the reply has no submit_plan call
     usage: dict  # response.usage.model_dump(), verbatim
     stop_reason: str | None
@@ -184,6 +186,8 @@ class LLMResult(BaseModel):
 
 
 class PlanCheck(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     plan: Plan | None  # set iff errors is empty
     errors: list[str]
     rejection_kind: RejectionKind
