@@ -20,7 +20,7 @@ from .config import Config
 
 if TYPE_CHECKING:
     from .budget import MotionBudget
-    from .context import PromptSurface
+    from .context import PromptSurface, RequestReason, ReturnReason
     from .llm import LLMResult, PlanCheck
     from .models import Plan, Posture, StepDispatch, StepRef, StepResult, StopMoveResult, TaskOutcome, TaskSummary
 
@@ -164,7 +164,9 @@ class RunLog:
             git_commit=s.git_commit,
         )
 
-    def llm_request(self, call_index: int, return_reason: str, retry_of: str | None, user_text: str) -> None:
+    def llm_request(
+        self, call_index: int, return_reason: RequestReason, retry_of: ReturnReason | None, user_text: str
+    ) -> None:
         self._write(
             "llm_request", call_index=call_index, return_reason=return_reason, retry_of=retry_of, user_text=user_text
         )

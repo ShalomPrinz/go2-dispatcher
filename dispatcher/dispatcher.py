@@ -15,7 +15,7 @@ from . import prompts
 from .bounds import cut_message, precheck
 from .budget import MotionBudget
 from .config import Config
-from .context import ContextInput, Feedback, build_user_message, schema_retry_message
+from .context import ContextInput, Feedback, RequestReason, ReturnReason, build_user_message, schema_retry_message
 from .executor import STDERR_TAIL_CHARS, SkillExecutor
 from .llm import LLMResult, PlanCheck, PlannerClient, check_reply
 from .models import (
@@ -232,7 +232,9 @@ class Dispatcher:
 
     # --- LLM call ------------------------------------------------------------------------------
 
-    def _call(self, t: _Task, user: str, return_reason: str, retry_of: str | None = None) -> LLMResult | TaskOutcome:
+    def _call(
+        self, t: _Task, user: str, return_reason: RequestReason, retry_of: ReturnReason | None = None
+    ) -> LLMResult | TaskOutcome:
         """One planner call. Returns the result, or the task outcome if the call ended it
         (interrupted, unavailable, or a stop/deadline that arrived during the call)."""
         call_index = t.llm_calls + 1
@@ -397,7 +399,9 @@ class Dispatcher:
         """The request, then at most one schema retry (dispatcher/docs/llm.md). Returns a valid plan, or the
         task outcome if the task ended."""
         user = self._context(t)
-        request, return_reason, retry_of = user, t.feedback.return_reason, None
+        request = user
+        return_reason: RequestReason = t.feedback.return_reason
+        retry_of: ReturnReason | None = None
         while True:
             if t.llm_calls >= self.cfg.loop.max_llm_calls:
                 return self._end(t, "CALL_BUDGET_EXHAUSTED")
@@ -410,7 +414,11 @@ class Dispatcher:
             self._log_invalid(t, res, check)
             if retry_of is not None:
                 return self._end(t, "LLM_INVALID")
-            request, return_reason, retry_of = schema_retry_message(user, check.errors), "schema_retry", return_reason
+            request, return_reason, retry_of = (
+                schema_retry_message(user, check.errors),
+                "schema_retry",
+                t.feedback.return_reason,
+            )
 
     def _execute_plan(self, t: _Task, plan: Plan) -> Feedback | TaskOutcome:
         """Run a valid plan up to ``stop_at``. Returns the feedback for the next call, or the task outcome if

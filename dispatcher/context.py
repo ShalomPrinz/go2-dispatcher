@@ -20,6 +20,7 @@ NOT_DISPATCHED_OUTCOMES = frozenset({"rejected", "motion_budget_exceeded"})
 BUDGET_DECIMALS = 2  # budget numbers: round(x, 2) then :g (dispatcher/docs/loop-and-context.md)
 
 ReturnReason = Literal["initial", "plan_complete", "checkpoint", "failure"]
+RequestReason = ReturnReason | Literal["schema_retry"]  # logged on llm_request (dispatcher/docs/run-log.md)
 RemainingTag = Literal["pending", "abandoned"]
 
 
