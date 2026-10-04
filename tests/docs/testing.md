@@ -5,7 +5,7 @@ Running the test suite: layout, markers and opt-in flags, helpers and fakes, gol
 ## Running the tests
 
 ```bash
-uv run pytest                    # everything that needs no network, API key, robot or SDK
+uv run pytest                    # everything that needs no network, API key, robot or SDK (includes the hook tests)
 uv run pytest -q dispatcher/tests skills/tests  # unit tests of both services only
 uv run pytest -q tests           # cross-service tests only
 uv run pytest -m integration     # real subprocesses on the stub backend
@@ -62,6 +62,7 @@ The default run must pass on any machine after `uv sync` (core + dev dependencie
 | `tests/helpers/` | helpers shared by the root tests and a service suite (below) |
 | `tests/pytest_plugin.py` | the `--run-live`, `--run-robot` and `--update-golden` options, marker gating, the `update_golden` fixture and the network guard |
 | `tests/test_network_guard.py` | the network guard refuses an outbound connection |
+| `.claude/hooks/tests/` | the Claude Code hooks, run as subprocesses ([hooks README](../../.claude/hooks/README.md)); in `testpaths`, so the default suite runs them |
 
 A service folder holds unit tests of that service only: `skills/tests/` never imports `dispatcher`, while `dispatcher/tests/` may import `skills` (the dispatcher depends on skills). A test that needs both services, or that runs the services as real subprocesses, lives in the root `tests/` (see design decisions below).
 
