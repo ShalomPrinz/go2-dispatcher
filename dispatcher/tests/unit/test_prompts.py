@@ -39,6 +39,39 @@ NOTICE_ARGS = {
     "failure": {"n": 2, "skill": "walk", "outcome": "error", "f": 1, "max_failures": 3},
 }
 
+# Texts already rendered through a function or a labelled part above.
+RENDERED_ABOVE = {
+    *("OPERATOR_MESSAGES", "STOP_MOVE_WARNING", "MOTION_BUDGET_MESSAGE", "REJECTION_HEADER", "REJECTION_FOOTER"),
+    *("BUSY", "STOPPING", "NOTHING_RUNNING", "WORKING", "EMPTY_TASK", "HELP", "SYSTEM_TEMPLATE", "SKILLS_HEADER"),
+}
+TEXT_ARGS: dict[str, dict[str, object]] = {
+    "OMITTED_ENTRIES": {"n": 3},
+    "PREVIOUS_TASK_TEMPLATE": {"task": "sit", "outcome": "DONE", "message": "Sitting.", "last_step": "sit: ok"},
+    "POSTURE_TEMPLATE": {"posture": "standing"},
+    "BUDGET_TEMPLATE": {
+        **{"travel_used": 0.5, "travel_max": 5.0, "rotation_used": 90, "rotation_max": 720},
+        **{"failures": 1, "max_failures": 3, "calls_made": 2, "max_llm_calls": 20},
+    },
+    "HORIZON_EXCEEDED": {"n": 7, "horizon": 5},
+    "STATUS_NO_STEPS": {"status": "DONE"},
+    "STATUS_NEEDS_MESSAGE": {"status": "ABORT"},
+    "REPLAN_OUT_OF_RANGE": {"n": 3},
+    "UNKNOWN_SKILL": {"skill": "fly", "available": "walk, turn"},
+    "UNKNOWN_PARAM": {"param": "speed", "skill": "walk"},
+    "MISSING_PARAM": {"param": "distance_m", "skill": "walk"},
+    "PARAM_WRONG_TYPE": {"param": "distance_m", "skill": "walk", "expected": "a finite number", "value": "'far'"},
+    "EXPECTED_ENUM": {"values": "['left', 'right']"},
+    "PARAM_VALUE": {"param": "distance_m", "skill": "walk", "value": 9.0},
+    "PARAM_OUTSIDE_RANGE": {"where": "<where>", "lo": -3.0, "hi": 3.0},
+    "PARAM_BELOW_MIN": {"where": "<where>", "lo": 0.1},
+    "PARAM_ABOVE_MAX": {"where": "<where>", "hi": 3.0},
+    "MALFORMED_RESPONSE": {"rc": 1},
+    "KILL_STEP_TIMEOUT": {"timeout_s": 30.0},
+    "STEPS_LINE": {"run": 3, "failed": 1},
+    "OMITTED_LINES": {"n": 4},
+    "ERROR_REPLY": {"exception_type": "KeyError"},
+}
+
 
 def render_fixed_texts() -> str:
     """Every fixed text from prompts.py, rendered with example arguments and labelled."""
@@ -62,6 +95,11 @@ def render_fixed_texts() -> str:
     parts.append(('help_text("stub")', prompts.help_text("stub")))
     for i, block in enumerate(prompts.system_blocks(5, "<catalog>")):
         parts.append((f"system_blocks(5) block {i}", block))
+    for name in prompts.__all__:
+        value = getattr(prompts, name)
+        if isinstance(value, str) and name not in RENDERED_ABOVE:
+            text = value.format(**TEXT_ARGS.get(name, {}))
+            parts.append((f"{name} (repr)", repr(text)) if text != text.strip() else (name, text))
     return "\n\n".join(f"=== {label} ===\n{text}" for label, text in parts) + "\n"
 
 

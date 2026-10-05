@@ -112,3 +112,135 @@ Rules:
 === system_blocks(5) block 1 ===
 ## Skills
 <catalog>
+
+=== SECTION_PREVIOUS_TASK ===
+## Previous task
+
+=== SECTION_ROBOT ===
+## Robot
+
+=== SECTION_TASK ===
+## Task
+
+=== SECTION_BUDGET ===
+## Budget
+
+=== SECTION_EXECUTED ===
+## Executed so far
+
+=== SECTION_REMAINING ===
+## Remaining plan
+
+=== SECTION_NOTICE ===
+## Notice
+
+=== SECTION_SEPARATOR (repr) ===
+'\n\n'
+
+=== NONE ===
+(none)
+
+=== NOTHING_YET ===
+(nothing yet)
+
+=== OMITTED_ENTRIES ===
+(3 earlier entries omitted)
+
+=== PREVIOUS_TASK_TEMPLATE ===
+Task: sit
+Outcome: DONE
+Message: Sitting.
+Last step: sit: ok
+
+=== POSTURE_TEMPLATE ===
+Posture: standing
+
+=== BUDGET_TEMPLATE ===
+Travel: 0.5 of 5.0 m used
+Rotation: 90 of 720 deg used
+Failures: 1 of 3
+Model calls: 2 of 20
+
+=== ERR_MAX_TOKENS ===
+reply was cut off; keep the plan shorter
+
+=== ERR_NO_TOOL_CALL ===
+no submit_plan call in reply
+
+=== HORIZON_EXCEEDED ===
+plan has 7 steps; the maximum is 5
+
+=== PLAN_NEEDS_STEPS ===
+status PLAN needs at least one step
+
+=== STATUS_NO_STEPS ===
+status DONE must have no steps
+
+=== STATUS_NEEDS_MESSAGE ===
+status ABORT needs a message
+
+=== REPLAN_ONLY_PLAN ===
+replan_after is only allowed with status PLAN
+
+=== REPLAN_OUT_OF_RANGE ===
+replan_after must be between 1 and 3
+
+=== UNKNOWN_SKILL ===
+unknown skill 'fly'; available: walk, turn
+
+=== UNKNOWN_PARAM ===
+unknown parameter 'speed' for skill walk
+
+=== MISSING_PARAM ===
+missing parameter 'distance_m' for skill walk
+
+=== PARAM_WRONG_TYPE ===
+parameter 'distance_m' for skill walk must be a finite number, got 'far'
+
+=== EXPECTED_NUMBER ===
+a finite number
+
+=== EXPECTED_STRING ===
+a non-empty string
+
+=== EXPECTED_ENUM ===
+one of ['left', 'right']
+
+=== PARAM_VALUE ===
+parameter 'distance_m' for skill walk is 9
+
+=== PARAM_OUTSIDE_RANGE ===
+<where>, outside -3 to 3
+
+=== PARAM_BELOW_MIN ===
+<where>, below the minimum 0.1
+
+=== PARAM_ABOVE_MAX ===
+<where>, above the maximum 3
+
+=== MALFORMED_RESPONSE ===
+skill process exited with code 1 without a valid response
+
+=== KILL_STEP_TIMEOUT ===
+killed after 30s timeout
+
+=== KILL_OPERATOR ===
+stopped by operator
+
+=== KILL_TASK_TIME_LIMIT ===
+task time limit reached
+
+=== KILL_SHUTDOWN ===
+dispatcher shutting down
+
+=== NOT_DISPATCHED_PREFIX (repr) ===
+'- rejected before running: '
+
+=== STEPS_LINE ===
+Steps: 3 run, 1 failed
+
+=== OMITTED_LINES ===
+(4 earlier lines omitted)
+
+=== ERROR_REPLY ===
+Error: KeyError
