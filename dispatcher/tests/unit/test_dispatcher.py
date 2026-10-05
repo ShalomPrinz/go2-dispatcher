@@ -11,7 +11,7 @@ from dispatcher import prompts
 from dispatcher.context import PromptSurface
 from dispatcher.dispatcher import Dispatcher
 from dispatcher.executor import STDERR_TAIL_CHARS
-from dispatcher.models import BusyError, LLMInterrupted, LLMUnavailable, Plan, PlanStep, Posture
+from dispatcher.models import BusyError, LLMInterrupted, LLMUnavailable, Plan, PlanStep, Posture, StopCause
 from dispatcher.registry import Registry
 from dispatcher.runlog import RunLog, RunLogFactory
 from dispatcher.tests.helpers import (
@@ -245,7 +245,7 @@ def test_llm_unavailable(tmp_path, registry):
 
 
 def test_llm_interrupted_operator(tmp_path, registry):
-    r = Rig(tmp_path, registry, [LLMInterrupted("operator")])
+    r = Rig(tmp_path, registry, [LLMInterrupted(StopCause.OPERATOR)])
     o = r.run()
     assert o.outcome == "STOPPED"
     assert r.executor.stop_moves == ["operator"]
@@ -254,7 +254,9 @@ def test_llm_interrupted_operator(tmp_path, registry):
 
 def test_stop_during_step(tmp_path, registry):
     res = exec_result(
-        "interrupted", interrupt_cause="operator", stop_move=stop_move_result("operator", posture="standing")
+        "interrupted",
+        interrupt_cause=StopCause.OPERATOR,
+        stop_move=stop_move_result(StopCause.OPERATOR, posture="standing"),
     )
     r = Rig(tmp_path, registry, [plan(walk(), turn())], [res])
     o = r.run()
@@ -424,7 +426,7 @@ def test_previous_task(tmp_path, registry):
 
 def test_posture(tmp_path, registry):
     sit = PlanStep(skill="sit", params={})
-    timeout = exec_result("timeout", stop_move=stop_move_result("step_timeout"))
+    timeout = exec_result("timeout", stop_move=stop_move_result(StopCause.STEP_TIMEOUT))
     r = Rig(
         tmp_path,
         registry,
@@ -517,7 +519,7 @@ def test_stop_during_schema_retry_call(tmp_path, registry):
 
 
 def test_step_stop_move_failure_warns(tmp_path, registry):
-    timeout = exec_result("timeout", stop_move=stop_move_result("step_timeout", ok=False))
+    timeout = exec_result("timeout", stop_move=stop_move_result(StopCause.STEP_TIMEOUT, ok=False))
     r = Rig(tmp_path, registry, [plan(walk()), done()], [timeout])
     o = r.run()
     assert o.outcome == "DONE"
@@ -537,7 +539,7 @@ def test_dispatcher_stop_move_updates_posture(tmp_path, registry):
 
 
 def test_llm_interrupted_time_limit(tmp_path, registry):
-    r = Rig(tmp_path, registry, [LLMInterrupted("task_time_limit")])
+    r = Rig(tmp_path, registry, [LLMInterrupted(StopCause.TASK_TIME_LIMIT)])
     o = r.run()
     assert o.outcome == "TIME_LIMIT_EXCEEDED"
     assert r.executor.stop_moves == ["task_time_limit"]
