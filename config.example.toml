@@ -5,9 +5,10 @@
 condition = ""                      # free-text experiment label, copied into task_start and index.jsonl
 
 [llm]
-model = "claude-sonnet-5-5"         # (tunable)
+provider = "anthropic"              # "anthropic" | "openrouter"; key from .env: ANTHROPIC_API_KEY | OPENROUTER_API_KEY
+model = "claude-sonnet-5-5"         # (tunable); with openrouter, an OpenRouter model id (required)
 max_tokens = 2048
-thinking = "between_tools"          # "between_tools" (lowest thinking setting, Sonnet 5.5 only; not zero thinking) | "adaptive"
+thinking = "between_tools"          # "between_tools" (lowest thinking setting, Sonnet 5.5 only; not zero thinking) | "adaptive"; anthropic only
 request_timeout_s = 60.0            # cap per attempt (tunable)
 infra_backoff_s = [1.0, 4.0]        # sleep before retry 1, retry 2; one retry per value
 
@@ -38,7 +39,7 @@ detections = {}                     # e.g. { chair = "center:near", "cell phone"
 faults = []                         # e.g. [ { step = 2, kind = "hang" } ]
 
 [log]
-dir = "runs"
+dir = "logs"                        # root; each task goes to logs/<llm.provider>/<robot.backend>/
 
 [telegram]
 allowed_user_ids = []               # numeric Telegram user ids; empty = nobody allowed

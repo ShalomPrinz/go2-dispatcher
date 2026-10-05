@@ -91,7 +91,9 @@ class Dispatcher:
         self.planner = planner
         self.executor = executor
         # the log copies the surface the planner sends (dispatcher/docs/run-log.md)
-        self.runlog_factory = RunLogFactory(cfg.log.dir, uuid.uuid4().hex, SessionInfo.collect(cfg, planner.surface))
+        self.runlog_factory = RunLogFactory(
+            cfg.run_log_dir, uuid.uuid4().hex, SessionInfo.collect(cfg, planner.surface)
+        )
         self.registry_hash = planner.surface.registry_hash
         self.clock = clock
         self.posture: Posture = initial_posture

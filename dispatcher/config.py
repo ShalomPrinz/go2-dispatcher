@@ -34,9 +34,11 @@ else:  # pragma: no cover - exercised only on 3.10
 
 DEFAULT_CONFIG_PATH = Path("config.toml")
 ENV_FILE_NAME = ".env"
-API_KEY_ENV = "ANTHROPIC_API_KEY"  # secrets read from .env (docs/configuration.md)
+Provider = Literal["anthropic", "openrouter"]
+# secrets read from .env (docs/configuration.md)
+API_KEY_ENV: dict[Provider, str] = {"anthropic": "ANTHROPIC_API_KEY", "openrouter": "OPENROUTER_API_KEY"}
 TOKEN_ENV = "TELEGRAM_BOT_TOKEN"
-SECRET_ENV = frozenset({API_KEY_ENV, TOKEN_ENV})  # never passed to skill children (docs/safety.md)
+SECRET_ENV = frozenset({*API_KEY_ENV.values(), TOKEN_ENV})  # never passed to skill children (docs/safety.md)
 DETECTION_VALUE_RE = re.compile(r"^(left|center|right):(near|medium|far)$")
 
 
@@ -59,9 +61,10 @@ class RunConfig(_Section):
 
 
 class LLMConfig(_Section):
+    provider: Provider = "anthropic"
     model: StrictStr = "claude-sonnet-5-5"  # (tunable)
     max_tokens: StrictInt = Field(default=2048, ge=1)
-    thinking: Literal["between_tools", "adaptive"] = "between_tools"
+    thinking: Literal["between_tools", "adaptive"] = "between_tools"  # anthropic only; ignored for openrouter
     request_timeout_s: FiniteFloat = Field(default=60.0, gt=0)  # (tunable)
     infra_backoff_s: list[FiniteFloat] = [1.0, 4.0]  # one sleep per retry; length = retry count
 
@@ -72,6 +75,12 @@ class LLMConfig(_Section):
             if x < 0:
                 raise ValueError("every value must be >= 0")
         return v
+
+    @model_validator(mode="after")
+    def _openrouter_needs_model(self) -> LLMConfig:
+        if self.provider == "openrouter" and "model" not in self.model_fields_set:
+            raise ValueError('llm.model is required when llm.provider = "openrouter"')
+        return self
 
 
 class LoopConfig(_Section):
@@ -133,7 +142,7 @@ class StubConfig(_Section):
 
 
 class LogConfig(_Section):
-    dir: Path = Path("runs")
+    dir: Path = Path("logs")  # root; tasks go to <dir>/<provider>/<backend>/ (dispatcher/docs/run-log.md)
 
 
 class TelegramConfig(_Section):
@@ -157,6 +166,11 @@ class Config(_Section):
     def base_dir(self) -> Path:
         """Folder relative paths were resolved against; subprocess cwd (docs/configuration.md)."""
         return self._base_dir
+
+    @property
+    def run_log_dir(self) -> Path:
+        """Task logs and index: ``<log.dir>/<provider>/<backend>`` (dispatcher/docs/run-log.md)."""
+        return self.log.dir / self.llm.provider / self.robot.backend
 
     @model_validator(mode="after")
     def _real_backend_rules(self) -> Config:

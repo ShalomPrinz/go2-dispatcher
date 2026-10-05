@@ -22,7 +22,7 @@ Secrets are never config keys. They come only from environment variables (see [`
 - Every skill and utility subprocess runs with the base dir as its working directory.
 - `log.dir` is created if it is missing. If it cannot be created, that is a config error.
 
-So `go2 --config /lab/exp1/config.toml run ...` writes logs to `/lab/exp1/runs/` and reads `/lab/exp1/.env`, whatever the current directory is.
+So `go2 --config /lab/exp1/config.toml run ...` writes logs under `/lab/exp1/logs/` (in `anthropic/stub/` with the defaults) and reads `/lab/exp1/.env`, whatever the current directory is.
 
 ## Keys
 
@@ -43,9 +43,10 @@ Types:
 
 | Key | Type | Default | Rule | Meaning |
 |---|---|---|---|---|
-| `model` | str | `"claude-sonnet-5-5"` *tunable* | | Anthropic model id. Logged in `task_start.config` and `index.jsonl`. |
+| `provider` | `"anthropic"` \| `"openrouter"` | `"anthropic"` | | Planner API ([llm.md](../dispatcher/docs/llm.md#provider-and-model)). Selects the API key (`ANTHROPIC_API_KEY` / `OPENROUTER_API_KEY`) and the log folder `{log.dir}/{provider}/{backend}/`. Logged in `task_start.config` and `index.jsonl`. |
+| `model` | str | `"claude-sonnet-5-5"` *tunable* | required when `provider = "openrouter"` | Anthropic model id, or with `openrouter` an OpenRouter model id (for example a `:free` model). Logged in `task_start.config` and `index.jsonl`. |
 | `max_tokens` | int | `2048` | ≥ 1 | `max_tokens` for each request. |
-| `thinking` | `"between_tools"` \| `"adaptive"` | `"between_tools"` | | Sent as `thinking={"type": ...}`. `between_tools` is the lowest setting (no extended thinking; [llm.md](../dispatcher/docs/llm.md#sonnet-55-parameter-constraints)); `adaptive` lets the model think (use it only as a deliberate experimental condition). Logged in `index.jsonl`. |
+| `thinking` | `"between_tools"` \| `"adaptive"` | `"between_tools"` | | Sent as `thinking={"type": ...}`. `between_tools` is the lowest setting (no extended thinking; [llm.md](../dispatcher/docs/llm.md#sonnet-55-parameter-constraints)); `adaptive` lets the model think (use it only as a deliberate experimental condition). Logged in `index.jsonl`. Anthropic only: ignored with `provider = "openrouter"` (not sent; `null` in `index.jsonl`). |
 | `request_timeout_s` | float | `60.0` *tunable* | > 0 | Upper limit for one HTTP attempt. Each attempt uses `min(request_timeout_s, remaining task time)`. |
 | `infra_backoff_s` | list of float | `[1.0, 4.0]` | each ≥ 0 | Retries after transport or overload errors: one retry per value, sleeping that many seconds before it (`[]` = no retries). Infra retries are not LLM calls. A `retry-after` header can raise a sleep, capped at 30 s. |
 
@@ -106,7 +107,7 @@ The 80 class names are in `skills/coco.py` (`COCO_CLASSES`).
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `dir` | path | `"runs"` | Run logs, `index.jsonl`, and the single-instance lock file `.dispatcher.lock`. |
+| `dir` | path | `"logs"` | Root of the run logs. Each task goes to `{dir}/{llm.provider}/{robot.backend}/` with that folder's own `index.jsonl`; the folder is derived, not configurable ([run-log.md](../dispatcher/docs/run-log.md#files)). The single-instance lock file `.dispatcher.lock` is at the root. |
 
 ### `[telegram]`
 
@@ -128,6 +129,7 @@ Each failure below is a config error:
 - Floats > 0: `task_time_limit_s`, `request_timeout_s`, `stub.time_scale`.
 - Floats ≥ 0: `max_distance_m`, `max_rotation_deg`, every value in `infra_backoff_s`.
 - `llm.thinking` not one of `between_tools`, `adaptive`.
+- `llm.provider` not one of `anthropic`, `openrouter`; `llm.provider = "openrouter"` without an explicit `llm.model`.
 - Any float key given a boolean, a string, `nan` or `±inf`.
 - Invalid TOML, an unreadable file, an explicit `--config` path that does not exist, or a `log.dir` that cannot be created.
 
@@ -160,7 +162,8 @@ Secrets come only from environment variables:
 
 | Variable | Needed by |
 |---|---|
-| `ANTHROPIC_API_KEY` | `run`, `batch`, `go2 bot` (only when a real LLM client is built) |
+| `ANTHROPIC_API_KEY` | `run`, `batch`, `go2 bot` with `llm.provider = "anthropic"` (only when a real LLM client is built) |
+| `OPENROUTER_API_KEY` | the same, with `llm.provider = "openrouter"` |
 | `TELEGRAM_BOT_TOKEN` | `go2 bot` |
 
 A `.env` file in the base dir is read by a small built-in parser (no `python-dotenv`):
@@ -168,6 +171,7 @@ A `.env` file in the base dir is read by a small built-in parser (no `python-dot
 ```
 # comment
 ANTHROPIC_API_KEY=sk-ant-...
+OPENROUTER_API_KEY=sk-or-...
 export TELEGRAM_BOT_TOKEN="123456:ABC..."
 ```
 
@@ -177,7 +181,7 @@ export TELEGRAM_BOT_TOKEN="123456:ABC..."
 - **Real environment variables win** over `.env` values.
 - A missing `.env` is not an error.
 
-Secrets are never written to the run log, never printed, and never passed to skill subprocesses: the executor removes `ANTHROPIC_API_KEY` and `TELEGRAM_BOT_TOKEN` from the child environment.
+Secrets are never written to the run log, never printed, and never passed to skill subprocesses: the executor removes `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY` and `TELEGRAM_BOT_TOKEN` from the child environment. Only the key of the configured provider is required; a missing one prints `Missing <VARIABLE>.` and exits 2.
 
 ## Where the other tunables live
 

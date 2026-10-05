@@ -4,7 +4,7 @@ Everything that limits or stops the robot. The dispatcher bounds what the LLM ca
 
 ## Supervised-operation rules
 
-- Run the real robot only under supervision, with the remote (e-stop) in hand and a clear area around the robot.
+- Run the real robot only under supervision, with the remote (e-stop) in hand and a clear area around the robot. This holds for both planner providers: `llm.provider = "openrouter"` with `robot.backend = "real"` is allowed and follows exactly these rules; a free or untested model is no reason to relax them, since every safety limit below is enforced by the dispatcher whatever the model plans.
 - Before the first real run on a machine, work through the robot checklist in [robot.md](../skills/docs/robot.md), in order. The real backend has never been run.
 - Keep one dispatcher per robot. The lock ([below](#single-instance-lock)) prevents a second process on the same `log.dir`, not one on another machine or with another `log.dir`.
 - After a `sit`, stand the robot up with the remote: no skill can stand it up ([robot.md](../skills/docs/robot.md)).

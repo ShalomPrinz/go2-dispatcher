@@ -6,10 +6,13 @@ What counts as a failure, an LLM call or a rejection is defined in [loop-and-con
 
 ## Files
 
-- One file per task: `{log.dir}/{YYYYMMDDTHHMMSS}_{run_id[:8]}.jsonl`, using the local time at task start. Example: `runs/20261001T113603_b6bb52fe.jsonl`.
-- `{log.dir}/index.jsonl`: one line per finished task, including the experimental `condition`, `model` and `thinking`.
-- `{log.dir}/.dispatcher.lock`: the single-instance lock (not a log).
-- `{log.dir}/.stub_state.json`: the stub state, at the default `stub.state_file` (not a log).
+`log.dir` (default `logs`) is the root. Each task is written to the folder `{log.dir}/{llm.provider}/{robot.backend}/`, using the config values verbatim, so there are four folders: `anthropic/stub`, `anthropic/real`, `openrouter/stub`, `openrouter/real`. The folder is derived from the config (`Config.run_log_dir`) and cannot be set by hand.
+
+- One file per task: `{folder}/{YYYYMMDDTHHMMSS}_{run_id[:8]}.jsonl`, using the local time at task start. Example: `logs/anthropic/stub/20261001T113603_b6bb52fe.jsonl`.
+- `{folder}/index.jsonl`: one line per finished task in that folder, including the experimental `condition`, `provider`, `model` and `thinking`.
+- `{log.dir}/.dispatcher.lock`: the single-instance lock, at the root so it covers every folder (not a log).
+
+**Research data is `logs/anthropic/real/` only.** Analysis reads one folder and its `index.jsonl`; it never globs across folders, so stub runs and OpenRouter runs cannot leak into the dataset. The other folders are for development and testing.
 
 `run_id` is a uuid4 hex per task. `session_id` is a uuid4 hex per process (one CLI invocation, one bot run); it links the tasks of one session.
 
@@ -38,7 +41,7 @@ The payload fields follow.
 
 ### `task_start`
 
-`task`, `source` (`cli` / `telegram` / `test`), `sender_id` (Telegram user id or null), `condition`, `config` (full config dump; it holds no secrets), `registry_hash`, `system_text`, `catalog_text`, `tool_schema`, `skills` (names), `previous_task` (`TaskSummary` or null), `posture`, `versions` (`python`, `anthropic`, `pydantic`, `go2-dispatcher`), `git_commit` (`git rev-parse HEAD` in the base dir, or null). `versions` and `git_commit` are read once per process at startup.
+`task`, `source` (`cli` / `telegram` / `test`), `sender_id` (Telegram user id or null), `condition`, `config` (full config dump; it holds no secrets), `registry_hash`, `system_text`, `catalog_text`, `tool_schema`, `skills` (names), `previous_task` (`TaskSummary` or null), `posture`, `versions` (`python`, `anthropic`, `httpx`, `pydantic`, `go2-dispatcher`), `git_commit` (`git rev-parse HEAD` in the base dir, or null). `versions` and `git_commit` are read once per process at startup.
 
 ### `llm_request`
 
@@ -51,6 +54,8 @@ An infra retry (not an LLM call): `call_index`, `attempt` (1-based number of the
 ### `llm_response`
 
 `call_index`, `latency_ms` (successful attempt only), `total_ms` (whole call including failed attempts and backoff), `attempts`, `stop_reason`, `usage` (verbatim from the API), `content` (all response blocks, including any `thinking` or `text` blocks; only the first `submit_plan` `tool_use` block is used), `response_id`, `request_id`.
+
+With `llm.provider = "openrouter"` the same fields hold OpenRouter's native values ([llm.md](llm.md#response-handling)): `stop_reason` is `finish_reason` (`tool_calls`, `stop`, `length`, ...), `usage` is OpenRouter's usage object (`prompt_tokens`, `completion_tokens`, `total_tokens`, ...), `content` is the full `choices` list (each with `message`, `finish_reason`, `native_finish_reason`), `response_id` is the generation id and `request_id` is null.
 
 ### `llm_error` / `llm_interrupted`
 
@@ -94,14 +99,14 @@ All `StopMoveResult` fields: `ok`, `reason` (`operator` / `task_time_limit` / `s
 One line per finished task, without the envelope:
 
 ```json
-{"run_id":"b6bb52fe55bb41589a5a1fc51c463f72","file":"20261001T113603_b6bb52fe.jsonl","ts_start":"2026-10-01T11:36:03.636693+03:00","task":"turn left 90 degrees, then tell me if you see a chair","source":"cli","outcome":"DONE","condition":"","backend":"stub","model":"claude-sonnet-5-5","thinking":"between_tools","planning_horizon":5,"max_llm_calls":20,"registry_hash":"bf06b5af6abd480b","llm_calls":2,"failures":0,"steps_dispatched":2,"input_tokens":200,"output_tokens":40,"duration_ms":156.1}
+{"run_id":"b6bb52fe55bb41589a5a1fc51c463f72","file":"20261001T113603_b6bb52fe.jsonl","ts_start":"2026-10-01T11:36:03.636693+03:00","task":"turn left 90 degrees, then tell me if you see a chair","source":"cli","outcome":"DONE","condition":"","provider":"anthropic","backend":"stub","model":"claude-sonnet-5-5","thinking":"between_tools","planning_horizon":5,"max_llm_calls":20,"registry_hash":"bf06b5af6abd480b","llm_calls":2,"failures":0,"steps_dispatched":2,"input_tokens":200,"output_tokens":40,"duration_ms":156.1}
 ```
 
-`file` is relative to `log.dir`. A task whose log could not be opened has no index line. `input_tokens` and `output_tokens` are the sums of those two `usage` fields only; any other numeric `usage` fields (for example cache counters) are summed in `task_end.usage_totals`. Use the index to select tasks by condition, then read their files for per-call detail.
+`file` is relative to the index's folder. A task whose log could not be opened has no index line. `provider`, `backend` and `model` are the config values; `thinking` is `llm.thinking` for `anthropic` and null for `openrouter`, which ignores it. `input_tokens` and `output_tokens` are the sums of those two `usage` fields only (for `openrouter`: of `prompt_tokens` and `completion_tokens`); any other numeric `usage` fields (for example cache counters) are summed in `task_end.usage_totals`. Use the index to select tasks by condition, then read their files for per-call detail.
 
 ## Computing the study metrics
 
-Group tasks by condition first: `condition`, `registry_hash` (the skill set and prompt surface), `model`, `thinking`, `planning_horizon` and `max_llm_calls` are in every index line; the full config is in `task_start.config`. Runs with different registry hashes saw different prompts and are not directly comparable.
+Pick the folder first (`logs/anthropic/real/` for the study), then group its tasks by condition: `condition`, `registry_hash` (the skill set and prompt surface), `model`, `thinking`, `planning_horizon` and `max_llm_calls` are in every index line; the full config is in `task_start.config`. Runs with different registry hashes saw different prompts and are not directly comparable.
 
 | Metric | How to compute it |
 |---|---|
@@ -131,6 +136,7 @@ Group tasks by condition first: `condition`, `registry_hash` (the skill set and 
 - **A step is a `StepRef` plus an optional `StepDispatch`, composed in `StepResult`.** `StepRef` (`call_index`, `plan_step`, `skill`, `params`) is what every recorded step has; `StepDispatch` (`index`, `timeout_s`, `motion_cost`, `fault`) is what the dispatcher decided for a dispatched step. The loop builds both once per dispatched step (the pre-check builds the `StepRef` of a rejection), passes them to `RunLog.step_start` and stores them on the `StepResult`, so `step_start` and `step_result` carry the same nested `ref` and `dispatch` objects; a rejected step has `dispatch = null`. Composition keeps the dispatched fields strictly typed (`index` and `timeout_s` are never null) and the step identity built in one place instead of being passed field by field. Rejected: a flat `StepResult` with the identity and dispatch fields at the top level, which made `step_start` take the fields one by one and re-flatten the dispatch object; inheritance `StepResult(StepRef, StepDispatch)`, which would force the dispatch fields optional because rejected steps are also `StepResult`s.
 - **The loop resolves a step's stub fault while building its `StepDispatch`.** It calls `cfg.stub.fault_at(index)` with the task-wide dispatched index; config validation already rejects `stub.faults` under the real backend and keeps one fault per step, so the loop does not re-check the backend. The fault belongs to `StepDispatch` because `step_start` records it before the executor runs. Rejected: resolving the fault in the executor, which would need the dispatched index passed in and the fault handed back for the log.
 - **One file per task plus an index.** A task is the unit of analysis; the index lets analysis select tasks by condition without parsing every file.
+- **One folder per provider and backend, derived from config.** `{log.dir}/{llm.provider}/{robot.backend}/` keeps research data (`anthropic/real`) physically apart from stub and OpenRouter runs, so an analysis that reads one folder cannot mix them, and the logs of the two providers can keep their native shapes ([llm.md](llm.md#design-decisions)). The folder is computed, never configured, so a run cannot be filed under the wrong combination; `provider` and `backend` are still in every index row and in `task_start.config`, so a file stays self-describing if moved. The lock stays at the root so one process at a time writes anywhere under it. Rejected: one shared folder filtered by index columns, which relies on every analysis remembering the filter; a hand-set `log.dir` per combination, which can be forgotten.
 - **Every line is flushed as it is written**, under a lock, so a crash leaves a usable partial log and lines from the transport thread never interleave.
 - **The exact prompt surface is logged with every task** (system text, catalog, tool schema, registry hash) and the exact user message with every call, so any call can be reconstructed and conditions can be told apart by hash.
 - **The return reason is logged on every call.** Without it, horizon 1 would look like constant replanning; with it, `plan_complete` calls can be separated from replans after a failure ([loop-and-context.md](loop-and-context.md#return-reasons)).

@@ -23,13 +23,15 @@ Global options go **before** the command (argparse), for example `go2 --backend 
 | `--fault STEP:KIND` | Injects a stub fault at dispatched step `STEP`. Repeatable. Replaces `stub.faults` ([skills.md](../skills/docs/skills.md#fault-injection)). |
 | `--reset-stub` | Resets the stub state file to `stub.initial_posture` and exits. |
 
-| Command | Takes the lock | Resets the stub | Needs `ANTHROPIC_API_KEY` | What it does |
+| Command | Takes the lock | Resets the stub | Needs the API key | What it does |
 |---|---|---|---|---|
 | `run TASK` | yes | yes | yes | Runs one task, prints the outcome. |
 | `batch TASKS_FILE` | yes | yes | yes | Runs one task per line, in order, in one process. |
 | `--reset-stub` | yes | yes | no | Resets the stub and exits. |
 | `catalog` | no | no | no | Prints the system text, `## Skills` + catalog, `## Tool schema` + the JSON schema, and `Registry hash: <16 hex>`. |
 | `state` | no | no | no | Runs the `read_state` utility and prints the robot state as JSON. |
+
+"The API key" is the variable for `llm.provider`: `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` ([configuration.md](configuration.md#env-file)). `run`, `batch` and the bot log each task under `{log.dir}/{llm.provider}/{robot.backend}/` ([run-log.md](../dispatcher/docs/run-log.md#files)).
 
 Use `catalog` to see exactly what the model is sent before any task text. The hash identifies the prompt surface (system text + catalog + tool schema) and is logged with every task.
 
@@ -54,7 +56,7 @@ The first line is `{OUTCOME}: {message}`. `Steps:` counts dispatched steps and f
 |---|---|
 | 0 | `run` ended `DONE`; `batch` finished all lines; `catalog`; `state` read a state; `--reset-stub` succeeded. |
 | 1 | `run` ended with any outcome other than `DONE` (including a stop by Ctrl+C); `state` could not read a state (`Robot state unavailable.`). |
-| 2 | Usage error; `Config error: ...`; `Registry error: ...`; `Missing ANTHROPIC_API_KEY.`; `Another dispatcher is running (lock: <path>).`; `--reset-stub` with the real backend; `run` with an empty task; a tasks file that cannot be read. |
+| 2 | Usage error; `Config error: ...`; `Registry error: ...`; `Missing ANTHROPIC_API_KEY.` (or `OPENROUTER_API_KEY`); `Another dispatcher is running (lock: <path>).`; `--reset-stub` with the real backend; `run` with an empty task; a tasks file that cannot be read. |
 | 130 | Ctrl+C: a second Ctrl+C, Ctrl+C while no task runs, or a `batch` stopped by the first Ctrl+C. |
 | 143 | SIGTERM. |
 
@@ -87,7 +89,7 @@ go2 bot [--config PATH]
 ### Setup
 
 1. In Telegram, talk to **@BotFather**: send `/newbot` and follow the prompts. It gives you a token like `123456789:AA...`.
-2. Put the token in `.env` in the base dir (or export it): `TELEGRAM_BOT_TOKEN=123456789:AA...`. Also set `ANTHROPIC_API_KEY`.
+2. Put the token in `.env` in the base dir (or export it): `TELEGRAM_BOT_TOKEN=123456789:AA...`. Also set the API key for `llm.provider` (`ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY`).
 3. Find your numeric user id. One way: message **@userinfobot**, which replies with your id. Another: start the bot, send it any message, and read the stderr line `Warning: ignoring Telegram message from unauthorised user <id>.`
 4. Add the id to the config:
    ```toml
@@ -100,7 +102,7 @@ At startup, `go2 bot`:
 - loads the config and `.env`;
 - exits 2 with `Missing TELEGRAM_BOT_TOKEN.` if there is no token;
 - warns if `allowed_user_ids` is empty;
-- takes the lock, resets the stub (stub backend only), and builds the LLM client (exits 2 with `Missing ANTHROPIC_API_KEY.` if the key is missing).
+- takes the lock, resets the stub (stub backend only), and builds the LLM client (exits 2 with `Missing <API key variable>.` if the provider's key is missing).
 
 Stop the bot with Ctrl+C (or SIGTERM). If a task is running, it is stopped at once, as if `stop` had been sent: the skill is killed, StopMove is sent, the task ends `STOPPED`, and its outcome is still replied. Then the bot shuts down. As a backstop, shutdown waits up to the `stop_move` `POLICY` timeout + 5 s (15 s) for the task to end, then kills it and sends StopMove itself. The bot is built on `python-telegram-bot` 22.x (pinned `>=22.8,<23`).
 
@@ -156,10 +158,10 @@ The registry hash changes with the catalog, so runs with different skill sets ca
 `run`, `batch`, `--reset-stub` and `go2 bot` take an exclusive `flock` on `{log.dir}/.dispatcher.lock` and hold it until they exit. A second one fails with:
 
 ```
-Another dispatcher is running (lock: /path/to/runs/.dispatcher.lock).
+Another dispatcher is running (lock: /path/to/logs/.dispatcher.lock).
 ```
 
-and exit code 2. This stops two processes from driving one robot, overwriting the stub state file, or mixing lines in `index.jsonl`. `catalog` and `state` do not take the lock, so you can run them while a task is running. The lock is tied to `log.dir`: two configs with different `log.dir` values do not block each other, so do not point two configs at the same robot.
+and exit code 2. This stops two processes from driving one robot, overwriting the stub state file, or mixing lines in `index.jsonl`. `catalog` and `state` do not take the lock, so you can run them while a task is running. The lock is at the root of `log.dir`, so runs of every provider and backend under one root share it. It is tied to `log.dir`: two configs with different `log.dir` values do not block each other, so do not point two configs at the same robot.
 
 ## Design decisions
 

@@ -28,15 +28,18 @@ def surface():
 
 @pytest.fixture
 def no_planner_env(monkeypatch):
-    monkeypatch.delenv(API_KEY_ENV, raising=False)
+    for env in API_KEY_ENV.values():
+        monkeypatch.delenv(env, raising=False)
     monkeypatch.delenv(TEST_PLANNER_ENV, raising=False)
     return monkeypatch
 
 
-def test_missing_api_key_raises(tmp_path, surface, no_planner_env):
+@pytest.mark.parametrize("provider", ["anthropic", "openrouter"])
+def test_missing_api_key_raises(tmp_path, surface, no_planner_env, provider):
+    cfg = make_config(tmp_path, llm={"provider": provider, "model": "m"})
     with pytest.raises(StartupError) as ei:
-        make_planner(make_config(tmp_path), surface)
-    assert str(ei.value) == MISSING_API_KEY
+        make_planner(cfg, surface)
+    assert str(ei.value) == MISSING_API_KEY.format(env=API_KEY_ENV[provider])
 
 
 def test_malformed_test_planner_raises(tmp_path, surface, no_planner_env):

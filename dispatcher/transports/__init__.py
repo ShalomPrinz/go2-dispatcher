@@ -13,7 +13,7 @@ from ..config import API_KEY_ENV, Config, load_config_and_env
 from ..context import PromptSurface, render_step
 from ..dispatcher import Dispatcher
 from ..executor import Executor, SkillExecutor
-from ..llm import AnthropicPlanner, PlannerClient
+from ..llm import AnthropicPlanner, OpenRouterPlanner, PlannerClient
 from ..models import ConfigError, Posture, RegistryError, StartupError, TaskOutcome
 from ..registry import Registry
 
@@ -30,7 +30,7 @@ __all__ = [
 ]
 
 TEST_PLANNER_ENV = "GO2_TEST_PLANNER"  # "module:factory" (tests only)
-MISSING_API_KEY = f"Missing {API_KEY_ENV}."
+MISSING_API_KEY = "Missing {env}."
 OUTCOME_MAX_CHARS = 4000  # Telegram's limit is 4096 (docs/running.md)
 
 
@@ -44,7 +44,7 @@ def startup_error_text(e: StartupError) -> str:
 
 
 def make_planner(cfg: Config, surface: PromptSurface) -> PlannerClient:
-    """Choose the planner for ``surface``: test planner or Anthropic (docs/running.md).
+    """Choose the planner for ``surface``: test planner, else the ``llm.provider`` one (docs/running.md).
     Raises ``StartupError`` for a malformed test planner spec or a missing API key."""
     spec = os.environ.get(TEST_PLANNER_ENV)
     if spec:
@@ -53,9 +53,12 @@ def make_planner(cfg: Config, surface: PromptSurface) -> PlannerClient:
             raise StartupError(f"{TEST_PLANNER_ENV} must be module:factory, got {spec!r}.")
         factory = getattr(importlib.import_module(module_name), attr)
         return factory(surface)
-    key = os.environ.get(API_KEY_ENV, "").strip()
+    env = API_KEY_ENV[cfg.llm.provider]
+    key = os.environ.get(env, "").strip()
     if not key:
-        raise StartupError(MISSING_API_KEY)
+        raise StartupError(MISSING_API_KEY.format(env=env))
+    if cfg.llm.provider == "openrouter":
+        return OpenRouterPlanner(key, cfg.llm, surface)
     return AnthropicPlanner(key, cfg.llm, surface)
 
 
@@ -71,7 +74,7 @@ def initial_posture(executor: SkillExecutor) -> Posture:
 def build_dispatcher(cfg: Config, *, reset_stub: bool) -> Dispatcher:
     """Lock, registry, stub reset, planner, executor, dispatcher (docs/running.md).
     Raises ``StartupError``; process-lifetime hooks are the caller's."""
-    process_lock.acquire(cfg.log.dir)
+    process_lock.acquire(cfg.log.dir)  # the root, so all provider/backend folders share one lock
     registry = Registry.load(cfg.skills.dir)
     if reset_stub and cfg.robot.backend == "stub":
         stub.reset(cfg.stub.initial_posture, cfg.stub.state_file)

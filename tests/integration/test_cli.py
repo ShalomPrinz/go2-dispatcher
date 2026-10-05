@@ -115,7 +115,7 @@ def test_fault_with_real_backend(cfg_path):
 
 
 def test_second_run_is_locked_out_then_sigint_stops(cfg_path):
-    log_dir = cfg_path.parent / "runs"
+    log_dir = cfg_path.parent / "runs" / "anthropic" / "stub"
     first = subprocess.Popen(
         argv(cfg_path, "--fault", "1:hang", "run", "turn left"),
         env=cli_env([PLAN_TURN]),

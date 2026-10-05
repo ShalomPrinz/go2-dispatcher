@@ -16,7 +16,7 @@ uv run go2 catalog                             # check system text, catalog, too
 | Doc | Covers |
 |---|---|
 | [loop-and-context.md](docs/loop-and-context.md) | `submit_plan` schema, validation, return reasons, budgets, outcome codes and operator messages, context layout, fixed texts |
-| [llm.md](docs/llm.md) | Model choice, request parameters, schema retry, horizon rejection, infrastructure retries |
+| [llm.md](docs/llm.md) | Providers (Anthropic, OpenRouter), model choice, request parameters, schema retry, horizon rejection, infrastructure retries |
 | [run-log.md](docs/run-log.md) | Run log files, record types, `index.jsonl`, study metrics |
 | [configuration.md](../docs/configuration.md) | Config keys, validation rules, exit codes, CLI overrides, `.env` |
 | [running.md](../docs/running.md) | `go2` CLI, Telegram bot, stub vs real, single-instance lock |
@@ -27,7 +27,7 @@ uv run go2 catalog                             # check system text, catalog, too
 
 - Fixed texts in `prompts.py` change the registry hash and the golden files and make runs incomparable. Regenerate with `--update-golden` and review the diff.
 - Changes to `context.py` (step rendering, user message) change the `context_*.txt` golden files; a `SKILL.md` change on the skills side changes `catalog.txt`.
-- `anthropic` is imported lazily inside `llm.py`; a top-level import breaks the "CLI does not import `anthropic`" test ([llm.md](docs/llm.md#design-decisions)).
+- `anthropic` and `httpx` are imported lazily inside `llm.py`; a top-level `anthropic` import breaks the "CLI does not import `anthropic`" test ([llm.md](docs/llm.md#design-decisions)).
 - The dispatcher imports `skills`, never the reverse. `dispatcher/tests/` holds unit tests only; tests that spawn subprocesses or need both packages go in root `tests/` ([testing.md](../tests/docs/testing.md#layout)).
 - No `temperature`, no forced `tool_choice`, no prompt caching: deliberate, not omissions ([llm.md](docs/llm.md#design-decisions)).
 - Nothing raw (stderr, tracebacks, provider error text) may enter the model context ([loop-and-context.md](docs/loop-and-context.md#design-decisions)).

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
+from pathlib import Path
 
 import pytest
 
@@ -376,10 +377,20 @@ def test_internal_error_stop_move_and_kill_raise_task_end_still_written(tmp_path
     assert sm["ok"] is False and "stop_move exploded" in sm["stderr_tail"]
     (end,) = records(o, "task_end")
     assert end["outcome"] == "INTERNAL_ERROR" and end["stop_move_failed"] is True
-    index = r.cfg.log.dir / "index.jsonl"
+    index = r.cfg.run_log_dir / "index.jsonl"
     rows = [json.loads(line) for line in index.read_text(encoding="utf-8").splitlines()]
     assert rows[-1]["run_id"] == o.run_id and rows[-1]["outcome"] == "INTERNAL_ERROR"
     assert not r.d.is_busy()
+
+
+def test_log_folder_from_provider_and_backend(tmp_path, registry):
+    r = Rig(tmp_path, registry, [done()], llm={"provider": "openrouter", "model": "some/free-model"})
+    o = r.run()
+    folder = r.cfg.log.dir / "openrouter" / "stub"
+    assert Path(o.log_path).parent == folder
+    (row,) = [json.loads(line) for line in (folder / "index.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert row["provider"] == "openrouter" and row["backend"] == "stub" and row["thinking"] is None
+    assert records(o, "task_start")[0]["config"]["llm"]["provider"] == "openrouter"
 
 
 def test_internal_error_stop_move_stderr_tail_is_cut(tmp_path, registry):
@@ -406,7 +417,7 @@ def test_task_end_write_fails_index_row_still_written(tmp_path, registry, monkey
     o = r.run()
     assert o.outcome == "DONE"
     assert records(o, "task_end") == []
-    index = r.cfg.log.dir / "index.jsonl"
+    index = r.cfg.run_log_dir / "index.jsonl"
     rows = [json.loads(line) for line in index.read_text(encoding="utf-8").splitlines()]
     assert len(rows) == 1
     assert rows[0]["run_id"] == o.run_id and rows[0]["outcome"] == "DONE"
@@ -575,5 +586,5 @@ def test_log_open_fails_internal_error_without_index_row(tmp_path, registry, mon
     r = Rig(tmp_path, registry, [done()])
     o = r.run()
     assert o.outcome == "INTERNAL_ERROR" and o.log_path == ""
-    assert not (r.cfg.log.dir / "index.jsonl").exists()
+    assert not (r.cfg.run_log_dir / "index.jsonl").exists()
     assert not r.d.is_busy()

@@ -34,7 +34,8 @@ def test_defaults_load_without_file(tmp_path, monkeypatch, capsys):
     assert cfg.base_dir == tmp_path.resolve()
     assert cfg.loop.planning_horizon == 5
     assert cfg.robot.backend == "stub"
-    assert cfg.log.dir == tmp_path.resolve() / "runs"
+    assert cfg.log.dir == tmp_path.resolve() / "logs"
+    assert cfg.run_log_dir == cfg.log.dir / "anthropic" / "stub"
     assert cfg.log.dir.is_dir()
     err = capsys.readouterr().err
     assert err.count("\n") == 1 and "config.toml" in err
@@ -190,6 +191,12 @@ def test_llm_thinking(tmp_path):
     ok(tmp_path, {"llm": {"thinking": "between_tools"}})
     ok(tmp_path, {"llm": {"thinking": "adaptive"}})
     bad(tmp_path, {"llm": {"thinking": "disabled"}}, "thinking")
+
+
+def test_llm_provider(tmp_path):
+    ok(tmp_path, {"llm": {"provider": "openrouter", "model": "vendor/model:free"}})
+    bad(tmp_path, {"llm": {"provider": "openrouter"}}, "llm.model is required")
+    bad(tmp_path, {"llm": {"provider": "openai", "model": "m"}}, "provider")
 
 
 def test_backoff_values_non_negative(tmp_path):

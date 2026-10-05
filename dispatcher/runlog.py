@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any, TextIO
 
 from pydantic import BaseModel
 
-from .config import Config
+from .config import Config, Provider
 
 if TYPE_CHECKING:
     from .budget import MotionBudget
@@ -29,7 +29,12 @@ FILE_TIME_FORMAT = "%Y%m%dT%H%M%S"  # local time at task start (dispatcher/docs/
 RUN_ID_PREFIX_LEN = 8
 ENVELOPE_KEYS = frozenset({"ts", "t_mono_ms", "session_id", "run_id", "seq", "type"})
 GIT_TIMEOUT_S = 5.0  # best-effort `git rev-parse HEAD` at startup
-VERSION_PACKAGES = ("anthropic", "pydantic", "go2-dispatcher")
+VERSION_PACKAGES = ("anthropic", "httpx", "pydantic", "go2-dispatcher")
+# usage keys summed into the index token columns, per provider (dispatcher/docs/run-log.md)
+TOKEN_KEYS: dict[Provider, tuple[str, str]] = {
+    "anthropic": ("input_tokens", "output_tokens"),
+    "openrouter": ("prompt_tokens", "completion_tokens"),
+}
 
 
 def _local_iso() -> str:
@@ -326,6 +331,7 @@ class RunLogFactory:
     def append_index(self, path: Path, result: TaskOutcome, *, ts_start: str, source: str, usage_totals: dict) -> None:
         """One ``index.jsonl`` row for a finished task whose log file is ``path`` (dispatcher/docs/run-log.md)."""
         cfg = self.session.config
+        input_key, output_key = TOKEN_KEYS[cfg.llm.provider]
         row = {
             "run_id": result.run_id,
             "file": path.name,
@@ -334,17 +340,18 @@ class RunLogFactory:
             "source": source,
             "outcome": result.outcome,
             "condition": self.session.condition,
+            "provider": cfg.llm.provider,
             "backend": cfg.robot.backend,
             "model": cfg.llm.model,
-            "thinking": cfg.llm.thinking,
+            "thinking": cfg.llm.thinking if cfg.llm.provider == "anthropic" else None,
             "planning_horizon": cfg.loop.planning_horizon,
             "max_llm_calls": cfg.loop.max_llm_calls,
             "registry_hash": self.session.registry_hash,
             "llm_calls": result.llm_calls,
             "failures": result.failures,
             "steps_dispatched": len(result.dispatched_steps),
-            "input_tokens": usage_totals.get("input_tokens", 0),
-            "output_tokens": usage_totals.get("output_tokens", 0),
+            "input_tokens": usage_totals.get(input_key, 0),
+            "output_tokens": usage_totals.get(output_key, 0),
             "duration_ms": result.duration_ms,
         }
         with self._index_lock:
