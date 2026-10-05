@@ -104,6 +104,10 @@ def render_fixed_texts() -> str:
 
 
 def test_fixed_texts_match_golden(update_golden):
+    # Guard: render_fixed_texts() reaches str constants via __all__ and only the two containers it loops over.
+    public = {n: v for n, v in vars(prompts).items() if not n.startswith("_")}
+    assert {n for n, v in public.items() if isinstance(v, str)} <= set(prompts.__all__)
+    assert {n for n, v in public.items() if isinstance(v, (dict, list, tuple))} == {"NOTICES", "OPERATOR_MESSAGES"}
     text = render_fixed_texts()
     if update_golden:
         GOLDEN.write_text(text, encoding="utf-8")
