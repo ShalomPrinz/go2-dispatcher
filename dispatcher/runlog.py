@@ -12,7 +12,7 @@ import traceback
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TextIO
+from typing import TYPE_CHECKING, Any, Protocol, TextIO
 
 from pydantic import BaseModel
 
@@ -262,50 +262,88 @@ class RunLog:
         )
 
 
+class TaskLog(Protocol):
+    """What the loop writes for one task: ``RunLog`` once the file is open, ``NullLog`` before that or if opening
+    failed. ``path`` is None when there is no file, so no index row is written (dispatcher/docs/run-log.md)."""
+
+    @property
+    def path(self) -> Path | None: ...
+
+    def llm_request(
+        self, call_index: int, return_reason: RequestReason, retry_of: ReturnReason | None, user_text: str
+    ) -> None: ...
+
+    def llm_retry(self, retry: dict) -> None: ...
+
+    def llm_response(self, call_index: int, res: LLMResult) -> None: ...
+
+    def llm_error(self, call_index: int, detail: str) -> None: ...
+
+    def llm_interrupted(self, call_index: int, cause: str) -> None: ...
+
+    def plan(self, call_index: int, plan: Plan, stop_at: int) -> None: ...
+
+    def plan_invalid(self, call_index: int, tool_input: Any, check: PlanCheck, horizon: int) -> None: ...
+
+    def step_start(self, ref: StepRef, dispatch: StepDispatch) -> None: ...
+
+    def step_result(self, sr: StepResult, *, budget: MotionBudget, failures: int, posture: Posture) -> None: ...
+
+    def stop_move(self, smr: StopMoveResult) -> None: ...
+
+    def exception(self, where: str, e: BaseException) -> None: ...
+
+    def task_end(
+        self, result: TaskOutcome, *, rejections: int, horizon_rejections: int, usage_totals: dict, budget: MotionBudget
+    ) -> None: ...
+
+
 class NullLog:
-    """Stands in for ``RunLog`` until the task's log file is open (or if opening it failed): every record is
-    dropped, and ``path`` is None, so no index row is written (dispatcher/docs/run-log.md)."""
+    """The ``TaskLog`` with no file: every record is dropped and ``path`` is None."""
 
-    path: None = None
+    @property
+    def path(self) -> None:
+        return None
 
-    def llm_request(self, *args: Any, **kwargs: Any) -> None:
+    def llm_request(
+        self, call_index: int, return_reason: RequestReason, retry_of: ReturnReason | None, user_text: str
+    ) -> None:
         pass
 
-    def llm_retry(self, *args: Any, **kwargs: Any) -> None:
+    def llm_retry(self, retry: dict) -> None:
         pass
 
-    def llm_response(self, *args: Any, **kwargs: Any) -> None:
+    def llm_response(self, call_index: int, res: LLMResult) -> None:
         pass
 
-    def llm_error(self, *args: Any, **kwargs: Any) -> None:
+    def llm_error(self, call_index: int, detail: str) -> None:
         pass
 
-    def llm_interrupted(self, *args: Any, **kwargs: Any) -> None:
+    def llm_interrupted(self, call_index: int, cause: str) -> None:
         pass
 
-    def plan(self, *args: Any, **kwargs: Any) -> None:
+    def plan(self, call_index: int, plan: Plan, stop_at: int) -> None:
         pass
 
-    def plan_invalid(self, *args: Any, **kwargs: Any) -> None:
+    def plan_invalid(self, call_index: int, tool_input: Any, check: PlanCheck, horizon: int) -> None:
         pass
 
-    def step_start(self, *args: Any, **kwargs: Any) -> None:
+    def step_start(self, ref: StepRef, dispatch: StepDispatch) -> None:
         pass
 
-    def step_result(self, *args: Any, **kwargs: Any) -> None:
+    def step_result(self, sr: StepResult, *, budget: MotionBudget, failures: int, posture: Posture) -> None:
         pass
 
-    def stop_move(self, *args: Any, **kwargs: Any) -> None:
+    def stop_move(self, smr: StopMoveResult) -> None:
         pass
 
-    def exception(self, *args: Any, **kwargs: Any) -> None:
+    def exception(self, where: str, e: BaseException) -> None:
         pass
 
-    def task_end(self, *args: Any, **kwargs: Any) -> None:
+    def task_end(
+        self, result: TaskOutcome, *, rejections: int, horizon_rejections: int, usage_totals: dict, budget: MotionBudget
+    ) -> None:
         pass
-
-
-TaskLog = RunLog | NullLog  # a task's log: the open file, or the stand-in before it opens
 
 
 class RunLogFactory:
