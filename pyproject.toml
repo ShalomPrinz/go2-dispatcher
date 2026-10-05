@@ -60,7 +60,7 @@ show_missing = true
 skip_covered = true
 
 [tool.importlinter]                     # import boundaries: uv run lint-imports (tests/docs/testing.md)
-root_packages = ["skills", "dispatcher"]
+root_packages = ["skills", "dispatcher", "tests"]
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
