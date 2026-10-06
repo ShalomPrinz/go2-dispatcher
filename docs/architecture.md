@@ -12,7 +12,7 @@ An operator sends a natural-language task over Telegram or the CLI. The LLM retu
  Operator ──► Transport (Telegram | CLI)
                 │  run_task(text) / request_stop() / shutdown()
                 ▼
-           Dispatcher ─────────────────────► Run log (runs/*.jsonl, runs/index.jsonl)
+           Dispatcher ─────────────────────► Run log (logs/<provider>/<backend>/*.jsonl, index.jsonl)
             │    ▲
    context  │    │ plan
             ▼    │
@@ -113,7 +113,7 @@ go2-dispatcher/
 │   └── tests/                  # unit/, robot/ (opt-in): skills unit tests (excluded from the wheel)
 ├── tests/                      # cross-service tests: integration/, shared helpers/, pytest_plugin.py (options)
 ├── docs/                       # shared documentation (index: docs/README.md)
-├── runs/                       # run logs (gitignored)
+├── logs/                       # run logs by provider and backend (gitignored)
 └── models/                     # YOLO weights (gitignored)
 ```
 

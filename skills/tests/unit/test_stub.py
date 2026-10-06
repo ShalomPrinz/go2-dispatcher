@@ -8,7 +8,7 @@ from skills import stub
 
 
 def test_reset_overwrites_posture_and_rejects_unknown(tmp_path):
-    path = tmp_path / "runs" / "stub_state.json"
+    path = tmp_path / "logs" / "stub_state.json"
     stub.reset("sitting", path)
     assert stub.read_posture(path) == "sitting"
     stub.reset("standing", path)

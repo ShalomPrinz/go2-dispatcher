@@ -110,7 +110,7 @@ uv run go2 run "turn left 90 degrees, then tell me if you see a chair"
 uv run pytest                        # all default tests pass with no key, robot or network
 ```
 
-The `run` command needs `ANTHROPIC_API_KEY`. Its run log is written to `runs/` ([run-log.md](../dispatcher/docs/run-log.md)).
+The `run` command needs the API key for the configured `llm.provider` (`ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY`). Its run log is written under `logs/<provider>/<backend>/` ([run-log.md](../dispatcher/docs/run-log.md)).
 
 On the lab machine, with the robot on and standing, check the real backend:
 

@@ -89,7 +89,7 @@ There is no `temperature` key (adding one is an unknown-key error), and `tool_ch
 |---|---|---|---|---|
 | `time_scale` | float | `0.1` | > 0 | Multiplies every simulated duration (motion loops, settle waits, detection delay). |
 | `initial_posture` | `"standing"` \| `"sitting"` | `"standing"` | | Posture written to the state file at startup by `run`, `batch`, `go2 bot` and `--reset-stub`. |
-| `state_file` | path | `"runs/.stub_state.json"` | | JSON file that holds the stub posture. Shared by all skill processes. |
+| `state_file` | path | `"logs/.stub_state.json"` | | JSON file that holds the stub posture. Shared by all skill processes. |
 | `detections` | table str → str | `{}` | keys are COCO class names; values match `^(left\|center\|right):(near\|medium\|far)$` | What the stub detector "sees". |
 | `faults` | list of `{step, kind}` | `[]` | `step` int ≥ 1, unique; `kind` ∈ `error`, `hang`, `crash`, `garbage`; must be empty when `backend = "real"` | Faults injected by dispatched step number (counted across the task). See [skills.md](../skills/docs/skills.md#fault-injection). |
 

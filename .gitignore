@@ -1,6 +1,6 @@
 config.toml
 .env
-runs/
+logs/
 models/
 .venv/
 __pycache__/

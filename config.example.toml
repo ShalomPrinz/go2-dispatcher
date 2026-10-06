@@ -34,7 +34,7 @@ yolo_weights = "models/yolov8n.pt"
 [stub]
 time_scale = 0.1                    # multiplies every simulated duration
 initial_posture = "standing"        # "standing" | "sitting"
-state_file = "runs/.stub_state.json"
+state_file = "logs/.stub_state.json"
 detections = {}                     # e.g. { chair = "center:near", "cell phone" = "left:far" }
 faults = []                         # e.g. [ { step = 2, kind = "hang" } ]
 

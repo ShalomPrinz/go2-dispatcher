@@ -22,7 +22,7 @@ except StartupError as e:
 
 
 def test_lock_held_by_parent_blocks_child(tmp_path):
-    log_dir = tmp_path / "runs"
+    log_dir = tmp_path / "logs"
     path = process_lock.acquire(log_dir)
     assert path == (log_dir / ".dispatcher.lock").resolve()
     assert path.exists()

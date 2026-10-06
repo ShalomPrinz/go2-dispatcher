@@ -17,7 +17,7 @@ from skills.env import STUB_DETECTIONS, STUB_FAULT, STUB_STATE_FILE, STUB_TIME_S
 from skills.schema import RobotState
 
 # Stub defaults: used when the env is unset (manual runs) and as the dispatcher's stub config defaults.
-DEFAULT_STATE_FILE = "runs/.stub_state.json"
+DEFAULT_STATE_FILE = "logs/.stub_state.json"
 DEFAULT_TIME_SCALE = 0.1
 
 StubPosture = Literal["standing", "sitting"]  # the postures the stub can hold; a subset of schema.Posture

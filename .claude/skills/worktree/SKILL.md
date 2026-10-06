@@ -19,7 +19,7 @@ That one command is the whole setup — there is nothing here for you to decide 
 creates `<repo-root>-<slug>` on a new branch `<slug>` off `main`, copies the git-ignored `.env` and
 `config.toml` when main has them, adds the worktree to `permissions.additionalDirectories` in
 `<repo-root>/.claude/settings.local.json` so searching it does not prompt, and runs `uv sync` (stub
-mode). `runs/` is not copied, so the worktree starts with its own stub posture and logs.
+mode). `logs/` is not copied, so the worktree starts with its own stub posture and logs.
 
 Then run every command from **`<repo-root>-<slug>`**, on the local branch **`<slug>`**. Do not `cd` to
 `<repo-root>` — it stays on `main`, untouched.

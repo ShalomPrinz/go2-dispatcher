@@ -24,9 +24,9 @@ def make_config(tmp_path: Path, **overrides: Any) -> Config:
     0.01, base dir = repo root. ``overrides`` are section dicts merged in, e.g.
     ``make_config(tmp_path, loop={"max_failures": 1}, stub={"faults": [...]})``."""
     data: dict[str, Any] = {
-        "log": {"dir": str(tmp_path / "runs")},
+        "log": {"dir": str(tmp_path / "logs")},
         "stub": {
-            "state_file": str(tmp_path / "runs" / ".stub_state.json"),
+            "state_file": str(tmp_path / "logs" / ".stub_state.json"),
             "time_scale": TEST_TIME_SCALE,
         },
     }

@@ -32,9 +32,9 @@ def cfg_path(tmp_path):
     p = tmp_path / "config.toml"
     p.write_text(
         f'[skills]\ndir = "{REPO_ROOT / "skills" / "catalog"}"\n'
-        '[log]\ndir = "runs"\n'
+        '[log]\ndir = "logs"\n'
         '[robot]\nnetwork_interface = "eth0"\n'
-        '[stub]\nstate_file = "runs/.stub_state.json"\ntime_scale = 0.01\n',
+        '[stub]\nstate_file = "logs/.stub_state.json"\ntime_scale = 0.01\n',
         encoding="utf-8",
     )
     return p
@@ -70,7 +70,7 @@ def test_catalog(cfg_path):
 
 
 def test_reset_stub(cfg_path):
-    state_file = cfg_path.parent / "runs" / ".stub_state.json"
+    state_file = cfg_path.parent / "logs" / ".stub_state.json"
     stub.write_posture("sitting", state_file)
     proc = cli(cfg_path, "--reset-stub")
     assert proc.returncode == 0, proc.stderr
@@ -115,7 +115,7 @@ def test_fault_with_real_backend(cfg_path):
 
 
 def test_second_run_is_locked_out_then_sigint_stops(cfg_path):
-    log_dir = cfg_path.parent / "runs" / "anthropic" / "stub"
+    log_dir = cfg_path.parent / "logs" / "anthropic" / "stub"
     first = subprocess.Popen(
         argv(cfg_path, "--fault", "1:hang", "run", "turn left"),
         env=cli_env([PLAN_TURN]),

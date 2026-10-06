@@ -22,7 +22,7 @@ git -C "$root" worktree add -b "$slug" "$wt" main
 echo "==> git-ignored files"
 # Both optional: the default suite needs neither. .env holds the API key and Telegram token, config.toml
 # the local settings. Copied, not symlinked, so a branch under test cannot change main's config.
-# runs/ (logs and the stub posture file) is not copied: the worktree starts with a fresh stub.
+# logs/ (run logs and the stub posture file) is not copied: the worktree starts with a fresh stub.
 for f in .env config.toml; do
     if [[ -f "$root/$f" ]]; then cp "$root/$f" "$wt/$f"; else echo "skip $f (absent in main)"; fi
 done

@@ -209,7 +209,7 @@ Example: a `stand` skill (recommended before experiments, see [roadmap.md](../..
 On the stub:
 
 ```bash
-export GO2_BACKEND=stub GO2_STUB_STATE_FILE=runs/.stub_state.json GO2_STUB_TIME_SCALE=0.1
+export GO2_BACKEND=stub GO2_STUB_STATE_FILE=logs/.stub_state.json GO2_STUB_TIME_SCALE=0.1
 uv run python -m skills.walk '{"direction":"forward","distance_m":1}'
 uv run python -m skills.detect_object '{"target":"chair"}'
 GO2_STUB_DETECTIONS='{"chair":"center:near"}' uv run python -m skills.detect_object '{"target":"chair"}'
@@ -218,7 +218,7 @@ uv run python -m skills.read_state '{}'
 uv run python -m skills.stop_move '{}'
 ```
 
-Without `GO2_STUB_STATE_FILE` and `GO2_STUB_TIME_SCALE` the stub uses `runs/.stub_state.json` (relative to the working directory) and 0.1. On the real robot set `GO2_BACKEND=real GO2_IFACE=<nic>` (and `GO2_YOLO_WEIGHTS` for detection), with the robot supervised ([safety.md](../../docs/safety.md#supervised-operation-rules)). Pass all params: skills do not fill defaults.
+Without `GO2_STUB_STATE_FILE` and `GO2_STUB_TIME_SCALE` the stub uses `logs/.stub_state.json` (relative to the working directory) and 0.1. On the real robot set `GO2_BACKEND=real GO2_IFACE=<nic>` (and `GO2_YOLO_WEIGHTS` for detection), with the robot supervised ([safety.md](../../docs/safety.md#supervised-operation-rules)). Pass all params: skills do not fill defaults.
 
 ## Design decisions
 
