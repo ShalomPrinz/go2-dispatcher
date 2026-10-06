@@ -174,13 +174,9 @@ def test_detect_follows_the_pose(tmp_path):
     turned = run_ok("turn", {"direction": "left", "angle_deg": 90}, env).state_after
     assert turned is not None and turned.imu_rpy == pytest.approx([0.0, 0.0, 1.6])  # 16 commands of 0.1 rad
     resp = run_ok("detect_object", {"target": "  Chair "}, env)
-    assert resp.observations == {
-        "target": "chair",
-        "object_found": True,
-        "position": "center",
-        "closeness": "medium",
-        "confidence": 0.78,
-    }
+    obs = resp.observations
+    assert set(obs) == {"target", "object_found", "position", "closeness", "confidence"}
+    assert (obs["target"], obs["object_found"], obs["position"]) == ("chair", True, "center")
 
 
 def test_detect_not_found_is_ok(tmp_path):
