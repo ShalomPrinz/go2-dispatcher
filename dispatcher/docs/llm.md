@@ -44,11 +44,11 @@ Nothing else is sent: no `temperature` or other sampling parameter, no `output_c
     {"role": "user", "content": "<user_message>"}
   ],
   "tools": [{"type": "function", "function": {"name": "submit_plan", "description": "...", "parameters": {"...": "submit_plan input_schema"}}}],
-  "tool_choice": "auto"
+  "tool_choice": {"type": "function", "function": {"name": "submit_plan"}}
 }
 ```
 
-The two system blocks stay two text parts of one system message. The tool is the logged `tool_schema` wrapped as a function tool (`input_schema` becomes `parameters`); `task_start.tool_schema` holds the unwrapped definition. `tool_choice` is `auto`, as for Anthropic. Nothing else is sent: no `thinking` or reasoning setting, no sampling parameters, no provider routing preferences, no streaming. Whether a given free model supports tool calls is the model's affair: one that ignores the tool gives `no_tool_call` rejections.
+The two system blocks stay two text parts of one system message. The tool is the logged `tool_schema` wrapped as a function tool (`input_schema` becomes `parameters`); `task_start.tool_schema` holds the unwrapped definition. `tool_choice` forces the `submit_plan` call, unlike the Anthropic request (Design decisions). Nothing else is sent: no `thinking` or reasoning setting, no sampling parameters, no provider routing preferences, no streaming. Whether a given free model supports tool calls (or honours the forced choice) is the model's affair: one that ignores the tool gives `no_tool_call` rejections, handled as for Anthropic.
 
 ### Sonnet 5.5 parameter constraints
 
@@ -114,7 +114,8 @@ The SDK's own retries are disabled (`max_retries=0`); `AnthropicPlanner` retries
 
 - **Claude Sonnet 5.5 as the planner, with the request shaped to what it accepts.** When an earlier design (forced `tool_choice`, a fixed `temperature`) turned out to be rejected by Sonnet 5.5, the request was changed rather than the model. Rejected: switching to an older model that still accepts forced tool choice and `temperature` (such as Opus 4.6).
 - **Thinking at its lowest setting (`between_tools`), called "thinking off".** Thinking adds variable latency and output tokens, and those are measured variables. Sonnet 5.5 does not allow `disabled`, so the lowest accepted setting is used and kept constant across conditions; `adaptive` exists only as a deliberate condition.
-- **Auto `tool_choice` plus one schema retry.** Forced tool choice is unavailable; a missing call is treated like any other invalid reply, so it is measured rather than hidden.
+- **Auto `tool_choice` plus one schema retry.** Forced tool choice is unavailable on Sonnet 5.5; a missing call is treated like any other invalid reply, so it is measured rather than hidden.
+- **Forced `tool_choice` for OpenRouter only.** Free models often answer in plain text under `auto`, which costs a `no_tool_call` schema retry and free-tier quota; forcing `submit_plan` avoids that. The Anthropic request keeps `auto` (Sonnet 5.5 rejects a forced choice), so the research request and golden files are unchanged. The `no_tool_call` check stays, because a model or provider may ignore the forced choice. Rejected: `auto` for OpenRouter too, which mirrored Anthropic but wasted retries on free models.
 - **No `temperature`.** Not possible on Sonnet 5.5. The cost is non-deterministic planning; the study must account for run-to-run variation.
 - **Non-strict tool mode.** Strict mode cannot enforce `maxItems` or numeric ranges, and it injects an extra system prompt that distorts token counts. The dispatcher's own validation is the enforcer.
 - **`max_tokens` 2048** as headroom against cut-off replies; it does not affect cost or measurements unless a reply would be cut off.

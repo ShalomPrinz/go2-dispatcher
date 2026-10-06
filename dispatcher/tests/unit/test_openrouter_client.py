@@ -75,7 +75,7 @@ def test_tool_call_parsed_and_request_shape(tmp_path):
     assert str(req.url) == OPENROUTER_URL and req.headers["authorization"] == "Bearer test-key"
     body = json.loads(req.content)
     assert body["model"] == "vendor/free-model" and body["max_tokens"] == 2048
-    assert body["tool_choice"] == "auto"
+    assert body["tool_choice"] == {"type": "function", "function": {"name": TOOL_NAME}}
     assert body["messages"] == [
         {"role": "system", "content": [{"type": "text", "text": SYSTEM[0]}, {"type": "text", "text": SYSTEM[1]}]},
         {"role": "user", "content": USER},

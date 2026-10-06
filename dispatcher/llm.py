@@ -489,7 +489,7 @@ class OpenRouterPlanner:
                 {"role": "user", "content": user},
             ],
             "tools": [_openrouter_tool(self.surface.tool_schema)],
-            "tool_choice": "auto",
+            "tool_choice": {"type": "function", "function": {"name": TOOL_NAME}},
         }
 
     def plan(
