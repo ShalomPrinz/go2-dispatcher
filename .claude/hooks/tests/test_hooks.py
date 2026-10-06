@@ -48,6 +48,8 @@ def hook(name: str, payload: object, tmpdir: Path) -> subprocess.CompletedProces
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")} | {"TMPDIR": str(tmpdir)}
     # The temp repo has no project, so `uv run ruff` there resolves ruff on PATH: put this venv's bin first.
     env["PATH"] = os.pathsep.join([str(Path(sys.executable).parent), env.get("PATH", "")])
+    # An empty config home, so ruff's defaults apply instead of a user-level ruff.toml.
+    env["XDG_CONFIG_HOME"] = str(tmpdir / "xdg-config")
     stdin = payload if isinstance(payload, str) else json.dumps(payload)
     return subprocess.run(
         [sys.executable, str(HOOKS / name)], input=stdin, capture_output=True, text=True, env=env, timeout=10
