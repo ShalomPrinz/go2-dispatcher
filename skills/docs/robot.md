@@ -25,7 +25,7 @@ All SDK use is in `skills/real.py`, selected in the skill process by `GO2_BACKEN
 | Camera | `VideoClient`, `SetTimeout(CAMERA_TIMEOUT_S)`, `Init()`, `GetImageSample()` → JPEG bytes, decoded with OpenCV. |
 | State | `ChannelSubscriber("rt/sportmodestate", SportModeState_)`, queue length `SUBSCRIBER_QUEUE_LEN` ([state sampling](#state-sampling)). |
 
-Constants are module-level in `skills/real.py` (detector ones on `RealDetector`). Each skill call and utility is a fresh process, so DDS is initialised once per call ([skills.md](skills.md#design-decisions)).
+Constants are module-level in `skills/real.py`, except the detector ones ([object detection](#object-detection)). Each skill call and utility is a fresh process, so DDS is initialised once per call ([skills.md](skills.md#design-decisions)).
 
 ### Motion
 
@@ -42,7 +42,9 @@ Constants are module-level in `skills/real.py` (detector ones on `RealDetector`)
 - **Position** from the box centre's horizontal fraction of the image (`LEFT_MAX_X`, `RIGHT_MIN_X`); **closeness** from the box height's fraction (`NEAR_MIN_H`, `MEDIUM_MIN_H`).
 - Confidence is rounded to `CONFIDENCE_DECIMALS` decimals.
 
-All thresholds are class constants of `RealDetector`, *tunable* and *unverified* on the robot's camera.
+The box classification and its thresholds live in `skills/vision.py` (`classify_box`), shared with the stub's simulated camera ([skills.md](skills.md#stub-backend)); `IMGSZ`, `CONF` and `CAMERA_TIMEOUT_S` stay on `RealDetector`. All are *tunable* and *unverified* on the robot's camera.
+
+**Front camera.** Unitree's Go2 specification gives the front camera as 1280×720 with an ultra-wide 120° field of view; the stub assumes the 120° is horizontal, square pixels, no distortion and a camera about 0.3 m ahead of the body centre (`CAMERA_*` in `skills/stub.py`). All *unverified*. Under that model the focal length is about 370 px and a 0.25 m bottle reads `near` only within about 0.21 m camera depth, `medium` up to about 0.43 m and `far` beyond, and the `center` band is about ±19° of bearing. The closeness thresholds are therefore likely too coarse for objects of bottle size; calibrating them is pending human work ([roadmap.md](../../docs/roadmap.md#pending-human-work)).
 
 ## State sampling
 
@@ -102,7 +104,7 @@ The list of open questions with owners is in [roadmap.md](../../docs/roadmap.md#
 - **Posture is derived from sampled state, never inferred from the last skill.** A skill can fail, be killed, or be followed by a manual stand-up with the remote; only the robot's state says what it is doing now. One function holds the rule, so it changes in one place.
 - **Fixed settle waits after `StandDown` and `Stretch`**, rather than waiting for the state to settle: simple and inspectable; the values are tuned from the checklist.
 - **The network interface is never hardcoded.** A blank `robot.network_interface` with `robot.backend = "real"` is a config error, so the backend never guesses an interface.
-- **Translation is not estimated from commanded velocity.** Dead reckoning restates the walk skill's own open-loop assumption, so it is not a measurement. The robot's own measurement-based estimator is acceptable, with a drift tolerance, if it turns out usable.
+- **Translation is not estimated from commanded velocity.** Dead reckoning restates the walk skill's own open-loop assumption, so it is not a measurement. The robot's own measurement-based estimator is acceptable, with a drift tolerance, if it turns out usable. The stub's pose does integrate commanded velocity, but only as a simulation of that estimator for offline runs ([skills.md](skills.md#stub-backend)).
 
 ## Supervised robot checklist
 

@@ -91,7 +91,7 @@ The plugin's autouse fixture `_block_network` makes the default suite offline by
 ANTHROPIC_API_KEY=sk-ant-... uv run pytest --run-live -s tests/integration/test_live_llm.py
 ```
 
-It runs the task "turn left 90 degrees, then tell me if you see a chair" on the stub with `stub.detections = {chair = "center:near"}`. It passes if the task ends `DONE`, the message mentions the chair, and the run log has no `plan_invalid` record (which includes horizon rejections; [run-log.md](../../dispatcher/docs/run-log.md)). With `-s`, it prints the run log path.
+It runs the task "turn left 90 degrees, then tell me if you see a chair" on the stub with `stub.objects = {chair = {x = 0.0, y = 2.0}}` (a chair 2 m to the robot's left, out of view until the turn). It passes if the task ends `DONE`, the message mentions the chair, and the run log has no `plan_invalid` record (which includes horizon rejections; [run-log.md](../../dispatcher/docs/run-log.md)). With `-s`, it prints the run log path.
 
 It uses the default LLM settings ([llm.md](../../dispatcher/docs/llm.md#the-request)). **It has not been run live yet**; running it is the pending check of the request parameters ([roadmap.md](../../docs/roadmap.md#pending-human-work)).
 

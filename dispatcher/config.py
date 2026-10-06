@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import copy
 import os
-import re
 import sys
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -23,7 +22,7 @@ from pydantic import (
 )
 
 from skills.coco import COCO_CLASSES
-from skills.stub import DEFAULT_POSTURE, DEFAULT_STATE_FILE, DEFAULT_TIME_SCALE, FaultKind, StubPosture
+from skills.stub import DEFAULT_POSTURE, DEFAULT_STATE_FILE, DEFAULT_TIME_SCALE, FaultKind, StubPosture, parse_objects
 
 from .models import ConfigError
 
@@ -39,7 +38,6 @@ Provider = Literal["anthropic", "openrouter"]
 API_KEY_ENV: dict[Provider, str] = {"anthropic": "ANTHROPIC_API_KEY", "openrouter": "OPENROUTER_API_KEY"}
 TOKEN_ENV = "TELEGRAM_BOT_TOKEN"
 SECRET_ENV = frozenset({*API_KEY_ENV.values(), TOKEN_ENV})  # never passed to skill children (docs/safety.md)
-DETECTION_VALUE_RE = re.compile(r"^(left|center|right):(near|medium|far)$")
 
 
 def _strict_number(v: Any) -> Any:
@@ -115,17 +113,16 @@ class StubConfig(_Section):
     time_scale: FiniteFloat = Field(default=DEFAULT_TIME_SCALE, gt=0)
     initial_posture: StubPosture = DEFAULT_POSTURE
     state_file: Path = Path(DEFAULT_STATE_FILE)
-    detections: dict[str, StrictStr] = {}
+    objects: dict[str, dict[str, Any]] = {}  # world frame, metres (skills/docs/skills.md)
     faults: list[FaultConfig] = []
 
-    @field_validator("detections")
+    @field_validator("objects")
     @classmethod
-    def _check_detections(cls, v: dict[str, str]) -> dict[str, str]:
-        for name, where in v.items():
+    def _check_objects(cls, v: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        for name, spec in v.items():
             if name not in COCO_CLASSES:
                 raise ValueError(f"'{name}' is not a COCO class")
-            if not DETECTION_VALUE_RE.match(where):
-                raise ValueError(f"value for '{name}' must match {DETECTION_VALUE_RE.pattern}, got '{where}'")
+            parse_objects({name: spec})  # the stub's own rules; its ValueError names the class
         return v
 
     @field_validator("faults")

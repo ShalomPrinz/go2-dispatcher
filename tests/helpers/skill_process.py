@@ -6,10 +6,12 @@ import json
 import os
 import subprocess
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 from dispatcher.config import SECRET_ENV
+from skills.env import STUB_OBJECTS
 
 from .paths import REPO_ROOT, TEST_TIME_SCALE
 
@@ -17,7 +19,11 @@ SKILL_RUN_TIMEOUT_S = 20.0
 
 
 def stub_env(
-    tmp_path: Path, *, detections: dict[str, str] | None = None, fault: str | None = None, **extra: str
+    tmp_path: Path,
+    *,
+    objects: Mapping[str, Mapping[str, float]] | None = None,
+    fault: str | None = None,
+    **extra: str,
 ) -> dict[str, str]:
     """Environment like the executor's (skills/docs/skills.md) for the stub backend, rooted at tmp_path."""
     env = {k: v for k, v in os.environ.items() if k not in SECRET_ENV and not k.startswith("GO2_")}
@@ -29,7 +35,7 @@ def stub_env(
             "GO2_YOLO_WEIGHTS": str(tmp_path / "missing.pt"),
             "GO2_STUB_STATE_FILE": str(tmp_path / "stub_state.json"),
             "GO2_STUB_TIME_SCALE": repr(TEST_TIME_SCALE),
-            "GO2_STUB_DETECTIONS": json.dumps(detections or {}),
+            STUB_OBJECTS: json.dumps({k: dict(v) for k, v in (objects or {}).items()}),
         }
     )
     if fault:

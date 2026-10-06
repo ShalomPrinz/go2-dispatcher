@@ -150,7 +150,7 @@ class Executor:
             yolo_weights=str(self.cfg.robot.yolo_weights),
             stub_state_file=str(self.cfg.stub.state_file),
             stub_time_scale=self.cfg.stub.time_scale,
-            stub_detections=self.cfg.stub.detections,
+            stub_objects=self.cfg.stub.objects,
             parent_pid=os.getpid(),
             fault=fault,
         )

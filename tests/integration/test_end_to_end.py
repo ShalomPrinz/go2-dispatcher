@@ -56,7 +56,7 @@ def test_turn_then_detect(tmp_path, registry):
         tmp_path,
         registry,
         [Plan(status="PLAN", steps=[TURN, DETECT]), Plan(status="DONE", message="I see a chair.")],
-        stub={"detections": {"chair": "center:near"}},
+        stub={"objects": {"chair": {"x": 0.0, "y": 2.0}}},  # left of the start pose, seen after the turn
     )
     o = d.run_task("turn left then look for a chair", source="test")
     assert o.outcome == "DONE", o.message

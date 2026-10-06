@@ -12,7 +12,7 @@ from tests.helpers import REPO_ROOT, TEST_TIME_SCALE
 def _merge(base: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:
     out = dict(base)
     for k, v in extra.items():
-        if isinstance(v, dict) and isinstance(out.get(k), dict) and k != "detections":
+        if isinstance(v, dict) and isinstance(out.get(k), dict) and k != "objects":
             out[k] = _merge(out[k], v)
         else:
             out[k] = v

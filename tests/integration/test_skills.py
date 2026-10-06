@@ -167,15 +167,19 @@ def test_stretch_while_sitting_fails(tmp_path):
     assert resp.error.message == f"Stretch returned {stub.STUB_ERR_NOT_STANDING}"
 
 
-def test_detect_found(tmp_path):
-    env = stub_env(tmp_path, detections={"chair": "left:far"})
+def test_detect_follows_the_pose(tmp_path):
+    """A chair behind the camera at the start is ahead after a left turn (pose kept in the state file)."""
+    env = stub_env(tmp_path, objects={"chair": {"x": 0.0, "y": 1.2}})
+    assert run_ok("detect_object", {"target": "chair"}, env).observations["object_found"] is False
+    turned = run_ok("turn", {"direction": "left", "angle_deg": 90}, env).state_after
+    assert turned is not None and turned.imu_rpy == pytest.approx([0.0, 0.0, 1.6])  # 16 commands of 0.1 rad
     resp = run_ok("detect_object", {"target": "  Chair "}, env)
     assert resp.observations == {
         "target": "chair",
         "object_found": True,
-        "position": "left",
-        "closeness": "far",
-        "confidence": 0.9,
+        "position": "center",
+        "closeness": "medium",
+        "confidence": 0.78,
     }
 
 

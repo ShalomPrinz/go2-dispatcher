@@ -60,7 +60,7 @@ python -m skills.<name> '<params-json>'
 | `GO2_YOLO_WEIGHTS` | Path to the YOLO weights. |
 | `GO2_STUB_STATE_FILE` | Stub state file. |
 | `GO2_STUB_TIME_SCALE` | Stub time scale. |
-| `GO2_STUB_DETECTIONS` | JSON `{class: "position:closeness"}`. |
+| `GO2_STUB_OBJECTS` | JSON `{class: {"x": m, "y": m, "height_m": m}}`, the objects in the stub world ([stub backend](#stub-backend)). |
 | `GO2_STUB_FAULT` | Fault kind; set only for the faulted step, never inherited from the dispatcher's environment. |
 | `GO2_PARENT_PID` | Dispatcher PID, for the orphan watchdog. |
 | `PYTHONUNBUFFERED` | `1`. |
@@ -152,7 +152,9 @@ The import-linter contracts enforce these rules before every commit and in CI fo
 
 ## Stub backend
 
-The stub (`skills/stub.py`) replaces only the SDK layer inside the skill process; processes, timeouts, kills and `StopMove` run for real. Constants are in `skills/stub.py`. It keeps posture in a JSON state file (`{"posture": "standing" | "sitting"}`; a missing file means standing), written atomically.
+The stub (`skills/stub.py`) replaces only the SDK layer inside the skill process; processes, timeouts, kills and `StopMove` run for real. It simulates only what the real backend gets from the robot (motion, the camera image, the state message) and reuses the rest, such as the detector's box classification. Constants are in `skills/stub.py`.
+
+It keeps posture and an odometry pose in one JSON state file, `{"posture": "standing" | "sitting", "pose": {"x": m, "y": m, "yaw": rad}}`. The pose is in the world frame: the robot starts at (0, 0) facing +x, and yaw is counter-clockwise. A missing file means standing at the origin; a missing `pose` means the origin. Every writer reads the file, changes its own field and replaces the file atomically (temp file + `os.replace`); no lock is needed because only one skill process runs at a time.
 
 | Call | While standing | While sitting |
 |---|---|---|
@@ -161,10 +163,12 @@ The stub (`skills/stub.py`) replaces only the SDK layer inside the skill process
 | `StandDown` | 0; posture → sitting; waits `STAND_DOWN_S` | 0; no change |
 | `Stretch` | 0; waits `STRETCH_S` | 1 |
 
-- `detect(target)` waits `DETECT_S` and returns found (`DETECT_CONFIDENCE`, position and closeness from the entry) if the target is listed in `stub.detections`, else not found.
-- `sample_state()` returns a `body_height` per posture (`BODY_HEIGHT_*_M`); other fields are `null`.
+- **Odometry.** An accepted `Move(vx, vy, vyaw)` (return 0) stores the command and `StopMove()` clears it. While a command is stored, every `sleep(seconds)` advances the pose by the **unscaled** seconds, integrating the body-frame velocity exactly along the arc, and writes it to the state file. Body frame as on the Go2: +vx forward, +vy left, +vyaw counter-clockwise (left).
+- **Camera.** `detect(target)` waits `DETECT_S`, then projects the object listed under `target` in `GO2_STUB_OBJECTS` through a pinhole camera `CAMERA_OFFSET_M` ahead of the body centre (`CAMERA_WIDTH_PX` × `CAMERA_HEIGHT_PX`, horizontal field of view `CAMERA_HFOV_DEG`, square pixels; [robot.md](robot.md#object-detection)). The box centre-x fraction is `0.5 − f × tan(bearing) / width`, so a positive bearing (left) gives a small x; the box height fraction is `f × height_m / depth / height`, clipped to 1, where depth is the distance along the camera axis. The box goes to the real detector's classifier, `vision.classify_box`. Not found when the target is not listed, is behind the camera, is outside the horizontal field of view, or its box height fraction is below `MIN_BOX_H`. Confidence is deterministic: `CONFIDENCE_MIN` + (`CONFIDENCE_MAX` − `CONFIDENCE_MIN`) × box height fraction.
+- **Objects.** `GO2_STUB_OBJECTS` is a JSON object: each key is a COCO class name and each value is `{"x": number, "y": number}` in metres in the world frame, with an optional `"height_m": number > 0`; no other keys. Without `height_m` the class's entry in `DEFAULT_HEIGHTS_M` is used (bottle 0.25, cup 0.10, chair 0.90, person 1.70); a class without one is an error naming the class. `stub.parse_objects(data)` holds these rules and raises `ValueError`. One object per class.
+- `sample_state()` reports `body_height` per posture (`BODY_HEIGHT_*_M`), `position` = [x, y, `body_height`], `imu_rpy` = [0, 0, yaw], and `velocity` (world frame) and `yaw_speed` from the stored command, so zero at rest. `mode`, `gait_type`, `foot_force` and `error_code` are `null`.
 - All stub waits go through `backend.sleep()` and are multiplied by `stub.time_scale`. Skills never call `time.sleep` themselves.
-- The stub is reset to `stub.initial_posture` at startup and by `go2 --reset-stub`, not between tasks ([running.md](../../docs/running.md)). The dispatcher does this with `stub.reset(posture, path)`, its only access to stub state; start-up posture on either backend comes from the `read_state` utility.
+- The stub is reset to `stub.initial_posture` at the origin at startup and by `go2 --reset-stub`, not between tasks ([running.md](../../docs/running.md)). The dispatcher does this with `stub.reset(posture, path)`, its only access to stub state; start-up posture on either backend comes from the `read_state` utility.
 
 ### Fault injection
 
@@ -212,7 +216,7 @@ On the stub:
 export GO2_BACKEND=stub GO2_STUB_STATE_FILE=logs/.stub_state.json GO2_STUB_TIME_SCALE=0.1
 uv run python -m skills.walk '{"direction":"forward","distance_m":1}'
 uv run python -m skills.detect_object '{"target":"chair"}'
-GO2_STUB_DETECTIONS='{"chair":"center:near"}' uv run python -m skills.detect_object '{"target":"chair"}'
+GO2_STUB_OBJECTS='{"chair":{"x":1.5,"y":0}}' uv run python -m skills.detect_object '{"target":"chair"}'
 GO2_STUB_FAULT=crash uv run python -m skills.sit '{}'; echo "exit=$?"
 uv run python -m skills.read_state '{}'
 uv run python -m skills.stop_move '{}'
@@ -234,7 +238,8 @@ Without `GO2_STUB_STATE_FILE` and `GO2_STUB_TIME_SCALE` the stub uses `logs/.stu
 - **The catalog is generated from the registry, never hand-written**, so skill sets of different granularity are presented to the model in the same form and stay comparable. The `SKILL.md` prose never reaches the model.
 - **An unsupported `detect_object` target is a skill error with suggestions; the 80-class COCO list stays out of the catalog.** Listing every class would add tokens to every call; the skill validates the target and suggests close matches, so the model can correct itself on the next call.
 - **State is sampled at the start and end of every step, for logging only.** v1 gives no verdicts. The samples provide data to set v2 verification thresholds before seeing any verification results, and supply the posture shown to the model ([roadmap.md](../../docs/roadmap.md#v2-plan)).
-- **The stub replaces only the SDK layer inside the subprocess**, so process start, timeouts and kills are exercised for real offline. It remembers sitting or standing only: enough to run every failure path. Simulating motion is a v2 prerequisite ([roadmap.md](../../docs/roadmap.md#stub-upgrade-prerequisite)).
+- **The stub replaces only the SDK layer inside the subprocess**, so process start, timeouts and kills are exercised for real offline.
+- **The stub is pose-aware: it integrates commanded velocity and simulates the camera over objects placed in a world, reusing the real detector's classifier.** Detections then change as the robot moves (a chair behind the robot appears after a turn), the state samples carry a pose in the real `position` and `imu_rpy` fields, and position and closeness come from the same thresholds as on the robot (`skills/vision.py`), so the two backends cannot drift apart. Only what the robot supplies is simulated: velocity integration stands in for the robot's motion and estimator, and a pinhole projection stands in for the camera image and YOLO. The projection ignores lens distortion, occlusion and the object's vertical position, and the pose resets only with the posture, never between tasks. Rejected: keeping the static `{class: "position:closeness"}` table (`stub.detections`), alone or beside the world, because it answered the same whatever the robot did, so a plan that turned or walked before looking was never tested against what it would actually see.
 - **`skills` owns the process environment contract, the posture type, the error codes, the fault kinds and the stub defaults; the dispatcher imports them.** These are contracts between the executor and the skill processes, and the skill side is where they are read. Defining them once (`skills/env.py`, `schema.Posture`, `schema.ErrorCode`, `stub.FaultKind`, the `stub.DEFAULT_*` values) removes the copies in the executor and config that could drift silently: a renamed variable, a new fault kind or a changed stub default used to need matching edits in both packages. `ErrorCode` is `class ErrorCode(str, Enum)` with `__str__` returning the value, because Python 3.10 has no `StrEnum`; the members serialise and compare as their plain strings, so the response line and the dispatcher's validation are unchanged. `SkillError.code` stays `str`, so pydantic does not reject a code the dispatcher does not know. `Posture` lives in `schema.py` next to `RobotState`, which uses it, rather than in `backend.py`. Rejected: a dispatcher-owned env builder (it would keep the variable names in the package that only sets them); typing `SkillError.code` as `ErrorCode` (an unknown code would turn a skill error into `malformed`).
 - **The response is built from three sources, `SkillOutcome` + `StateSampler` + `total_ms`, each written by the code that owns it.** The body owns the outcome, the sampler owns the state fields and their timing, and `run_main` owns the total time and the exception mapping (`SkillOutcome.from_exception`). `run_main` creates the sampler before calling the body, so samples taken before an exception survive without the body writing into a shared result. Accepted edge case: any exception in `stop_move` after `StopMove()` returns (the settle `backend.sleep` on a malformed `GO2_STUB_TIME_SCALE`, or the after-sample raising `BackendNotConfigured`) drops `sdk_ret` and `stop_call_ms` from the response; only misconfiguration reaches it. Rejected: a mutable `ResponseDraft` (a typed version of the old `out` dict: three writers still mutate one object, and it duplicates `SkillResponse`); plain locals in `run_main` with `try/finally` (it either duplicates the exception mapping in each utility or keeps utilities mutating a result argument).
 - **The dispatcher touches stub state only through `stub.reset(posture, path)`, never the state file or `write_posture`.** The state file layout stays a stub internal, so a richer stub state (the v2 stub upgrade) changes `reset` alone, and posture is read the same way on both backends, through `read_state`. Rejected: a stub `read_posture` call in the dispatcher, which needs a backend branch and a second posture path.

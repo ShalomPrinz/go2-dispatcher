@@ -140,11 +140,13 @@ def test_fault_steps_unique(tmp_path):
     bad(tmp_path, {"stub": {"faults": [{"step": 2, "kind": "error"}, {"step": 2, "kind": "hang"}]}}, "unique")
 
 
-def test_detections(tmp_path):
-    ok(tmp_path, {"stub": {"detections": {"chair": "center:near", "cell phone": "left:far", "person": "right:medium"}}})
-    bad(tmp_path, {"stub": {"detections": {"phone": "left:far"}}}, "phone")
-    bad(tmp_path, {"stub": {"detections": {"chair": "middle:near"}}}, "chair")
-    bad(tmp_path, {"stub": {"detections": {"chair": "center:near "}}}, "chair")
+def test_objects(tmp_path):
+    objects = {"chair": {"x": 2.0, "y": -1.0}, "cell phone": {"x": 1, "y": 0.5, "height_m": 0.15}}
+    assert ok(tmp_path, {"stub": {"objects": objects}}).stub.objects == objects
+    bad(tmp_path, {"stub": {"objects": {"phone": {"x": 1.0, "y": 0.0}}}}, "phone")
+    bad(tmp_path, {"stub": {"objects": {"chair": {"y": 0.0}}}}, "stub.objects: .*'chair'")
+    bad(tmp_path, {"stub": {"objects": {"cell phone": {"x": 1.0, "y": 0.0}}}}, "'cell phone' needs height_m")
+    bad(tmp_path, {"stub": {"detections": {"chair": "center:near"}}}, "stub.detections: unknown key")
 
 
 @pytest.mark.parametrize(

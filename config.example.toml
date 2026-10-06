@@ -35,7 +35,7 @@ yolo_weights = "models/yolov8n.pt"
 time_scale = 0.1                    # multiplies every simulated duration
 initial_posture = "standing"        # "standing" | "sitting"
 state_file = "logs/.stub_state.json"
-detections = {}                     # e.g. { chair = "center:near", "cell phone" = "left:far" }
+objects = {}                        # world frame, m; e.g. { bottle = { x = 3.0, y = 0.5 }, chair = { x = 2.0, y = -1.0, height_m = 0.9 } }
 faults = []                         # e.g. [ { step = 2, kind = "hang" } ]
 
 [log]

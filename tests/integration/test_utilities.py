@@ -79,5 +79,5 @@ def test_stub_state_file_missing_parent_is_created(tmp_path):
     path = tmp_path / "a" / "b" / "state.json"
     stub.write_posture("sitting", path)
     assert stub.read_posture(path) == "sitting"
-    assert json.loads(path.read_text()) == {"posture": "sitting"}
+    assert json.loads(path.read_text()) == {"posture": "sitting", "pose": {"x": 0.0, "y": 0.0, "yaw": 0.0}}
     assert stub.read_posture(tmp_path / "nope.json") == "standing"

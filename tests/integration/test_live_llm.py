@@ -25,7 +25,7 @@ def test_live_turn_and_find_chair(tmp_path):
     key = os.environ.get("ANTHROPIC_API_KEY")
     if not key:
         pytest.skip("ANTHROPIC_API_KEY is not set")
-    cfg = make_config(tmp_path, stub={"detections": {"chair": "center:near"}})
+    cfg = make_config(tmp_path, stub={"objects": {"chair": {"x": 0.0, "y": 2.0}}})
     stub.reset(cfg.stub.initial_posture, cfg.stub.state_file)
     registry = Registry.load(REPO_ROOT / "skills" / "catalog")
     surface = PromptSurface.build(registry, cfg.loop.planning_horizon)

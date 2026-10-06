@@ -11,6 +11,7 @@ import os
 import threading
 import time
 
+from skills import vision
 from skills.backend import (
     BackendNotConfigured,
     BadFrame,
@@ -73,11 +74,6 @@ class RealDetector:
     CAMERA_TIMEOUT_S = 3.0
     IMGSZ = 640
     CONF = 0.4
-    LEFT_MAX_X = 0.4  # box centre x fraction < this -> left
-    RIGHT_MIN_X = 0.6  # > this -> right, else center
-    NEAR_MIN_H = 0.6  # box height fraction > this -> near
-    MEDIUM_MIN_H = 0.3  # > this -> medium, else far
-    CONFIDENCE_DECIMALS = 2
 
     def __init__(self) -> None:
         self._model = None
@@ -129,13 +125,7 @@ class RealDetector:
         if best is None:
             return DetectResult(found=False)
         conf, x1, y1, x2, y2 = best
-        cx = (x1 + x2) / 2.0 / width
-        h = (y2 - y1) / height
-        position = "left" if cx < self.LEFT_MAX_X else "right" if cx > self.RIGHT_MIN_X else "center"
-        closeness = "near" if h > self.NEAR_MIN_H else "medium" if h > self.MEDIUM_MIN_H else "far"
-        return DetectResult(
-            found=True, position=position, closeness=closeness, confidence=round(conf, self.CONFIDENCE_DECIMALS)
-        )
+        return vision.classify_box((x1 + x2) / 2.0 / width, (y2 - y1) / height, conf)
 
 
 def get_detector() -> RealDetector:

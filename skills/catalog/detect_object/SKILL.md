@@ -22,5 +22,5 @@ problems return `camera_unavailable`, `bad_frame` or `weights_missing`.
 
 Manual run on the stub:
 
-    GO2_BACKEND=stub GO2_STUB_DETECTIONS='{"chair":"center:near"}' \
+    GO2_BACKEND=stub GO2_STUB_OBJECTS='{"chair":{"x":1.5,"y":0}}' \
       uv run python -m skills.detect_object '{"target":"chair"}'

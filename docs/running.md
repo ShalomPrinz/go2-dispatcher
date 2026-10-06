@@ -128,9 +128,9 @@ Only `stop` is recognised during a task. Other messages sent during a task are a
 | | Stub (`robot.backend = "stub"`, default) | Real (`robot.backend = "real"`) |
 |---|---|---|
 | Needs | core dependencies only | `uv sync --extra robot --extra vision`, `robot.network_interface`, YOLO weights ([setup.md](setup.md#lab-machine-real-robot)) |
-| Motion | none; the stub remembers only standing/sitting in `stub.state_file` | real SDK calls ([robot.md](../skills/docs/robot.md)) |
+| Motion | none; the stub keeps standing/sitting and an odometry pose integrated from `Move` in `stub.state_file` ([skills.md](../skills/docs/skills.md#stub-backend)) | real SDK calls ([robot.md](../skills/docs/robot.md)) |
 | Durations | real durations × `stub.time_scale` | real time |
-| `detect_object` | reports what `stub.detections` lists (confidence 0.9) | front camera + YOLO |
+| `detect_object` | projects the objects in `stub.objects` from the current pose through a simulated camera ([skills.md](../skills/docs/skills.md#stub-backend)) | front camera + YOLO |
 | Startup posture | reset to `stub.initial_posture`, then read with `read_state` (`unknown` if that fails) | read with `read_state` (`unknown` if that fails) |
 | Faults | `stub.faults` / `--fault` | not allowed (config error) |
 

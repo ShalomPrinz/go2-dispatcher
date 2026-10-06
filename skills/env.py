@@ -11,7 +11,7 @@ IFACE = "GO2_IFACE"
 YOLO_WEIGHTS = "GO2_YOLO_WEIGHTS"
 STUB_STATE_FILE = "GO2_STUB_STATE_FILE"
 STUB_TIME_SCALE = "GO2_STUB_TIME_SCALE"
-STUB_DETECTIONS = "GO2_STUB_DETECTIONS"
+STUB_OBJECTS = "GO2_STUB_OBJECTS"
 STUB_FAULT = "GO2_STUB_FAULT"
 PARENT_PID = "GO2_PARENT_PID"
 
@@ -24,7 +24,7 @@ def child_env(
     yolo_weights: str,
     stub_state_file: str,
     stub_time_scale: float,
-    stub_detections: Mapping[str, str],
+    stub_objects: Mapping[str, Mapping[str, float]],
     parent_pid: int,
     fault: str | None = None,
 ) -> dict[str, str]:
@@ -38,7 +38,7 @@ def child_env(
             YOLO_WEIGHTS: yolo_weights,
             STUB_STATE_FILE: stub_state_file,
             STUB_TIME_SCALE: repr(stub_time_scale),
-            STUB_DETECTIONS: json.dumps(dict(stub_detections)),
+            STUB_OBJECTS: json.dumps({k: dict(v) for k, v in stub_objects.items()}),
             PARENT_PID: str(parent_pid),
         }
     )
