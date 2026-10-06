@@ -79,14 +79,17 @@ def test_move_while_sitting_stores_no_command(state):
     assert stub.read_state(state).pose == stub.Pose()
 
 
+BOTTLE_HEIGHT_M = 0.25
+
+
 def bottle_at(depth: float, left: float = 0.0) -> stub.WorldObject:
-    """A 0.25 m bottle at camera depth ``depth`` and ``left`` metres to the left, seen from the origin."""
-    return stub.WorldObject(x=stub.CAMERA_OFFSET_M + depth, y=left, height_m=0.25)
+    """A ``BOTTLE_HEIGHT_M`` bottle at camera depth ``depth`` and ``left`` metres to the left, seen from the origin."""
+    return stub.WorldObject(x=stub.CAMERA_OFFSET_M + depth, y=left, height_m=BOTTLE_HEIGHT_M)
 
 
 def depth_for(h_frac: float) -> float:
     """The camera depth at which a ``bottle_at`` box is ``h_frac`` of the image height."""
-    return stub.CAMERA_FOCAL_PX * 0.25 / (h_frac * stub.CAMERA_HEIGHT_PX)
+    return stub.CAMERA_FOCAL_PX * BOTTLE_HEIGHT_M / (h_frac * stub.CAMERA_HEIGHT_PX)
 
 
 def confidence_at(h_frac: float) -> float:
@@ -108,7 +111,7 @@ def test_project_closeness_position_and_confidence():
     assert stub.project(stub.Pose(), bottle_at(1.0, left=0.5)).position == "left"
     assert stub.project(stub.Pose(), bottle_at(1.0, left=-0.5)).position == "right"
     facing_left = stub.Pose(0.0, 0.0, math.pi / 2)  # the same bottle, now seen after a left turn
-    assert stub.project(facing_left, stub.WorldObject(0.0, 2.3, 0.25)).position == "center"
+    assert stub.project(facing_left, stub.WorldObject(0.0, 2.3, BOTTLE_HEIGHT_M)).position == "center"
 
 
 def test_project_not_found():
