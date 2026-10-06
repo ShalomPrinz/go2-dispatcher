@@ -46,6 +46,8 @@ def tmpdir_env(tmp_path: Path) -> Path:
 
 def hook(name: str, payload: object, tmpdir: Path) -> subprocess.CompletedProcess[str]:
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")} | {"TMPDIR": str(tmpdir)}
+    # The temp repo has no project, so `uv run ruff` there resolves ruff on PATH: put this venv's bin first.
+    env["PATH"] = os.pathsep.join([str(Path(sys.executable).parent), env.get("PATH", "")])
     stdin = payload if isinstance(payload, str) else json.dumps(payload)
     return subprocess.run(
         [sys.executable, str(HOOKS / name)], input=stdin, capture_output=True, text=True, env=env, timeout=10
@@ -137,6 +139,43 @@ def test_touched_records_per_caller_and_only_project_paths(repo: Path, tmpdir_en
 def test_stop_hooks_exit_at_once_when_stop_hook_active(name: str, repo: Path, tmpdir_env: Path) -> None:
     done = hook(name, {"session_id": SESSION, "cwd": str(repo), "stop_hook_active": True}, tmpdir_env)
     assert (done.returncode, done.stdout, done.stderr) == (0, "", "")
+
+
+def status(done: subprocess.CompletedProcess[str]) -> str:
+    """The `systemMessage` of a Stop hook that exited 0 with its one JSON object."""
+    assert done.returncode == 0, done.stderr
+    return json.loads(done.stdout)["systemMessage"]
+
+
+def test_lint_blocks_once_then_rechecks_only_after_a_new_write(repo: Path, tmpdir_env: Path) -> None:
+    """Block, loop breaker, pass, then the `lint-checked` offset: nothing touched until the next write."""
+    path = repo / "stop_lint.py"
+    path.write_text("def f():\n    x=1\n")  # F841, which neither format nor the I fix removes
+    stop = {"session_id": SESSION, "cwd": str(repo), "stop_hook_active": False}
+    assert hook("touched.py", write(str(path), repo), tmpdir_env).returncode == 0
+
+    done = hook("lint.py", stop, tmpdir_env)
+    assert (done.returncode, done.stdout) == (2, "")
+    assert done.stderr.startswith("ruff check failed; fix the lint errors before stopping:") and "F841" in done.stderr
+    assert path.read_text() == "def f():\n    x = 1\n"  # formatted before the lint
+    assert status(hook("lint.py", stop, tmpdir_env)) == (
+        "format - · lint ✗ unchanged since the last block; not blocking again (run uv run ruff check .)"
+    )
+
+    path.write_text("def f():\n    return 1\n")  # fixed with no new record: the offset kept it pending
+    assert status(hook("lint.py", stop, tmpdir_env)) == "format - · lint ✓ (1 files)"
+    record = (tmpdir_env / f"claude-touched-{SESSION}-main").read_text()
+    assert (tmpdir_env / f"claude-lint-checked-{SESSION}-main").read_text() == f"{len(record)}\n"
+    assert not (tmpdir_env / f"claude-lint-{SESSION}-main").exists()
+    assert status(hook("lint.py", stop, tmpdir_env)) == "format - · lint -"
+
+    assert hook("touched.py", write(str(path), repo), tmpdir_env).returncode == 0
+    assert status(hook("lint.py", stop, tmpdir_env)) == "format - · lint ✓ (1 files)"
+
+
+def test_typecheck_reports_nothing_touched(repo: Path, tmpdir_env: Path) -> None:
+    stop = {"session_id": SESSION, "cwd": str(repo), "stop_hook_active": False}
+    assert status(hook("typecheck.py", stop, tmpdir_env)) == "types -"
 
 
 def test_ownership_paths_exist_in_the_repo() -> None:
