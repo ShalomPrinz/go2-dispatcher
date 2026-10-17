@@ -8,19 +8,14 @@ params:
     description: Object to look for, as a lowercase COCO class name (for example chair, person, bottle, cell phone).
 ---
 
-# detect_object
+## Use when
+Checking whether an object is in front of the robot, where it is, and roughly how close.
 
-Grabs one frame from the front camera and runs YOLO on it (weights from
-`GO2_YOLO_WEIGHTS`; never downloaded automatically). Reports the most confident box of
-the target class: `position` (left / center / right, by box centre) and `closeness`
-(near / medium / far, by box height). Not seeing the object is a normal `ok` result with
-`object_found: false`.
+## Requires
+None.
 
-The target must be one of the 80 COCO classes in `skills/coco.py`; anything else
-returns `unsupported_object` with the closest supported names. Camera and decoding
-problems return `camera_unavailable`, `bad_frame` or `weights_missing`.
+## Effect
+Reports whether the target is visible and, if it is, its position in the frame (left, center or right) and its closeness (near, medium or far). Not seeing the target is a normal result, not an error.
 
-Manual run on the stub:
-
-    GO2_BACKEND=stub GO2_STUB_OBJECTS='{"chair":{"x":1.5,"y":0}}' \
-      uv run python -m skills.detect_object '{"target":"chair"}'
+## Limits
+Sees only what is in front of the robot; turn to look elsewhere. The target must be a COCO class name; any other name fails with the closest supported names. Closeness is a rough estimate from the object's size in the image.

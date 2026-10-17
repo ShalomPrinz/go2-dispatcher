@@ -31,7 +31,7 @@ CONTRACTS: tuple[tuple[str, str], ...] = (
     ("dispatcher/models.py", "plan schema and step results (dispatcher/docs/loop-and-context.md)"),
     ("dispatcher/llm.py", "submit_plan tool schema and request (dispatcher/docs/llm.md)"),
     ("skills/schema.py", "skill response and error codes (skills/docs/skills.md)"),
-    ("skills/frontmatter.py", "SKILL.md schema (skills/docs/skills.md)"),
+    ("skills/manifest.py", "SKILL.md schema and body sections (skills/docs/skills.md)"),
     ("skills/env.py", "skill process environment (skills/docs/skills.md)"),
 )
 # Safety paths for reviewer check 4 (docs/safety.md): whole files, then words on changed lines elsewhere.

@@ -1,4 +1,4 @@
-"""SKILL.md frontmatter schema and parser (skills/docs/skills.md).
+"""SKILL.md schema and parser: frontmatter and the body's section template (skills/docs/skills.md).
 
 Imported only by the dispatcher process; skill entry points must not import it (it pulls in pydantic and yaml).
 """
@@ -25,6 +25,10 @@ from pydantic import (
 SKILL_FILE = "SKILL.md"
 FRONTMATTER_DELIMITER = "---"
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+SECTION_PREFIX = "## "
+SECTION_HEADINGS = ("Use when", "Requires", "Effect", "Limits")  # every one required, in this order
+BODY_MAX_CHARS = 800  # (tunable)
+_HEADING_RE = re.compile(r"^#{1,6}(\s|$)")
 
 Name = Annotated[str, StringConstraints(pattern=NAME_RE.pattern)]
 NonEmptyStr = Annotated[str, StringConstraints(pattern=r"\S")]
@@ -34,12 +38,12 @@ class SkillFileError(ValueError):
     """A SKILL.md that cannot be read or fails the schema; the message starts with the file path."""
 
 
-class _Frontmatter(BaseModel):
+class _Strict(BaseModel):
     # strict: no coercion; extra keys are rejected (skills/docs/skills.md)
     model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
 
 
-class ParamSpec(_Frontmatter):
+class ParamSpec(_Strict):
     """One entry under ``params:``. ``required`` is true when the file gives no ``default``."""
 
     type: Literal["number", "string", "enum"]
@@ -101,7 +105,7 @@ class ParamSpec(_Frontmatter):
             raise ValueError(f"default {d!r} is not a valid {self.type}")
 
 
-class SkillFrontmatter(_Frontmatter):
+class SkillFrontmatter(_Strict):
     name: Name
     entrypoint: NonEmptyStr
     description: NonEmptyStr
@@ -116,12 +120,33 @@ class SkillFrontmatter(_Frontmatter):
         return v
 
 
-def parse_skill_file(path: Path) -> SkillFrontmatter:
-    """Read and validate one SKILL.md's frontmatter; raises SkillFileError."""
+class SkillSection(_Strict):
+    """One body section: ``heading`` without the ``## `` prefix, ``text`` stripped and otherwise verbatim."""
+
+    heading: str
+    text: str
+
+
+class SkillFile(SkillFrontmatter):
+    """A parsed SKILL.md: the frontmatter keys plus the body ``sections``, one per heading in template order."""
+
+    sections: tuple[SkillSection, ...]
+
+
+def parse_skill_file(path: Path) -> SkillFile:
+    """Read and validate one SKILL.md, frontmatter then body; raises SkillFileError."""
+    data, body = _read_skill_file(path)
     try:
-        return SkillFrontmatter.model_validate(_read_frontmatter(path))
+        fm = SkillFrontmatter.model_validate(data)  # rejects a 'sections' key like any unknown key
     except ValidationError as e:
         raise SkillFileError(f"{path}: {_format_validation_error(e)}") from None
+    try:
+        sections = _parse_body(body)
+    except ValueError as e:
+        raise SkillFileError(f"{path}: body: {e}") from None
+    # fields_set keeps a param's missing default (required) and the class defaults
+    keys = {k: getattr(fm, k) for k in fm.model_fields_set}
+    return SkillFile.model_validate({**keys, "sections": sections})
 
 
 # --- helpers ---------------------------------------------------------------------
@@ -144,7 +169,41 @@ def _format_validation_error(err: ValidationError) -> str:
     return "; ".join(parts)
 
 
-def _read_frontmatter(path: Path) -> dict[str, Any]:
+def _parse_body(lines: list[str]) -> tuple[SkillSection, ...]:
+    """Split the body into the template sections; raises ValueError naming the first rule broken."""
+    size = len("\n".join(lines).strip())
+    if size > BODY_MAX_CHARS:
+        raise ValueError(f"{size} characters, over the cap of {BODY_MAX_CHARS}")
+    found: dict[str, list[str]] = {}
+    current: list[str] | None = None
+    for line in lines:
+        if not _HEADING_RE.match(line):
+            if current is not None:
+                current.append(line)
+            elif line.strip():
+                raise ValueError(f"text outside a section: '{line.strip()}'")
+            continue
+        heading = line[len(SECTION_PREFIX) :].strip() if line.startswith(SECTION_PREFIX) else None
+        if heading not in SECTION_HEADINGS:
+            allowed = ", ".join(f"'{SECTION_PREFIX}{h}'" for h in SECTION_HEADINGS)
+            raise ValueError(f"unknown heading '{line.strip()}'; allowed: {allowed}")
+        index = SECTION_HEADINGS.index(heading)
+        if index < len(found):
+            raise ValueError(f"heading '{SECTION_PREFIX}{heading}' is repeated or out of order")
+        if index > len(found):
+            raise ValueError(f"missing section '{SECTION_PREFIX}{SECTION_HEADINGS[len(found)]}'")
+        current = found[heading] = []
+    if len(found) < len(SECTION_HEADINGS):
+        raise ValueError(f"missing section '{SECTION_PREFIX}{SECTION_HEADINGS[len(found)]}'")
+    sections = tuple(SkillSection(heading=h, text="\n".join(found[h]).strip()) for h in SECTION_HEADINGS)
+    for s in sections:
+        if not s.text:
+            raise ValueError(f"section '{SECTION_PREFIX}{s.heading}' is empty; write 'None.' if nothing applies")
+    return sections
+
+
+def _read_skill_file(path: Path) -> tuple[dict[str, Any], list[str]]:
+    """The frontmatter mapping and the body lines after the closing delimiter."""
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as e:
@@ -162,4 +221,4 @@ def _read_frontmatter(path: Path) -> dict[str, Any]:
         raise SkillFileError(f"{path}: invalid frontmatter YAML: {e}") from None
     if not isinstance(data, dict):
         raise SkillFileError(f"{path}: frontmatter must be a mapping")
-    return data
+    return data, lines[end + 1 :]

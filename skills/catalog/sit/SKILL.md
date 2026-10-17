@@ -4,12 +4,14 @@ entrypoint: skills.sit
 description: Lower the robot's body to the ground (sit or lie down).
 ---
 
-# sit
+## Use when
+The robot should sit or lie down.
 
-Calls `StandDown` (as the original skill did, not `Sit`), then waits a fixed settle
-time (`SETTLE_S` in `skills/sit.py`) so the state sampled afterwards shows the finished posture.
-Already lying down is not an error. Movement skills fail while the robot is down.
+## Requires
+None. Already lying down is not an error.
 
-Manual run on the stub:
+## Effect
+Lowers the body to the ground; the robot is then lying down.
 
-    GO2_BACKEND=stub uv run python -m skills.sit '{}'
+## Limits
+None.

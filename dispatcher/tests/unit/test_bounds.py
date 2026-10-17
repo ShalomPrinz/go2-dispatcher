@@ -10,7 +10,7 @@ from dispatcher.bounds import ERROR_MESSAGE_MAX, check_step, cut_message, preche
 from dispatcher.budget import MotionBudget
 from dispatcher.models import Plan, PlanStep, StepRef
 from dispatcher.registry import Registry, SkillDescriptor
-from skills.frontmatter import ParamSpec
+from skills.manifest import ParamSpec
 from skills.policy import MotionCost, SkillPolicy
 from tests.helpers import REPO_ROOT
 
@@ -35,6 +35,7 @@ def typed_registry() -> Registry:
                 entrypoint="x",
                 description="d",
                 params=params,
+                sections=(),
                 policy=SkillPolicy(name="count", timeout=1.0),
             )
         }

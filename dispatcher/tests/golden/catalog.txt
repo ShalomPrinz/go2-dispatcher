@@ -1,12 +1,32 @@
 detect_object: Look through the front camera once and report whether an object is visible, where it is in the frame, and roughly how close it is. Does not move the robot.
   - target (required): text. Object to look for, as a lowercase COCO class name (for example chair, person, bottle, cell phone).
+  Use when: Checking whether an object is in front of the robot, where it is, and roughly how close.
+  Requires: None.
+  Effect: Reports whether the target is visible and, if it is, its position in the frame (left, center or right) and its closeness (near, medium or far). Not seeing the target is a normal result, not an error.
+  Limits: Sees only what is in front of the robot; turn to look elsewhere. The target must be a COCO class name; any other name fails with the closest supported names. Closeness is a rough estimate from the object's size in the image.
 sit: Lower the robot's body to the ground (sit or lie down).
   - no parameters
+  Use when: The robot should sit or lie down.
+  Requires: None. Already lying down is not an error.
+  Effect: Lowers the body to the ground; the robot is then lying down.
+  Limits: None.
 stretch: Perform the robot's built-in stretch routine.
   - no parameters
+  Use when: The robot should stretch.
+  Requires: The robot is standing. Fails while lying down.
+  Effect: Runs the robot's built-in stretch routine in place.
+  Limits: None.
 turn: Turn in place to the left or right by an angle, then stop.
   - direction (required): one of left, right. Which way to turn.
   - angle_deg (optional, default 45): number from 5 to 180 degrees. Angle to turn.
+  Use when: Changing the robot's heading, for example to face something or to look around.
+  Requires: The robot is standing. Fails while lying down.
+  Effect: Turns in place at 1.0 rad/s by the given angle, then stops. The position does not change.
+  Limits: Open-loop: the robot turns for the time the angle should take; the angle actually turned is not measured.
 walk: Walk in a straight line forward, backward, or sideways by a distance, then stop.
   - direction (required): one of forward, backward, left, right. Direction of travel relative to the robot's current heading.
   - distance_m (optional, default 0.9): number from 0.1 to 3 metres. Distance to travel.
+  Use when: Moving the robot a set distance in a straight line without changing its heading.
+  Requires: The robot is standing. Fails while lying down.
+  Effect: Moves forward, backward, or sideways at 0.3 m/s, then stops. Left and right are sideways steps; the heading does not change.
+  Limits: Open-loop: the robot moves for the time the distance should take; the distance actually covered is not measured.

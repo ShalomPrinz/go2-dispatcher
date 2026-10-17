@@ -27,7 +27,8 @@ uv run go2 --fault 1:hang run "…"              # stub fault injection: error, 
 ## Gotchas
 
 - The docs define the skill contract; code follows [skills.md](docs/skills.md), not the other way round.
-- `SKILL.md` frontmatter is a fixed text: any wording change changes the catalog, the registry hash and `catalog.txt`, and makes runs incomparable. Regenerate with `--update-golden` and review the diff ([skills.md](docs/skills.md#catalog-and-registry-hash)).
+- `SKILL.md` frontmatter and body are fixed texts: any wording change changes the catalog, the registry hash and `catalog.txt`, and makes runs incomparable. Regenerate with `--update-golden` and review the diff ([skills.md](docs/skills.md#catalog-and-registry-hash)).
+- The `SKILL.md` body is model-facing and parsed against a fixed section template with a length cap; human notes go in the docs, never in a `SKILL.md` ([skills.md](docs/skills.md#skillmd-body)).
 - Real-backend code (`real.py`) cannot be run from an agent: no `--backend real`, no `robot.backend = "real"`, no `--run-robot`. Verify it with unit tests and the stub only ([safety.md](../docs/safety.md#supervised-operation-rules)).
 - Mark robot facts not yet checked on the robot as *unverified*. Checklist results go only in [robot.md](docs/robot.md#results), and only from a supervised session reported by a person.
 - Importing a skill module must do nothing; `skills` never imports `dispatcher`, and third-party imports live inside functions in `real.py` ([skills.md](docs/skills.md#no-side-effects-on-import)).

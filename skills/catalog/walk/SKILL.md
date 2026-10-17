@@ -16,14 +16,14 @@ params:
     description: Distance to travel.
 ---
 
-# walk
+## Use when
+Moving the robot a set distance in a straight line without changing its heading.
 
-Walks in a straight line at a constant 0.3 m/s, sending `Move` at 10 Hz for
-`distance_m / 0.3` seconds, then sends `StopMove`. Left and right are sideways steps
-(no turning). The distance is open-loop: the robot is commanded for the time it should
-take, not measured.
+## Requires
+The robot is standing. Fails while lying down.
 
-Fails with `sdk_error` if any SDK call returns non-zero (for example walking while the
-robot is lying down). Manual run on the stub:
+## Effect
+Moves forward, backward, or sideways at 0.3 m/s, then stops. Left and right are sideways steps; the heading does not change.
 
-    GO2_BACKEND=stub uv run python -m skills.walk '{"direction":"forward","distance_m":1}'
+## Limits
+Open-loop: the robot moves for the time the distance should take; the distance actually covered is not measured.

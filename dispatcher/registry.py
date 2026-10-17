@@ -1,6 +1,6 @@
 """Skill registry: discovery, entrypoint and POLICY checks, catalog rendering, registry hash (skills/docs/skills.md).
 
-SKILL.md frontmatter parsing and validation live in skills/frontmatter.py.
+SKILL.md parsing (frontmatter and body sections) and validation live in skills/manifest.py.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from skills.frontmatter import SKILL_FILE, ParamSpec, SkillFileError, parse_skill_file
+from skills.manifest import SKILL_FILE, ParamSpec, SkillFileError, SkillSection, parse_skill_file
 from skills.policy import SkillPolicy
 
 from .models import RegistryError
@@ -25,6 +25,7 @@ class SkillDescriptor:
     entrypoint: str
     description: str
     params: dict[str, ParamSpec]  # frontmatter order
+    sections: tuple[SkillSection, ...]  # SKILL.md body, template order
     policy: SkillPolicy
 
 
@@ -54,7 +55,12 @@ def _load_skill(folder: Path) -> SkillDescriptor:
         raise RegistryError(f"{path}: POLICY.name '{policy.name}' does not match name '{name}'")
 
     return SkillDescriptor(
-        name=name, entrypoint=entrypoint, description=fm.description.strip(), params=dict(fm.params), policy=policy
+        name=name,
+        entrypoint=entrypoint,
+        description=fm.description.strip(),
+        params=dict(fm.params),
+        sections=fm.sections,
+        policy=policy,
     )
 
 
@@ -93,6 +99,8 @@ def _render_skill(d: SkillDescriptor) -> list[str]:
     for pname, spec in d.params.items():
         req = "required" if spec.required else f"optional, default {_fmt_default(spec)}"
         lines.append(f"  - {pname} ({req}): {_type_phrase(spec)}. {spec.description}")
+    for section in d.sections:  # continuation lines indented under the heading (dispatcher/docs/loop-and-context.md)
+        lines.append(f"  {section.heading}: " + section.text.replace("\n", "\n    "))
     return lines
 
 
@@ -130,7 +138,7 @@ class Registry:
         return sorted(self._skills)
 
     def catalog_text(self) -> str:
-        """Deterministic catalog (skills/docs/skills.md): skills by name, one line per param, no trailing newline."""
+        """Deterministic catalog (skills/docs/skills.md): skills by name, params, body sections; no trailing newline."""
         lines: list[str] = []
         for name in self.names():
             lines.extend(_render_skill(self._skills[name]))

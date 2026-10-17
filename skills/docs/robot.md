@@ -31,7 +31,7 @@ Constants are module-level in `skills/real.py`, except the detector ones ([objec
 
 `walk` and `turn` are open-loop: they send `Move` every `CMD_PERIOD_S` at `VELOCITY_MPS` (both in `walk.py`) or `YAW_RATE_RPS` (`CMD_PERIOD_S` and `YAW_RATE_RPS` in `turn.py`) for the time the motion should take, then `StopMove()`. Nothing measures the distance or angle covered. If `Move` returns non-zero, the loop sends `StopMove()` and reports `sdk_error`. If the dispatcher dies, the loop notices on its next iteration, stops the robot and exits ([safety.md](../../docs/safety.md#if-the-dispatcher-dies)).
 
-`sit` is `StandDown()` and `stretch` is the robot's built-in `Stretch()` routine, each followed by a settle wait.
+`sit` is `StandDown()` (as in the predecessor skill, not `Sit()`) and `stretch` is the robot's built-in `Stretch()` routine, each followed by a settle wait.
 
 ### Object detection
 

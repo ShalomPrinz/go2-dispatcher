@@ -69,14 +69,14 @@ type = "forbidden"
 source_modules = ["skills"]
 forbidden_modules = ["dispatcher", "pydantic", "yaml"]
 ignore_imports = [
-  "skills.frontmatter -> pydantic",     # the SKILL.md parser runs in the dispatcher only
-  "skills.frontmatter -> yaml",
+  "skills.manifest -> pydantic",     # the SKILL.md parser runs in the dispatcher only
+  "skills.manifest -> yaml",
 ]
 
 [[tool.importlinter.contracts]]
 name = "Only the dispatcher and skill tests import the SKILL.md parser"
-type = "protected"                      # a forbidden contract skips skills -> skills.frontmatter as overlapping
-protected_modules = ["skills.frontmatter"]
+type = "protected"                      # a forbidden contract skips skills -> skills.manifest as overlapping
+protected_modules = ["skills.manifest"]
 allowed_importers = ["dispatcher", "skills.tests"]
 
 [tool.basedpyright]                     # type check: uv run basedpyright (tests/docs/testing.md)

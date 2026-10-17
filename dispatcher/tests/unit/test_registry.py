@@ -29,6 +29,8 @@ GOOD_PARAMS = """params:
     description: How fast.
 """
 
+GOOD_BODY = "## Use when\nNever.\n\n## Requires\nNone.\n\n## Effect\nNone.\n\n## Limits\nNone.\n"
+
 
 def write_skill(
     root: Path,
@@ -37,9 +39,10 @@ def write_skill(
     *,
     name: str | None = None,
     entrypoint: str = GOOD_ENTRY,
+    body: str = GOOD_BODY,
     raw: bool = False,
 ) -> Path:
-    """Write ``root/folder/SKILL.md``. Unless ``raw``, name/entrypoint/description are prepended."""
+    """Write ``root/folder/SKILL.md``. Unless ``raw``, name/entrypoint/description and ``body`` are added."""
     d = root / folder
     d.mkdir(parents=True, exist_ok=True)
     path = d / "SKILL.md"
@@ -47,7 +50,7 @@ def write_skill(
         text = frontmatter
     else:
         head = f"name: {name if name is not None else folder}\nentrypoint: {entrypoint}\ndescription: A demo skill.\n"
-        text = f"---\n{head}{frontmatter}---\n\n# body\n"
+        text = f"---\n{head}{frontmatter}---\n\n{body}"
     path.write_text(text, encoding="utf-8")
     return path
 
@@ -99,10 +102,10 @@ def test_registry_hash_stable_and_horizon_sensitive():
     assert h1 != h(5, sys="other")
 
 
-# --- catalog rendering for every type phrase -------------------------------------------
+# --- catalog rendering: every type phrase, then the body sections ----------------------
 
 
-def test_catalog_type_phrases(tmp_path):
+def test_catalog_rendering(tmp_path):
     write_skill(
         tmp_path,
         "demo",
@@ -135,6 +138,7 @@ def test_catalog_type_phrases(tmp_path):
     default: 3
     description: F.
 """,
+        body="## Use when\nAlways.\n\n## Requires\nStanding.\nNot lying.\n\n## Effect\nNone.\n\n## Limits\nNone.\n",
     )
     assert Registry.load(tmp_path).catalog_text() == (
         "demo: A demo skill.\n"
@@ -143,7 +147,12 @@ def test_catalog_type_phrases(tmp_path):
         "  - c (required): number. C.\n"
         "  - d (optional, default hi): text. D.\n"
         "  - e (optional, default y): one of x, y. E.\n"
-        "  - f (optional, default 3): number from 0 to 10. F."
+        "  - f (optional, default 3): number from 0 to 10. F.\n"
+        "  Use when: Always.\n"
+        "  Requires: Standing.\n"
+        "    Not lying.\n"
+        "  Effect: None.\n"
+        "  Limits: None."
     )
 
 

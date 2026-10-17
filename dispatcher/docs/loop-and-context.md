@@ -176,6 +176,8 @@ Every request is built from fixed slots. No conversation is carried over; each r
 
 Slots 1–3 come from `context.PromptSurface` (built once per process); `go2 catalog` prints them exactly. The catalog is generated from the registry ([skills.md](../../skills/docs/skills.md#catalog-and-registry-hash)).
 
+`registry._render_skill` renders each skill the same way: a `name: description` line, one `  - param (...)` line per parameter (or `  - no parameters`), then one `  Heading: text` line per `SKILL.md` body section in the parsed order ([skills.md](../../skills/docs/skills.md#skillmd-body)). A multi-line section text keeps its line breaks, with each continuation line indented four spaces. The dispatcher iterates the parsed sections and never names the headings. The current catalog is `dispatcher/tests/golden/catalog.txt`.
+
 ### System text
 
 `prompts.SYSTEM_TEMPLATE`, with `{horizon}` = `loop.planning_horizon`. It explains the loop (independent calls, a new plan replaces the old one) and the plan rules; exact text in `dispatcher/tests/golden/fixed_texts.txt`, or run `go2 catalog`.
@@ -238,6 +240,7 @@ A failed step is still charged to the motion budget: the budget is charged at di
 - **Budget exhaustion has its own outcomes** (`FAILURE_BUDGET_EXHAUSTED`, `CALL_BUDGET_EXHAUSTED`) with fixed messages, never `ABORTED`, so the dispatcher ending a task is never confused with the model giving up.
 - **Ambiguous instructions** ("go to the chair" with two chairs) end with `ABORT` and a clarifying question in `message`. A dedicated `ASK` status is planned for v2 ([roadmap.md](../../docs/roadmap.md#ask-plan-status)).
 - **Fixed slots, not a conversation.** Context size depends only on the current task, which keeps token and latency figures comparable across conditions. Rejected: carrying a conversation, and compaction (OpenClaw's compaction is part of why it was replaced).
+- **Body sections render as indented `Heading: text` lines after the parameters, with no dash.** The dash marks parameters, so the two kinds stay apart; every skill gets the same four lines, so catalogs of different granularity differ only in content. Continuation lines are indented rather than joined, so section text reaches the model verbatim. Rejected: Markdown `###` sub-headings per skill, which roughly double the catalog's line count for the same content.
 - **Static content first** (tools, system text, catalog), so prompt caching could be added later without reordering.
 - **No prompt caching.** Cached tokens are reported separately, and cache behaviour differs between skill sets of different sizes, which would confound token comparisons between granularity conditions. Kept as a future idea ([roadmap.md](../../docs/roadmap.md#future-ideas)).
 - **Executed-steps history keeps the last K entries plus an "n earlier entries omitted" line**, with no model summarisation. The count line tells the model that history was cut; summarisation would add an uncontrolled LLM step.

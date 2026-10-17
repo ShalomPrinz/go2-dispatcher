@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import os
 import threading
 import time
@@ -94,9 +95,7 @@ def test_fault_garbage(executor, registry):
 
 def test_wrong_skill_name_is_malformed(executor, registry):
     d = registry.get("turn")
-    other = SkillDescriptor(
-        name="walk", entrypoint=d.entrypoint, description=d.description, params=d.params, policy=d.policy
-    )
+    other = dataclasses.replace(d, name="walk")
     res = executor.run(
         other,
         TURN,
@@ -171,6 +170,7 @@ def test_child_env_has_no_secrets(executor, monkeypatch):
         entrypoint="skill_modules.env_dump",
         description="dump env keys",
         params={},
+        sections=(),
         policy=ENV_DUMP_POLICY,
     )
     res = executor.run(

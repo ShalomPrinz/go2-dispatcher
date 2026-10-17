@@ -16,12 +16,14 @@ params:
     description: Angle to turn.
 ---
 
-# turn
+## Use when
+Changing the robot's heading, for example to face something or to look around.
 
-Turns in place at a constant yaw rate of 1.0 rad/s, sending `Move(0, 0, ±rate)` at
-10 Hz for `radians(angle_deg) / 1.0` seconds, then sends `StopMove`. The interface is in
-degrees; the skill converts to radians. Open-loop, like `walk`.
+## Requires
+The robot is standing. Fails while lying down.
 
-Manual run on the stub:
+## Effect
+Turns in place at 1.0 rad/s by the given angle, then stops. The position does not change.
 
-    GO2_BACKEND=stub uv run python -m skills.turn '{"direction":"left","angle_deg":90}'
+## Limits
+Open-loop: the robot turns for the time the angle should take; the angle actually turned is not measured.

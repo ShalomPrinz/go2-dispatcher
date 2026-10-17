@@ -1,21 +1,25 @@
-"""SKILL.md frontmatter parser: accepted keys and every schema error (skills/docs/skills.md).
-Discovery, entrypoint and POLICY checks are the dispatcher registry's tests."""
+"""SKILL.md parser: accepted keys, every schema error, the body template and its sync with code constants
+(skills/docs/skills.md). Discovery, entrypoint and POLICY checks are the dispatcher registry's tests."""
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
 
-from skills.frontmatter import SkillFileError, parse_skill_file
+from skills import turn, walk
+from skills.manifest import BODY_MAX_CHARS, SECTION_HEADINGS, SkillFileError, parse_skill_file
 
+CATALOG = Path(__file__).resolve().parents[2] / "catalog"
 HEAD = "name: demo\nentrypoint: skills.demo\ndescription: A demo skill.\n"
+BODY = "## Use when\nAlways.\n\n## Requires\nNone.\n\n## Effect\nDoes it\nin two lines.\n\n## Limits\nNone.\n"
 
 
-def write(tmp_path: Path, frontmatter: str, *, raw: bool = False) -> Path:
-    """Write ``tmp_path/SKILL.md``. Unless ``raw``, name/entrypoint/description are prepended."""
+def write(tmp_path: Path, frontmatter: str, *, raw: bool = False, body: str = BODY) -> Path:
+    """Write ``tmp_path/SKILL.md``. Unless ``raw``, name/entrypoint/description are prepended and ``body`` appended."""
     path = tmp_path / "SKILL.md"
-    path.write_text(frontmatter if raw else f"---\n{HEAD}{frontmatter}---\n\n# body\n", encoding="utf-8")
+    path.write_text(frontmatter if raw else f"---\n{HEAD}{frontmatter}---\n\n{body}", encoding="utf-8")
     return path
 
 
@@ -93,3 +97,49 @@ def test_explicit_null_and_set_rejected(tmp_path):
 )
 def test_default_failing_its_own_checks(tmp_path, spec):
     assert_error(write(tmp_path, f"params:\n  x:\n    {spec}\n    description: X.\n"), "default")
+
+
+# --- body template ------------------------------------------------------------------
+
+
+def test_body_sections_in_template_order(tmp_path):
+    sf = parse_skill_file(write(tmp_path, ""))
+    assert [s.heading for s in sf.sections] == list(SECTION_HEADINGS)
+    assert sf.sections[2].text == "Does it\nin two lines."
+
+
+@pytest.mark.parametrize(
+    ("body", "match"),
+    [
+        (BODY.replace("## Requires\nNone.\n\n", ""), "body: missing section '## Requires'"),
+        (BODY.replace("## Limits\nNone.\n", ""), "body: missing section '## Limits'"),
+        (BODY.replace("## Limits", "## Notes"), "body: unknown heading '## Notes'"),
+        (BODY.replace("## Limits", "### Limits"), "body: unknown heading '### Limits'"),
+        ("# demo\n" + BODY, "body: unknown heading '# demo'"),
+        ("Intro.\n" + BODY, "body: text outside a section: 'Intro.'"),
+        (BODY + "## Effect\nAgain.\n", "heading '## Effect' is repeated or out of order"),
+        (BODY.replace("## Limits\nNone.", "## Limits\n"), "section '## Limits' is empty; write 'None.'"),
+        (BODY + "x" * BODY_MAX_CHARS, f"over the cap of {BODY_MAX_CHARS}"),
+    ],
+)
+def test_body_template_errors(tmp_path, body, match):
+    assert_error(write(tmp_path, "", body=body), match)
+
+
+def test_sections_key_in_frontmatter_rejected(tmp_path):
+    assert_error(write(tmp_path, "sections: []\n"), "sections: unknown key")
+
+
+def _number_before(text: str, unit: str) -> float:
+    m = re.search(rf"(\d+(?:\.\d+)?) {re.escape(unit)}", text)
+    assert m, f"no '<number> {unit}' in {text!r}"
+    return float(m.group(1))
+
+
+def test_prose_numbers_match_code_constants():
+    def effect(name: str) -> str:
+        sf = parse_skill_file(CATALOG / name / "SKILL.md")
+        return next(s.text for s in sf.sections if s.heading == "Effect")
+
+    assert _number_before(effect("walk"), "m/s") == walk.VELOCITY_MPS
+    assert _number_before(effect("turn"), "rad/s") == turn.YAW_RATE_RPS
