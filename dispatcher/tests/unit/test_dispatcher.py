@@ -253,6 +253,17 @@ def test_llm_interrupted_operator(tmp_path, registry):
     assert len(records(o, "llm_interrupted")) == 1
 
 
+def test_task_end_written_once(tmp_path, registry):
+    for i, (item, outcome) in enumerate(
+        [(LLMInterrupted(StopCause.OPERATOR), "STOPPED"), (LLMUnavailable("APIStatusError 500"), "LLM_ERROR")]
+    ):
+        r = Rig(tmp_path / str(i), registry, [item])
+        o = r.run()
+        assert o.outcome == outcome
+        (end,) = records(o, "task_end")
+        assert end["outcome"] == outcome
+
+
 def test_stop_during_step(tmp_path, registry):
     res = exec_result(
         "interrupted",
