@@ -54,12 +54,7 @@ CONFIDENCE_MAX = 0.95  # at box height 1 (tunable)
 # Object heights for GO2_STUB_OBJECTS entries without height_m.
 DEFAULT_HEIGHTS_M = {"bottle": 0.25, "cup": 0.10, "chair": 0.90, "person": 1.70}
 
-_fault_consumed = False
 _command: tuple[float, float, float] | None = None  # last accepted Move(vx, vy, vyaw), until StopMove
-
-
-class StubCameraError(CameraUnavailable):
-    """Injected detector fault; the skill maps it to ``camera_unavailable``."""
 
 
 @dataclass(frozen=True)
@@ -244,33 +239,41 @@ def reset(posture: StubPosture, path: Path | None = None) -> None:
 # --- faults -----------------------------------------------------------------------
 
 
+class _FaultInjector:
+    """Process-wide fault state shared by every stub client: only the first action call is faulted."""
+
+    def __init__(self) -> None:
+        self.consumed = False
+
+    def apply_fault(self) -> str | None:
+        """Apply the injected fault to this call. May hang forever, exit the process or write to stdout;
+        otherwise returns ``None`` or ``"error"``."""
+        if self.consumed:
+            return None
+        self.consumed = True
+        kind = os.environ.get(STUB_FAULT) or None
+        if kind is not None and kind not in FAULT_KINDS:
+            raise ValueError(f"{STUB_FAULT}={kind!r} is not one of {', '.join(FAULT_KINDS)}")
+        if kind == "hang":
+            print("stub fault: hang", file=sys.stderr, flush=True)
+            while True:
+                time.sleep(HANG_POLL_S)  # unscaled, forever
+        if kind == "crash":
+            print("stub fault: crash", file=sys.stderr, flush=True)
+            os._exit(CRASH_EXIT_CODE)
+        if kind == "garbage":
+            print("stub fault: garbage", file=sys.stderr, flush=True)
+            process.write_raw_stdout(GARBAGE_TEXT)
+            os._exit(0)
+        return kind  # None or "error"
+
+
+_faults = _FaultInjector()
+
+
 def disable_faults() -> None:
     """No injected fault in this process; the utilities call it so the stop path always works."""
-    global _fault_consumed
-    _fault_consumed = True
-
-
-def _take_fault() -> str | None:
-    """The injected fault kind for this call: only the first action call is faulted."""
-    global _fault_consumed
-    if _fault_consumed:
-        return None
-    _fault_consumed = True
-    kind = os.environ.get(STUB_FAULT) or None
-    if kind is not None and kind not in FAULT_KINDS:
-        raise ValueError(f"{STUB_FAULT}={kind!r} is not one of {', '.join(FAULT_KINDS)}")
-    if kind == "hang":
-        print("stub fault: hang", file=sys.stderr, flush=True)
-        while True:
-            time.sleep(HANG_POLL_S)  # unscaled, forever
-    if kind == "crash":
-        print("stub fault: crash", file=sys.stderr, flush=True)
-        os._exit(CRASH_EXIT_CODE)
-    if kind == "garbage":
-        print("stub fault: garbage", file=sys.stderr, flush=True)
-        process.write_raw_stdout(GARBAGE_TEXT)
-        os._exit(0)
-    return kind  # None or "error"
+    _faults.consumed = True
 
 
 # --- clients ----------------------------------------------------------------------
@@ -281,7 +284,7 @@ class StubSportClient:
 
     def Move(self, vx: float, vy: float, vyaw: float) -> int:
         global _command
-        if _take_fault() == "error":
+        if _faults.apply_fault() == "error":
             return STUB_ERR_INJECTED
         if read_posture() != "standing":
             return STUB_ERR_NOT_STANDING
@@ -290,13 +293,13 @@ class StubSportClient:
 
     def StopMove(self) -> int:
         global _command
-        if _take_fault() == "error":
+        if _faults.apply_fault() == "error":
             return STUB_ERR_INJECTED
         _command = None
         return 0
 
     def StandDown(self) -> int:
-        if _take_fault() == "error":
+        if _faults.apply_fault() == "error":
             return STUB_ERR_INJECTED
         if read_posture() == "standing":
             write_posture("sitting")
@@ -304,7 +307,7 @@ class StubSportClient:
         return 0
 
     def Stretch(self) -> int:
-        if _take_fault() == "error":
+        if _faults.apply_fault() == "error":
             return STUB_ERR_INJECTED
         if read_posture() != "standing":
             return STUB_ERR_NOT_STANDING
@@ -314,8 +317,8 @@ class StubSportClient:
 
 class StubDetector:
     def detect(self, target: str) -> DetectResult:
-        if _take_fault() == "error":
-            raise StubCameraError("injected camera fault")
+        if _faults.apply_fault() == "error":
+            raise CameraUnavailable("injected camera fault")
         sleep(DETECT_S)
         obj = objects().get(target)
         return DetectResult(found=False) if obj is None else project(read_state().pose, obj)
