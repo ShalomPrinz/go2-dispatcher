@@ -20,7 +20,7 @@ params:
 Moving the robot a set distance in a straight line without changing its heading.
 
 ## Requires
-The robot is standing. Fails while lying down.
+The robot is standing. Fails while sitting.
 
 ## Effect
 Moves forward, backward, or sideways at 0.3 m/s, then stops. Left and right are sideways steps; the heading does not change.

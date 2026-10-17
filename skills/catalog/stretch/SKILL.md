@@ -8,7 +8,7 @@ description: Perform the robot's built-in stretch routine.
 The robot should stretch.
 
 ## Requires
-The robot is standing. Fails while lying down.
+The robot is standing. Fails while sitting.
 
 ## Effect
 Runs the robot's built-in stretch routine in place.

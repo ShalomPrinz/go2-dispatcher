@@ -38,7 +38,7 @@ Any other key (`sections` included), a missing required key or an invalid value 
 
 ## SKILL.md body
 
-Everything after the closing `---` is the body: text for the model, written for the planner. It holds only what the planner needs to choose calls and params: preconditions (such as failing while lying down), effects and limits (such as speed or the COCO-class restriction). No SDK calls, rates, environment variables, settle constants or run commands; those are here and in [robot.md](robot.md). Params, ranges and the one-line `description` are already in the frontmatter and are not repeated.
+Everything after the closing `---` is the body: text for the model, written for the planner. It holds only what the planner needs to choose calls and params: preconditions (such as failing while sitting), effects and limits (such as speed or the COCO-class restriction). No SDK calls, rates, environment variables, settle constants or run commands; those are here and in [robot.md](robot.md). Params, ranges and the one-line `description` are already in the frontmatter and are not repeated.
 
 The body is exactly these sections, each a line `## <heading>` followed by its text, in this order (`SECTION_HEADINGS`):
 
@@ -133,7 +133,7 @@ Run a skill by hand ([below](#running-a-skill-by-hand)) to see a full response.
 | `stretch` | `Stretch()`, then a settle wait | `sdk_ret` | nothing |
 | `detect_object` | one camera frame + YOLO; never moves | `target`, `object_found`, `position` (left/center/right), `closeness` (near/medium/far), `confidence` | `object_found`, `position`, `closeness`, `confidence` |
 
-Params and ranges are in each `SKILL.md`. Walk and turn are open-loop ([robot.md](robot.md#motion)); walk's `left` and `right` are sideways steps that keep the heading. `walk`, `turn` and `stretch` need the robot standing: lying down, `Move` and `Stretch` return non-zero and the skill reports `sdk_error` (stub behaviour, [below](#stub-backend); *unverified* on the robot). `sit` while already lying down is `ok`. `detect_object` reports the most confident box of the target class; the target must be one of the 80 COCO classes in `skills/coco.py`. Not finding an object is `status = ok` with `object_found: false`, not an error.
+Params and ranges are in each `SKILL.md`. Walk and turn are open-loop ([robot.md](robot.md#motion)); walk's `left` and `right` are sideways steps that keep the heading. `walk`, `turn` and `stretch` need the robot standing: while sitting, `Move` and `Stretch` return non-zero and the skill reports `sdk_error` (stub behaviour, [below](#stub-backend); *unverified* on the robot). `sit` while already sitting is `ok`. `detect_object` reports the most confident box of the target class; the target must be one of the 80 COCO classes in `skills/coco.py`. Not finding an object is `status = ok` with `object_found: false`, not an error.
 
 ### Error codes
 
