@@ -69,6 +69,11 @@ class SkillExecutor(Protocol):
     def read_state(self) -> RobotState | None: ...
 
 
+def _stderr_tail(text: str | None) -> str | None:
+    """The last STDERR_TAIL_CHARS characters of ``text``, or None when empty."""
+    return (text or "")[-STDERR_TAIL_CHARS:] or None
+
+
 class _Readers:
     """Two daemon threads draining stdout (kept whole) and stderr (tail only)."""
 
@@ -92,7 +97,7 @@ class _Readers:
     def _read_stderr(self, stream) -> None:
         try:
             for chunk in iter(lambda: stream.read(4096), ""):
-                self._stderr = (self._stderr + chunk)[-STDERR_TAIL_CHARS:]
+                self._stderr = _stderr_tail(self._stderr + chunk) or ""
         except (OSError, ValueError):
             pass
 
@@ -106,7 +111,7 @@ class _Readers:
 
     @property
     def stderr_tail(self) -> str | None:
-        return self._stderr or None
+        return _stderr_tail(self._stderr)
 
 
 def _parse_response(stdout: str, skill_name: str) -> SkillResponse | None:
@@ -276,7 +281,7 @@ class Executor:
             out, err = proc.communicate()
         duration_ms = _ms(t0)
         response = _parse_response(out or "", policy.name)
-        tail = (err or "")[-STDERR_TAIL_CHARS:] or None
+        tail = _stderr_tail(err)
         return proc.returncode, response, tail, duration_ms
 
     def stop_move(self, reason: StopCause) -> StopMoveResult:
@@ -289,7 +294,7 @@ class Executor:
                 ok=False,
                 reason=reason,
                 duration_ms=_ms(t0),
-                stderr_tail=f"{type(e).__name__}: {e}"[-STDERR_TAIL_CHARS:],
+                stderr_tail=_stderr_tail(f"{type(e).__name__}: {e}"),
             )
         ok = response is not None and response.status == "ok"
         return StopMoveResult(
