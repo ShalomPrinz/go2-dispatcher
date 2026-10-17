@@ -29,7 +29,7 @@ Constants are module-level in `skills/real.py`, except the detector ones ([objec
 
 ### Motion
 
-`walk` and `turn` are open-loop: they send `Move` every `CMD_PERIOD_S` at `VELOCITY_MPS` (both in `walk.py`) or `YAW_RATE_RPS` (`CMD_PERIOD_S` and `YAW_RATE_RPS` in `turn.py`) for the time the motion should take, then `StopMove()`. Nothing measures the distance or angle covered. If `Move` returns non-zero, the loop sends `StopMove()` and reports `sdk_error`. If the dispatcher dies, the loop notices on its next iteration, stops the robot and exits ([safety.md](../../docs/safety.md#if-the-dispatcher-dies)).
+`walk` and `turn` are open-loop: they send `Move` every `CMD_PERIOD_S` (shared, in `motion.py`) at `VELOCITY_MPS` (in `walk.py`) or `YAW_RATE_RPS` (in `turn.py`) for the time the motion should take, then `StopMove()`. Nothing measures the distance or angle covered. If `Move` returns non-zero, the loop sends `StopMove()` and reports `sdk_error`. If the dispatcher dies, the loop notices on its next iteration, stops the robot and exits ([safety.md](../../docs/safety.md#if-the-dispatcher-dies)).
 
 `sit` is `StandDown()` (as in the predecessor skill, not `Sit()`) and `stretch` is the robot's built-in `Stretch()` routine, each followed by a settle wait.
 
@@ -117,7 +117,7 @@ Commands use `go2` with a real-backend config. Run a step as a one-step task, or
 3. `stretch` from standing. Measure how long the routine takes (tunes `SETTLE_S` in `stretch.py`).
 4. `detect_object` with target `person`, with a person in view. Check position and closeness against what you see.
 5. Operator `stop` during a 3 m walk. **Measure** kill-to-stop latency: `stop_move.response.timing.stop_call_ms` from the run log, plus the observed time. Record it; there is no pass threshold.
-6. Step timeout during a walk: temporarily set the module constants `BASE_S = 0` and `FACTOR = 0.5` in `skills/walk.py`. The robot must stop and the step outcome must be `timeout`. Restore the values afterwards.
+6. Step timeout during a walk: temporarily set the module constants `MOTION_BASE_S = 0` and `MOTION_FACTOR = 0.5` in `skills/motion.py` (they apply to `turn` too). The robot must stop and the step outcome must be `timeout`. Restore the values afterwards.
 7. `sit`. Measure how long `StandDown` takes (tunes `SETTLE_S` in `sit.py`). Then `go2 state`: record `mode` and `body_height` while sitting (decides the [posture rule](#posture-rule)).
 8. `walk` while sitting. Record the SDK return code and what the robot does (answers `Move` while sitting).
 9. Stand the robot up with the remote.

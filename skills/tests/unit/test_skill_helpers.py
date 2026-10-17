@@ -4,12 +4,13 @@ One subprocess case per mechanism stays in tests/integration."""
 
 from __future__ import annotations
 
+import math
 import os
 import sys
 
 import pytest
 
-from skills import backend, env, process, runner, sit, walk
+from skills import backend, env, process, runner, sit, turn, walk
 from skills.policy import MotionCost
 from skills.runner import InvalidParams, SkillOutcome, StateSampler, parse_params
 from skills.schema import ErrorCode, RobotState
@@ -27,7 +28,9 @@ def test_parse_params_rejects(argv):
 
 def test_policy_resolves_constants_and_functions():
     p = {"direction": "forward", "distance_m": 1.5}
-    assert walk.POLICY.timeout_s(p) == walk.BASE_S + walk.FACTOR * 1.5 / walk.VELOCITY_MPS
+    assert walk.POLICY.timeout_s(p) == 10.0 + 1.5 * (1.5 / walk.VELOCITY_MPS)
+    turn_s = math.radians(90) / turn.YAW_RATE_RPS
+    assert turn.POLICY.timeout_s({"direction": "left", "angle_deg": 90}) == 10.0 + 1.5 * turn_s
     assert walk.POLICY.motion_cost(p) == MotionCost(distance_m=1.5)
     assert sit.POLICY.timeout_s({}) == sit.TIMEOUT_S
     assert sit.POLICY.motion_cost({}) == MotionCost()

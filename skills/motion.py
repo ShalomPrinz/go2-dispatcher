@@ -7,9 +7,28 @@ from __future__ import annotations
 import sys
 import time
 import traceback
+from typing import NamedTuple
 
 from skills import backend, process, runner
 from skills.schema import ErrorCode
+
+CMD_PERIOD_S = 0.1  # Move command period of the move loop (10 Hz)
+MOTION_BASE_S = 10.0  # process start + SDK init + state samples (tunable)
+MOTION_FACTOR = 1.5  # safety factor on commanded motion time (tunable)
+
+
+class Velocity(NamedTuple):
+    """Body-frame velocity for Move: m/s forward and left, rad/s counter-clockwise."""
+
+    vx: float
+    vy: float
+    vyaw: float
+
+
+def motion_timeout(motion_s: float) -> float:
+    """Process timeout for a move-loop skill commanding ``motion_s`` seconds of motion."""
+    return MOTION_BASE_S + MOTION_FACTOR * motion_s
+
 
 # --- actions --------------------------------------------------------------------
 
@@ -23,8 +42,8 @@ def _safe_stop(client) -> int | None:
         return None
 
 
-def move_loop(vx: float, vy: float, vyaw: float, duration_s: float, period_s: float) -> runner.SkillOutcome:
-    """Command Move(vx, vy, vyaw) every ``period_s`` for ``duration_s``, then StopMove().
+def move_loop(velocity: Velocity, duration_s: float, *, period_s: float = CMD_PERIOD_S) -> runner.SkillOutcome:
+    """Command Move(*velocity) every ``period_s`` for ``duration_s``, then StopMove().
 
     Returns a SkillOutcome whose observations hold ``duration_s`` (iterations commanded × period), ``sdk_ret`` and
     ``orphaned: true`` when the loop broke because the parent died."""
@@ -40,7 +59,7 @@ def move_loop(vx: float, vy: float, vyaw: float, duration_s: float, period_s: fl
             if process.orphaned():
                 obs["orphaned"] = True
                 break
-            ret = client.Move(vx, vy, vyaw)
+            ret = client.Move(*velocity)
             if ret != 0:
                 stop_ret = client.StopMove()
                 msg = f"Move returned {ret}"

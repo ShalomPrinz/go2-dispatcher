@@ -62,7 +62,7 @@ def sdk(monkeypatch):
 def test_move_fails_mid_loop(sdk, stop, suffix):
     client = FakeClient(move=[0, 0, 7], stop=stop)
     sdk(client)
-    o = motion.move_loop(0.3, 0, 0, 1.0, PERIOD)
+    o = motion.move_loop(motion.Velocity(0.3, 0, 0), 1.0, period_s=PERIOD)
     assert (o.status, o.error_code, o.error_message) == ("error", "sdk_error", "Move returned 7" + suffix)
     assert o.observations == {"duration_s": round(2 * PERIOD, 3), "sdk_ret": 7}
     assert client.calls == ["Move"] * 3 + ["StopMove"]
@@ -71,7 +71,7 @@ def test_move_fails_mid_loop(sdk, stop, suffix):
 def test_final_stop_move_fails(sdk):
     client = FakeClient(stop=4)
     sdk(client)
-    o = motion.move_loop(0.3, 0, 0, 0.3, PERIOD)
+    o = motion.move_loop(motion.Velocity(0.3, 0, 0), 0.3, period_s=PERIOD)
     assert (o.status, o.error_code, o.error_message) == ("error", "sdk_error", "StopMove returned 4")
     assert o.observations == {"duration_s": round(3 * PERIOD, 3), "sdk_ret": 4}
     assert client.calls == ["Move"] * 3 + ["StopMove"]
@@ -83,7 +83,7 @@ def test_move_raises_still_stops(sdk, stop):
     client = FakeClient(move=[0, ValueError("dds down")], stop=stop)
     sdk(client)
     with pytest.raises(ValueError, match="dds down"):
-        motion.move_loop(0.3, 0, 0, 1.0, PERIOD)
+        motion.move_loop(motion.Velocity(0.3, 0, 0), 1.0, period_s=PERIOD)
     assert client.calls == ["Move", "Move", "StopMove"]
 
 
@@ -91,7 +91,7 @@ def test_orphaned_breaks_and_stops(sdk, monkeypatch):
     client = FakeClient()
     sdk(client)
     monkeypatch.setattr(process, "ORPHANED", True)
-    o = motion.move_loop(0.3, 0, 0, 1.0, PERIOD)
+    o = motion.move_loop(motion.Velocity(0.3, 0, 0), 1.0, period_s=PERIOD)
     assert (o.status, o.error_code) == ("ok", None)
     assert o.observations == {"orphaned": True, "duration_s": 0.0, "sdk_ret": 0}
     assert client.calls == ["StopMove"]

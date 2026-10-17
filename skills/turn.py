@@ -8,14 +8,16 @@ from dataclasses import replace
 from skills import motion, policy, runner
 
 YAW_RATE_RPS = 1.0  # rad/s
-CMD_PERIOD_S = 0.1
 DIRECTION_SIGN = {"left": 1, "right": -1}
-BASE_S = 10.0  # process start + SDK init + state samples (tunable)
-FACTOR = 1.5  # safety factor on commanded motion time (tunable)
+
+
+def _motion_s(params: dict) -> float:
+    return math.radians(float(params["angle_deg"])) / YAW_RATE_RPS
+
 
 POLICY = policy.SkillPolicy(
     name="turn",
-    timeout=lambda p: BASE_S + FACTOR * math.radians(p["angle_deg"]) / YAW_RATE_RPS,
+    timeout=lambda p: motion.motion_timeout(_motion_s(p)),
     cost=lambda p: policy.MotionCost(rotation_deg=p["angle_deg"]),
 )
 
@@ -23,9 +25,7 @@ POLICY = policy.SkillPolicy(
 def body(params: dict) -> runner.SkillOutcome:
     direction = params["direction"]
     angle_deg = float(params["angle_deg"])
-    outcome = motion.move_loop(
-        0.0, 0.0, DIRECTION_SIGN[direction] * YAW_RATE_RPS, math.radians(angle_deg) / YAW_RATE_RPS, CMD_PERIOD_S
-    )
+    outcome = motion.move_loop(motion.Velocity(0.0, 0.0, DIRECTION_SIGN[direction] * YAW_RATE_RPS), _motion_s(params))
     return replace(outcome, observations={"direction": direction, "angle_deg": angle_deg, **outcome.observations})
 
 
