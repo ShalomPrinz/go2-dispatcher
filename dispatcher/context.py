@@ -249,5 +249,5 @@ def build_user_message(inp: ContextInput, registry: Registry) -> str:
 
 
 def schema_retry_message(user: str, errors: list[str]) -> str:
-    """Original user message, byte-identical, + ``"\\n\\n"`` + the Rejection section (dispatcher/docs/llm.md)."""
+    """The rebuilt user message, byte-identical, + ``"\\n\\n"`` + the Rejection section (dispatcher/docs/llm.md)."""
     return user + prompts.SECTION_SEPARATOR + prompts.rejection_section(errors)

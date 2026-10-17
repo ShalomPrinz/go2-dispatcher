@@ -84,7 +84,7 @@ All content blocks, `usage` (verbatim), `stop_reason`, latency, attempts, `respo
 
 An invalid reply (any non-`none` rejection kind) gets exactly **one** retry:
 
-- The same system blocks and tool. The user message is the original one, byte for byte, plus the Rejection section with one line per error ([loop-and-context.md](loop-and-context.md#user-message)).
+- The same system blocks and tool. The user message is rebuilt from the current task state, plus the Rejection section with one line per error ([loop-and-context.md](loop-and-context.md#user-message)). Nothing else changed since the original request, so it differs from it only in the Budget's model-call count, which includes the rejected call.
 - The retry's return reason is `schema_retry`; the `llm_request` record's `retry_of` holds the reason being retried.
 - The retry is an LLM call and counts toward `loop.max_llm_calls` (checked before it is sent).
 - If the retry is also invalid, the task ends `LLM_INVALID`.
@@ -121,6 +121,7 @@ The SDK's own retries are disabled (`max_retries=0`); `AnthropicPlanner` retries
 - **`max_tokens` 2048** as headroom against cut-off replies; it does not affect cost or measurements unless a reply would be cut off.
 - **Reject, never truncate, over-long plans**, with the rate logged and a rule for revisiting the choice (above). Truncation would run a plan the model never made and corrupt the data.
 - **Exactly one schema retry**, then `LLM_INVALID`: bounded cost, and a second invalid reply is itself a measurable outcome. Invalid replies are LLM calls but never failures.
+- **The schema retry's user message is rebuilt, not copied.** It goes through the same context builder as every request, so the Budget's model-call count includes the rejected call and stays true to the count the call budget checks. Rejected: resending the original message byte for byte, which showed the model one call fewer than it had used.
 - **Own infrastructure retries, logged separately, never counted as LLM calls or replans.** Transport problems must not distort the planning metrics. This replaces OpenClaw's provider retry; model failover is not covered, which is accepted ([architecture.md](../../docs/architecture.md#why-a-purpose-built-dispatcher)).
 - **`anthropic` and `httpx` are imported lazily**, inside the planners and their retry classifiers. Importing it costs about 0.8 s, which every `go2 catalog`, `state` and `--reset-stub` and every stub run with the test planner would otherwise pay without calling the API. A fresh-interpreter test checks that the CLI transport does not import it.
 - **The planner is built with the prompt surface; `plan()` takes only per-call arguments.** The system blocks and tool definition are fixed per process, so `make_planner(cfg, surface)` passes the one `PromptSurface` to `AnthropicPlanner` (and a test planner factory) at construction, and `PlannerClient` exposes it as `surface`. The dispatcher takes no surface of its own: it builds its run-log session from `planner.surface`, so what is logged is what the planner sends ([run-log.md](run-log.md#design-decisions)). Rejected: passing `system` and `tool_schema` on every `plan()` call, which repeated constants in each call and let a caller send something other than the logged surface.

@@ -180,7 +180,11 @@ def test_schema_retry_success(tmp_path, registry):
     assert o.failures == 0
     retry = records(o, "llm_request")[1]
     assert (retry["return_reason"], retry["retry_of"]) == ("schema_retry", "initial")
-    assert r.user(1).startswith(r.user(0) + "\n\n" + prompts.REJECTION_HEADER)
+    first, rebuilt = r.user(0), r.user(1)
+    assert "Model calls: 0 of " in first and "Model calls: 1 of " in rebuilt
+    assert rebuilt.startswith(
+        first.replace("Model calls: 0 of ", "Model calls: 1 of ") + "\n\n" + prompts.REJECTION_HEADER
+    )
     assert len(records(o, "plan_invalid")) == 1
 
 

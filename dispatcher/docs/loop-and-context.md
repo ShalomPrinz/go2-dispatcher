@@ -227,7 +227,7 @@ Always all seven sections, in this order, separated by one blank line, no traili
 
 **History cut.** If more than `loop.context_history_k` (K, default 10, *tunable*) steps have been recorded, Executed so far starts with `({n} earlier entries omitted)` and shows the last K. Nothing is summarised. The operator's outcome text is cut separately ([running.md](../../docs/running.md)).
 
-**Rejection section** (schema retry only): the original user message, byte for byte, plus `"\n\n"`, `prompts.REJECTION_HEADER`, one line per validation error, and `prompts.REJECTION_FOOTER`.
+**Rejection section** (schema retry only): the user message rebuilt for the retry (the original one with the model-call count raised by the rejected call), plus `"\n\n"`, `prompts.REJECTION_HEADER`, one line per validation error, and `prompts.REJECTION_FOOTER`.
 
 A failed step is still charged to the motion budget: the budget is charged at dispatch ([safety.md](../../docs/safety.md#motion-budget)). Exact user messages for each case are the golden files `dispatcher/tests/golden/context_*.txt` ([testing.md](../../tests/docs/testing.md)).
 

@@ -425,8 +425,7 @@ class Dispatcher:
     def _get_valid_plan(self, t: _Task) -> Plan:
         """The request, then at most one schema retry (dispatcher/docs/llm.md). Returns a valid plan, or
         raises ``_TaskEnded``."""
-        user = self._context(t)
-        request = user
+        request = self._context(t)
         return_reason: RequestReason = t.feedback.return_reason
         retry_of: ReturnReason | None = None
         while True:
@@ -439,8 +438,8 @@ class Dispatcher:
             self._log_invalid(t, res, check)
             if retry_of is not None:
                 raise _TaskEnded(_Ending("LLM_INVALID"))
-            request, return_reason, retry_of = (
-                schema_retry_message(user, check.errors),
+            request, return_reason, retry_of = (  # rebuilt so the Budget shows the call just made
+                schema_retry_message(self._context(t), check.errors),
                 "schema_retry",
                 t.feedback.return_reason,
             )
