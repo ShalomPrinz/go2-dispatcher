@@ -138,7 +138,7 @@ def test_catalog_rendering(tmp_path):
     default: 3
     description: F.
 """,
-        body="## Use when\nAlways.\n\n## Requires\nStanding.\nNot lying.\n\n## Effect\nNone.\n\n## Limits\nNone.\n",
+        body="## Use when\nAlways.\n\n## Requires\nStanding.\nNot sitting.\n\n## Effect\nNone.\n\n## Limits\nNone.\n",
     )
     assert Registry.load(tmp_path).catalog_text() == (
         "demo: A demo skill.\n"
@@ -150,7 +150,7 @@ def test_catalog_rendering(tmp_path):
         "  - f (optional, default 3): number from 0 to 10. F.\n"
         "  Use when: Always.\n"
         "  Requires: Standing.\n"
-        "    Not lying.\n"
+        "    Not sitting.\n"
         "  Effect: None.\n"
         "  Limits: None."
     )

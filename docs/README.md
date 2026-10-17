@@ -42,7 +42,7 @@ The `skills` package: the skill contract and the robot side.
 | Document | Owns |
 |---|---|
 | [skills.md](../skills/docs/skills.md) | The skill contract: `SKILL.md` format, invocation, the common response schema, error codes, policies (timeout and motion cost), catalog generation and registry hash, the stub backend and fault injection, how to add a skill. |
-| [robot.md](../skills/docs/robot.md) | The Go2 EDU side: robot facts, SDK and DDS usage, state sampling and the posture rule, the real backend, settle waits, robot-side open questions (odometry, `stand` skill, `Move` while lying down), and the supervised robot checklist with its recorded results. |
+| [robot.md](../skills/docs/robot.md) | The Go2 EDU side: robot facts, SDK and DDS usage, state sampling and the posture rule, the real backend, settle waits, robot-side open questions (odometry, `stand` skill, `Move` while sitting), and the supervised robot checklist with its recorded results. |
 
 ### Tests (`tests/docs/`)
 

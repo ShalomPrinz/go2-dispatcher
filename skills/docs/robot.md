@@ -95,7 +95,7 @@ The list of open questions with owners is in [roadmap.md](../../docs/roadmap.md#
 
 - **Odometry.** `SportModeState` has `position` and `velocity`, and Go2 topic lists include `rt/utlidar/robot_odom` and `rt/utlidar/robot_pose`. Whether the robot's own estimate is available and usable is unknown (ask Achiya). v1 logs `position` and `velocity` in every sample and uses neither. The answer decides whether `walk` can be verified in v2 and whether a geofence is possible ([roadmap.md](../../docs/roadmap.md#verifiability-per-skill)).
 - **No skill can stand the robot up.** After `sit`, motion fails until a person stands the robot up with the remote; in a batch run one `sit` affects every later task. On the stub, `go2 --reset-stub` restores the posture. A `stand` skill (`StandUp()` then `BalanceStand()`, with a settle wait) is recommended before experiments ([skills.md](skills.md#adding-a-new-skill)).
-- **`Move` while lying down.** v1 treats a non-zero return code as `sdk_error` (the stub returns 1). If the real robot silently ignores `Move` and returns 0, `walk` and `turn` report `ok` while nothing moved. Checklist item 8 finds out.
+- **`Move` while sitting.** v1 treats a non-zero return code as `sdk_error` (the stub returns 1). If the real robot silently ignores `Move` and returns 0, `walk` and `turn` report `ok` while nothing moved. Checklist item 8 finds out.
 - **Kill-to-stop latency** and whether the sport service stops by itself when `Move` commands stop arriving: [safety.md](../../docs/safety.md#between-kill-and-stopmove). Checklist item 5 measures the latency.
 - **Installing the `robot` extra on the lab machine** (CycloneDDS build) and the Python version to pin: [setup.md](../../docs/setup.md#lab-machine-real-robot).
 
@@ -119,7 +119,7 @@ Commands use `go2` with a real-backend config. Run a step as a one-step task, or
 5. Operator `stop` during a 3 m walk. **Measure** kill-to-stop latency: `stop_move.response.timing.stop_call_ms` from the run log, plus the observed time. Record it; there is no pass threshold.
 6. Step timeout during a walk: temporarily set the module constants `BASE_S = 0` and `FACTOR = 0.5` in `skills/walk.py`. The robot must stop and the step outcome must be `timeout`. Restore the values afterwards.
 7. `sit`. Measure how long `StandDown` takes (tunes `SETTLE_S` in `sit.py`). Then `go2 state`: record `mode` and `body_height` while sitting (decides the [posture rule](#posture-rule)).
-8. `walk` while sitting. Record the SDK return code and what the robot does (answers `Move` while lying down).
+8. `walk` while sitting. Record the SDK return code and what the robot does (answers `Move` while sitting).
 9. Stand the robot up with the remote.
 
 ### Results
