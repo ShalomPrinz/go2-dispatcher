@@ -50,7 +50,7 @@ def _tokens(usage: dict) -> str | None:
 
 
 class ConsoleTrace:
-    """Writes one line per event to ``stream`` (stderr by default, so stdout keeps only the outcome). With ANSI on,
+    """Writes one line per event to ``stream`` (stderr by default). With ANSI on,
     the "Thinking..." and running-step lines are pending: the next line replaces them in place."""
 
     def __init__(
@@ -68,6 +68,7 @@ class ConsoleTrace:
         self._lock = threading.Lock()  # stop_requested arrives from the signal-handling thread
         self._pending: str | None = None
         self._t_request = 0.0
+        self._shown_message: str | None = None  # the message the last plan line printed
 
     # --- output ---------------------------------------------------------------------------
 
@@ -143,6 +144,7 @@ class ConsoleTrace:
                 head += f", replan after {stop_at}"
         if plan.message:
             head += f": {plan.message}"
+        self._shown_message = plan.message
         lines = [self._style(head, BOLD)]
         lines += [f"  {i}. {format_call(s.skill, s.params, self._registry)}" for i, s in enumerate(plan.steps, 1)]
         self._line("\n".join(lines))
@@ -187,4 +189,8 @@ class ConsoleTrace:
             parts.append(tokens)
         parts.append(_secs(result.duration_ms))
         color = GREEN if result.outcome == "DONE" else RED
-        self._close(self._style(" · ".join(parts), BOLD, color))
+        summary = self._style(" · ".join(parts), BOLD, color)
+        if result.message and result.message != self._shown_message:  # e.g. STOPPED, budget, LLM_INVALID
+            summary = self._style(result.message, BOLD, color) + "\n" + summary
+        self._shown_message = None
+        self._close(summary)

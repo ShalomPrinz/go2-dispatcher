@@ -20,7 +20,7 @@ from ..dispatcher import Dispatcher
 from ..executor import Executor
 from ..models import ConfigError, StartupError, TaskOutcome
 from ..registry import Registry
-from . import build_dispatcher, format_outcome, load_config_and_env, startup_error_text
+from . import build_dispatcher, load_config_and_env, startup_error_text
 from .console_trace import ConsoleTrace
 
 SOURCE = "cli"
@@ -171,10 +171,6 @@ class _Runner:
         return box["outcome"]
 
 
-def _print_outcome(outcome: TaskOutcome, registry: Registry) -> None:
-    print(format_outcome(outcome, registry), flush=True)
-
-
 def cmd_run(cfg, task: str) -> int:
     if not task.strip():
         print(prompts.EMPTY_TASK, file=sys.stderr)
@@ -182,8 +178,7 @@ def cmd_run(cfg, task: str) -> int:
     d = build_dispatcher(cfg, reset_stub=True, observer=ConsoleTrace)
     runner = _Runner(d)
     runner.install()
-    outcome = runner.run(task)
-    _print_outcome(outcome, d.registry)
+    outcome = runner.run(task)  # the ConsoleTrace is the only output (docs/running.md)
     return EXIT_OK if outcome.outcome == "DONE" else EXIT_FAIL
 
 
@@ -206,7 +201,7 @@ def cmd_batch(cfg, tasks_file: Path) -> int:
         if i > 1:
             print()
         print(BATCH_TASK_LINE.format(i=i, task=task), flush=True)
-        _print_outcome(runner.run(task), d.registry)
+        runner.run(task)
         if runner.stop_requested:
             return EXIT_SIGINT
     return EXIT_OK

@@ -84,6 +84,7 @@ def test_dispatcher_feeds_the_trace(tmp_path, registry):
     assert sum(ln.startswith("Thinking...") for ln in lines) == 2
     assert "▶ walk(direction=forward, distance_m=0.5)" in lines
     assert any(ln.startswith("✓ walk(") for ln in lines)
+    assert lines[-2] == "Plan: DONE: ok"  # the message is not repeated
     assert lines[-1].startswith("DONE · 2 LLM calls · 1 steps run, 0 failed")
     assert outcome.log_path  # the run log is still written
 
@@ -107,3 +108,29 @@ def test_observer_hears_stop_only_after_the_kill(tmp_path, registry):
     d = Dispatcher(cfg, registry, planner, executor, clock=FakeClock().now, observer=Observer())
     assert d.run_task("walk", source="test").outcome == "STOPPED"
     assert kills_seen == [1]
+
+
+def test_message_not_on_a_plan_line_is_printed_before_the_summary(tmp_path, registry):
+    cfg = make_config(tmp_path)
+    surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
+    walk = PlanStep(skill="walk", params={"direction": "forward", "distance_m": 0.5})
+    planner = ScriptedPlanner([Plan(status="PLAN", steps=[walk])], surface)
+
+    def step(call):
+        d.request_stop("test")
+        return exec_result()
+
+    out = io.StringIO()
+    d = Dispatcher(
+        cfg,
+        registry,
+        planner,
+        FakeExecutor([step]),
+        clock=FakeClock().now,
+        observer=ConsoleTrace(registry, out, ansi=False),
+    )
+    outcome = d.run_task("walk", source="test")
+    lines = out.getvalue().splitlines()
+    assert outcome.outcome == "STOPPED" and outcome.message
+    assert lines[-2] == outcome.message
+    assert lines[-1].startswith("STOPPED · ")

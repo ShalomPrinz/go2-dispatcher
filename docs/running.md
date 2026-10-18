@@ -25,7 +25,7 @@ Global options go **before** the command (argparse), for example `go2 --backend 
 
 | Command | Takes the lock | Resets the stub | Needs the API key | What it does |
 |---|---|---|---|---|
-| `run TASK` | yes | yes | yes | Runs one task, prints the outcome. |
+| `run TASK` | yes | yes | yes | Runs one task, prints its live trace. |
 | `batch TASKS_FILE` | yes | yes | yes | Runs one task per line, in order, in one process. |
 | `--reset-stub` | yes | yes | no | Resets the stub and exits. |
 | `catalog` | no | no | no | Prints the system text, `## Skills` + catalog, `## Tool schema` + the JSON schema, and `Registry hash: <16 hex>`. |
@@ -37,20 +37,22 @@ Use `catalog` to see exactly what the model is sent before any task text. The ha
 
 ### Output
 
-`run` prints the outcome as plain text:
+`run` and `batch` print a live trace of each task to stderr; it is their only task output, and stdout carries no outcome text. One line per event: `Thinking...` while the model is called, then a dim `Thought for 5.3s · {in} in / {out} out tokens`; the plan, one step per line (a `DONE` or `ABORT` plan shows its message); `▶ skill(params)` while a step runs, then `✓` or `✗` with the step rendered as in the LLM context ([loop-and-context.md](../dispatcher/docs/loop-and-context.md#user-message)) and its duration; infrastructure retries, rejected plans, stop requests, StopMove and internal errors; and a bold summary as the last line (outcome, LLM calls, steps, tokens, duration). When the task ends without a plan line that showed its message (`STOPPED`, a budget, `LLM_INVALID`, an error), the operator message is printed once just before the summary, in the same color:
 
 ```
-DONE: I turned left 90 degrees and see a chair ahead, close by.
-Steps: 2 run, 0 failed
-1. turn(direction=left, angle_deg=90) -> ok
-2. detect_object(target=chair) -> ok: object_found=true, position=center, closeness=near, confidence=0.9
+Posture: standing
+Thought for 3.0s · 1700 in / 122 out tokens
+Plan: PLAN, 1 step
+  1. turn(direction=left, angle_deg=90)
+✓ turn(direction=left, angle_deg=90) -> ok (0.3s)
+Thought for 3.7s · 1737 in / 154 out tokens
+Plan: DONE: The robot has successfully turned left 90 degrees as requested.
+DONE · 2 LLM calls · 1 steps run, 0 failed · 3437 in / 276 out tokens · 6.9s
 ```
 
-The first line is `{OUTCOME}: {message}`. `Steps:` counts dispatched steps and failures (rejections count as failures). Then each recorded step is shown, rendered as in the LLM context ([loop-and-context.md](../dispatcher/docs/loop-and-context.md#user-message)). If the whole text is longer than 4000 characters, the oldest step lines are replaced by `({n} earlier lines omitted)`.
+On a terminal the trace is colored and the `Thinking...` and `▶` lines are replaced in place; when stderr is not a terminal, or `NO_COLOR` is set, it is plain text with one line per event. The trace is `dispatcher/transports/console_trace.py`, an observer of the run log records ([run-log.md](../dispatcher/docs/run-log.md#observers)); the Telegram bot has no trace. The machine-readable record of a task is its run log ([run-log.md](../dispatcher/docs/run-log.md)).
 
-`batch` prints `Task {i}: {task}` before each outcome, with a blank line between tasks.
-
-While a task runs, `run` and `batch` also print a live trace to stderr, so stdout still holds only the outcome text. One line per event: `Thinking...` while the model is called, then a dim `Thought for 5.3s · {in} in / {out} out tokens`; the plan, one step per line; `▶ skill(params)` while a step runs, then `✓` or `✗` with the step rendered as in the outcome and its duration; infrastructure retries, rejected plans, stop requests, StopMove and internal errors; and a bold summary at the end (outcome, LLM calls, steps, tokens, duration). On a terminal the trace is colored and the `Thinking...` and `▶` lines are replaced in place; when stderr is not a terminal, or `NO_COLOR` is set, it is plain text with one line per event. The trace is `dispatcher/transports/console_trace.py`, an observer of the run log records ([run-log.md](../dispatcher/docs/run-log.md#observers)); the Telegram bot has no trace.
+`batch` prints `Task {i}: {task}` to stdout before each task, with a blank line between tasks. It prints no aggregate after the last task.
 
 ### Exit codes
 
@@ -66,7 +68,7 @@ While a task runs, `run` and `batch` also print a live trace to stderr, so stdou
 
 The task runs in a worker thread. The main thread waits in 0.2 s steps so signals are handled quickly.
 
-- **First Ctrl+C while a task runs:** the same as the operator `stop` word. The running skill is killed, StopMove is sent, and the task ends `STOPPED`. `Stopping.` is printed. `run` then prints the outcome and exits 1. `batch` prints the outcome, skips the remaining lines and exits 130.
+- **First Ctrl+C while a task runs:** the same as the operator `stop` word. The running skill is killed, StopMove is sent, and the task ends `STOPPED`. `Stopping.` is printed. `run` then exits 1. `batch` skips the remaining lines and exits 130.
 - **Second Ctrl+C, or SIGTERM:** `dispatcher.shutdown(0)` kills the skill and sends StopMove, then the process exits with 130 (SIGINT) or 143 (SIGTERM).
 
 ### `batch` file format
@@ -119,11 +121,24 @@ Messages from users who are not in `allowed_user_ids` get no reply (a warning li
 | `stop` or `/stop` while idle | `Nothing is running.` |
 | an empty message | `Send a task, for example: walk forward one metre.` |
 | a task while another task runs | `Busy: a task is running. Send "stop" to stop it.` |
-| a task | `Working on it.`, then the outcome text (same format as the CLI) |
+| a task | `Working on it.`, then the outcome text (below) |
 
 If a handler raises an error, the bot replies `Error: {ExceptionType}` and prints the traceback to stderr.
 
 Only `stop` is recognised during a task. Other messages sent during a task are answered `Busy` and are not forwarded to the model (forwarding them is a future idea; see [roadmap.md](roadmap.md#future-ideas)).
+
+### Outcome text
+
+The reply that ends a task is plain text:
+
+```
+DONE: I turned left 90 degrees and see a chair ahead, close by.
+Steps: 2 run, 0 failed
+1. turn(direction=left, angle_deg=90) -> ok
+2. detect_object(target=chair) -> ok: object_found=true, position=center, closeness=near, confidence=0.9
+```
+
+The first line is `{OUTCOME}: {message}`. `Steps:` counts dispatched steps and failures (rejections count as failures). Then each recorded step is shown, rendered as in the LLM context ([loop-and-context.md](../dispatcher/docs/loop-and-context.md#user-message)). If the whole text is longer than 4000 characters, the oldest step lines are replaced by `({n} earlier lines omitted)`.
 
 ## Stub vs real
 
@@ -167,7 +182,8 @@ and exit code 2. This stops two processes from driving one robot, overwriting th
 
 ## Design decisions
 
-- **Two thin transports over one dispatcher.** The CLI and the bot only parse input, format the outcome and handle signals; everything else is shared, so CLI runs and Telegram runs produce the same logs. The Telegram integration replaces OpenClaw's channels ([architecture.md](architecture.md#why-a-purpose-built-dispatcher)).
+- **Two thin transports over one dispatcher.** The CLI and the bot only parse input, report the task and handle signals; everything else is shared, so CLI runs and Telegram runs produce the same logs. The Telegram integration replaces OpenClaw's channels ([architecture.md](architecture.md#why-a-purpose-built-dispatcher)).
+- **The live trace is the CLI's only task output.** The trace already ends with the outcome, step counts, tokens and duration, and shows the operator message once (in the `DONE` or `ABORT` plan line, otherwise just before the summary), so printing the outcome text after it repeated the same task. Rejected: keeping the outcome text on stdout for scripting; the run log JSONL is the machine-readable record of every task ([run-log.md](../dispatcher/docs/run-log.md)). The bot keeps the outcome text, because it has no trace.
 - **`batch` carries the previous task and posture across lines**, because that is how the robot behaves between messages: it remembers. Experiments may need independent tasks later ([roadmap.md](roadmap.md#future-ideas)).
 - **The bot stops a running task on SIGINT/SIGTERM before the Telegram library shuts down.** In python-telegram-bot 22.x, shutdown waits for every in-flight handler, so without this a running task would continue until it ended by itself. The bot replaces the library's signal handlers with one that calls the stop path, keeping `Dispatcher.shutdown()` as the backstop.
 - **Long polling**, so the bot needs no public address on the lab network.

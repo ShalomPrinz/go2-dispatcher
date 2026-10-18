@@ -225,7 +225,7 @@ Always all seven sections, in this order, separated by one blank line, no traili
 - **Remaining plan:** steps of the latest plan that did not run, as `{position in plan}. {skill}({raw params}) [pending]` after a checkpoint or `[abandoned]` after a failure or rejection; otherwise `(none)`.
 - **Notice:** see [return reasons](#return-reasons).
 
-**History cut.** If more than `loop.context_history_k` (K, default 10, *tunable*) steps have been recorded, Executed so far starts with `({n} earlier entries omitted)` and shows the last K. Nothing is summarised. The operator's outcome text is cut separately ([running.md](../../docs/running.md)).
+**History cut.** If more than `loop.context_history_k` (K, default 10, *tunable*) steps have been recorded, Executed so far starts with `({n} earlier entries omitted)` and shows the last K. Nothing is summarised. The operator's outcome text is cut separately ([running.md](../../docs/running.md#outcome-text)).
 
 **Rejection section** (schema retry only): the user message rebuilt for the retry (the original one with the model-call count raised by the rejected call), plus `"\n\n"`, `prompts.REJECTION_HEADER`, one line per validation error, and `prompts.REJECTION_FOOTER`.
 

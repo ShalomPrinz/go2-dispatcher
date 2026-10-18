@@ -88,16 +88,15 @@ def test_cli_does_not_import_anthropic():
 def test_run_done(cfg_path):
     proc = cli(cfg_path, "run", "turn left", script=[PLAN_TURN, DONE])
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    lines = proc.stdout.splitlines()
-    assert lines[0] == "DONE: Turned left."
-    assert lines[1] == "Steps: 1 run, 0 failed"
-    assert lines[2].startswith("1. turn(")
+    assert proc.stdout == ""
+    assert proc.stderr.splitlines()[-1].startswith("DONE · 2 LLM calls · 1 steps run, 0 failed")
 
 
 def test_run_abort(cfg_path):
     proc = cli(cfg_path, "run", "fly", script=[ABORT])
     assert proc.returncode == 1, proc.stdout + proc.stderr
-    assert proc.stdout.startswith("ABORTED: Cannot do that.")
+    assert proc.stdout == ""
+    assert proc.stderr.splitlines()[-1].startswith("ABORTED · ")
 
 
 def test_batch(cfg_path, tmp_path):
@@ -105,7 +104,9 @@ def test_batch(cfg_path, tmp_path):
     tasks.write_text("# comment\nturn left\n\nfly\n", encoding="utf-8")
     proc = cli(cfg_path, "batch", str(tasks), script=[PLAN_TURN, DONE, ABORT])
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    assert "DONE: Turned left." in proc.stdout and "ABORTED: Cannot do that." in proc.stdout
+    assert proc.stdout.splitlines() == ["Task 1: turn left", "", "Task 2: fly"]
+    ends = [ln for ln in proc.stderr.splitlines() if " · " in ln and "LLM call" in ln]
+    assert [e.split(" · ")[0] for e in ends] == ["DONE", "ABORTED"]
 
 
 def test_fault_with_real_backend(cfg_path):
@@ -139,7 +140,7 @@ def test_second_run_is_locked_out_then_sigint_stops(cfg_path):
         out, err = first.communicate(timeout=STOP_WITHIN_S)
         assert first.returncode == 1, out + err
         assert "Stopping." in out
-        assert "STOPPED:" in out
+        assert "STOPPED · " in err
     finally:
         if first.poll() is None:
             first.kill()
