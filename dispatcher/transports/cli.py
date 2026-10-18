@@ -21,6 +21,7 @@ from ..executor import Executor
 from ..models import ConfigError, StartupError, TaskOutcome
 from ..registry import Registry
 from . import build_dispatcher, format_outcome, load_config_and_env, startup_error_text
+from .console_trace import ConsoleTrace
 
 SOURCE = "cli"
 JOIN_POLL_S = 0.2  # main thread join period, so signals are handled (docs/running.md)
@@ -178,7 +179,7 @@ def cmd_run(cfg, task: str) -> int:
     if not task.strip():
         print(prompts.EMPTY_TASK, file=sys.stderr)
         return EXIT_USAGE
-    d = build_dispatcher(cfg, reset_stub=True)
+    d = build_dispatcher(cfg, reset_stub=True, observer=ConsoleTrace)
     runner = _Runner(d)
     runner.install()
     outcome = runner.run(task)
@@ -198,7 +199,7 @@ def cmd_batch(cfg, tasks_file: Path) -> int:
     except OSError as e:
         print(f"Cannot read {tasks_file}: {e}", file=sys.stderr)
         return EXIT_USAGE
-    d = build_dispatcher(cfg, reset_stub=True)
+    d = build_dispatcher(cfg, reset_stub=True, observer=ConsoleTrace)
     runner = _Runner(d)
     runner.install()
     for i, task in enumerate(tasks, 1):

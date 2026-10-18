@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import os
 import sys
+from collections.abc import Callable
 
 from skills import stub
 
@@ -16,6 +17,7 @@ from ..executor import Executor, SkillExecutor
 from ..llm import AnthropicPlanner, OpenRouterPlanner, PlannerClient
 from ..models import ConfigError, Posture, RegistryError, StartupError, TaskOutcome
 from ..registry import Registry
+from ..runlog import TaskObserver
 
 __all__ = [
     "load_config_and_env",
@@ -71,9 +73,11 @@ def initial_posture(executor: SkillExecutor) -> Posture:
     return state.posture
 
 
-def build_dispatcher(cfg: Config, *, reset_stub: bool) -> Dispatcher:
-    """Lock, registry, stub reset, planner, executor, dispatcher (docs/running.md).
-    Raises ``StartupError``; process-lifetime hooks are the caller's."""
+def build_dispatcher(
+    cfg: Config, *, reset_stub: bool, observer: Callable[[Registry], TaskObserver] | None = None
+) -> Dispatcher:
+    """Lock, registry, stub reset, planner, executor, dispatcher (docs/running.md). ``observer`` builds the
+    dispatcher's task observer from the registry. Raises ``StartupError``; process-lifetime hooks are the caller's."""
     process_lock.acquire(cfg.log.dir)  # the root, so all provider/backend folders share one lock
     registry = Registry.load(cfg.skills.dir)
     if reset_stub and cfg.robot.backend == "stub":
@@ -88,6 +92,7 @@ def build_dispatcher(cfg: Config, *, reset_stub: bool) -> Dispatcher:
         planner,
         executor,
         initial_posture=posture,
+        observer=observer(registry) if observer is not None else None,
     )
 
 

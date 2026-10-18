@@ -50,6 +50,8 @@ The first line is `{OUTCOME}: {message}`. `Steps:` counts dispatched steps and f
 
 `batch` prints `Task {i}: {task}` before each outcome, with a blank line between tasks.
 
+While a task runs, `run` and `batch` also print a live trace to stderr, so stdout still holds only the outcome text. One line per event: `Thinking...` while the model is called, then a dim `Thought for 5.3s · {in} in / {out} out tokens`; the plan, one step per line; `▶ skill(params)` while a step runs, then `✓` or `✗` with the step rendered as in the outcome and its duration; infrastructure retries, rejected plans, stop requests, StopMove and internal errors; and a bold summary at the end (outcome, LLM calls, steps, tokens, duration). On a terminal the trace is colored and the `Thinking...` and `▶` lines are replaced in place; when stderr is not a terminal, or `NO_COLOR` is set, it is plain text with one line per event. The trace is `dispatcher/transports/console_trace.py`, an observer of the run log records ([run-log.md](../dispatcher/docs/run-log.md#observers)); the Telegram bot has no trace.
+
 ### Exit codes
 
 | Code | When |

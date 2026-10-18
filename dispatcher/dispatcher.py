@@ -36,7 +36,7 @@ from .models import (
     TaskSummary,
 )
 from .registry import Registry
-from .runlog import NullLog, RunLog, RunLogFactory, SessionInfo, TaskLog
+from .runlog import NullLog, RunLogFactory, SessionInfo, TaskLog, TaskObserver, TeeLog, notify
 
 __all__ = ["Dispatcher"]
 
@@ -104,6 +104,7 @@ class Dispatcher:
         *,
         clock: Callable[[], float] = time.monotonic,
         initial_posture: Posture = "unknown",
+        observer: TaskObserver | None = None,
     ):
         self.cfg = cfg
         self.registry = registry
@@ -115,6 +116,7 @@ class Dispatcher:
         )
         self.registry_hash = planner.surface.registry_hash
         self.clock = clock
+        self.observer = observer  # sees every record, e.g. the CLI console trace (dispatcher/docs/run-log.md)
         self.posture: Posture = initial_posture
         self.previous: TaskSummary | None = None
 
@@ -122,7 +124,7 @@ class Dispatcher:
         self._state_lock = threading.Lock()
         self._phase: Phase = "idle"
         self._stop_event = threading.Event()
-        self._log: RunLog | None = None
+        self._log: TaskLog | None = None  # the plain log, without the observer (dispatcher/docs/run-log.md)
 
     # --- public interface (dispatcher/docs/loop-and-context.md) ------------------------------------------------------
 
@@ -134,9 +136,13 @@ class Dispatcher:
             if self._phase in ("idle", "ending"):
                 return "idle"
             self._stop_event.set()
+            during = self._phase
+            logged = self._log is not None
             if self._log is not None:
-                self._log.stop_requested(source, self._phase)
+                self._log.stop_requested(source, during)
         self.executor.kill_current(StopCause.OPERATOR)
+        if logged:  # the observer runs after the kill and outside the lock (dispatcher/docs/run-log.md)
+            notify(self.observer, lambda o: o.stop_requested(source, during))
         return "stopping"
 
     def shutdown(self, wait_s: float) -> None:
@@ -150,8 +156,11 @@ class Dispatcher:
         self.executor.kill_current(StopCause.SHUTDOWN)
         smr = self.executor.stop_move(StopCause.SHUTDOWN)
         with self._state_lock:
+            logged = self._log is not None
             if self._log is not None:
                 self._log.stop_move(smr)
+        if logged:
+            notify(self.observer, lambda o: o.stop_move(smr))
 
     def run_task(self, task: str, *, source: str, sender_id: str | None = None) -> TaskOutcome:
         if not task.strip():
@@ -199,13 +208,18 @@ class Dispatcher:
             ts_start=datetime.now().astimezone().isoformat(),
             deadline=now + self.cfg.loop.task_time_limit_s,
             budget=MotionBudget(mb.max_distance_m, mb.max_rotation_deg),
+            log=self._observed(NullLog()),
         )
 
+    def _observed(self, log: TaskLog) -> TaskLog:
+        return log if self.observer is None else TeeLog(log, self.observer)
+
     def _open_log(self, t: _Task) -> None:
-        log = self.runlog_factory.open(t.run_id, t.t_start, clock=self.clock)
+        plain = self.runlog_factory.open(t.run_id, t.t_start, clock=self.clock)
+        log = self._observed(plain)
         with self._state_lock:
             t.log = log
-            self._log = log
+            self._log = plain
             self._phase = "between"
         log.task_start(t.task, t.source, t.sender_id, self.previous, self.posture)
 
