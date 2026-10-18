@@ -236,6 +236,9 @@ dispatcher shutting down
 === NOT_DISPATCHED_PREFIX (repr) ===
 '- rejected before running: '
 
+=== DONE_DEFAULT_MESSAGE ===
+Task completed, LLM didn't provide more details.
+
 === STEPS_LINE ===
 Steps: 3 run, 1 failed
 

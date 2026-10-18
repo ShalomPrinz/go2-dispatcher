@@ -42,9 +42,10 @@ def test_done_with_steps():
     assert errors == ["status DONE must have no steps"]
 
 
-def test_done_without_message():
-    _, errors, kind = v({"status": "DONE", "steps": []})
-    assert errors == ["status DONE needs a message"] and kind == "semantic"
+def test_done_without_message_is_accepted():
+    for raw in ({"status": "DONE", "steps": []}, {"status": "DONE", "steps": [], "message": "  "}):
+        plan, errors, _ = v(raw)
+        assert plan is not None and errors == []
 
 
 def test_abort_with_blank_message():

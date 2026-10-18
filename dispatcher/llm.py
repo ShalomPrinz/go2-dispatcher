@@ -128,7 +128,7 @@ def _semantic_errors(plan: Plan) -> list[str]:
     if s in ("DONE", "ABORT"):
         if n > 0:
             errors.append(prompts.STATUS_NO_STEPS.format(status=s))
-        if plan.message is None or not plan.message.strip():
+        if s == "ABORT" and (plan.message is None or not plan.message.strip()):
             errors.append(prompts.STATUS_NEEDS_MESSAGE.format(status=s))
     if plan.replan_after is not None:
         if s != "PLAN":

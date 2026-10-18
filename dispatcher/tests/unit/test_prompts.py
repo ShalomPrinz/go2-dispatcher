@@ -122,6 +122,12 @@ def test_every_outcome_has_operator_message():
         assert text and "{" not in text
 
 
+def test_done_without_message_gets_default_text():
+    for message in (None, "  "):
+        text = prompts.operator_message("DONE", replace(FACTS, message=message))
+        assert text == prompts.DONE_DEFAULT_MESSAGE
+
+
 def test_notice_missing_arguments_raises():
     with pytest.raises(KeyError):
         prompts.notice("checkpoint")

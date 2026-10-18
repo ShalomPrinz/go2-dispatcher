@@ -67,6 +67,7 @@ __all__ = [
     "KILL_SHUTDOWN",
     "NOT_DISPATCHED_PREFIX",
     "OPERATOR_MESSAGES",
+    "DONE_DEFAULT_MESSAGE",
     "STOP_MOVE_WARNING",
     "OutcomeFacts",
     "operator_message",
@@ -229,6 +230,7 @@ OPERATOR_MESSAGES: dict[str, str] = {
     "LLM_ERROR": "Stopped: the model could not be reached ({detail}).",
     "INTERNAL_ERROR": "Stopped: internal error ({exception_type}). See run log {run_id}.",
 }
+DONE_DEFAULT_MESSAGE = "Task completed, LLM didn't provide more details."  # DONE without a message
 STOP_MOVE_WARNING = " WARNING: the stop command to the robot failed. Stop the robot manually."
 
 
@@ -247,7 +249,9 @@ class OutcomeFacts:
 
 
 def _operator_args(outcome: TaskOutcomeCode, facts: OutcomeFacts) -> dict[str, Any]:
-    if outcome in ("DONE", "ABORTED"):
+    if outcome == "DONE":
+        return {"message": facts.message if facts.message and facts.message.strip() else DONE_DEFAULT_MESSAGE}
+    if outcome == "ABORTED":
         return {"message": facts.message or ""}
     if outcome == "TIME_LIMIT_EXCEEDED":
         return {"limit": facts.time_limit_s}
