@@ -65,7 +65,7 @@ The loop checks every reply with `llm.check_reply`: the two reply checks below, 
    - `replan_after is only allowed with status PLAN`
    - `replan_after must be between 1 and {len(steps)}`
 
-A plan is accepted only with no errors at all. Two more invalid replies are detected before validation ([llm.md](llm.md#response-handling)): a reply cut off at `max_tokens` (`reply was cut off; keep the plan shorter`) and a reply without a `submit_plan` call (`no submit_plan call in reply`).
+A plan is accepted only with no errors at all. Two more invalid replies are detected before validation ([llm.md](llm.md#response-handling)): a reply cut off at `max_tokens` (`reply hit the output token limit before submit_plan was complete; reason more briefly and submit the plan sooner`) and a reply without a `submit_plan` call (`no submit_plan call in reply`).
 
 ## Step bounds
 

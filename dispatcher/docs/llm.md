@@ -72,7 +72,7 @@ Sonnet 5.5 returns HTTP 400 for three things an earlier design relied on. A 400 
 
 `AnthropicPlanner` returns the reply unvalidated: the input of the first `tool_use` block named `submit_plan` (`thinking` and `text` blocks before it are skipped, further calls are ignored), or none. The loop then checks it with `llm.check_reply`, in this order ([loop-and-context.md](loop-and-context.md#design-decisions)):
 
-1. `stop_reason == "max_tokens"` → invalid, `rejection_kind = "max_tokens"`, error `reply was cut off; keep the plan shorter`. The tool input, if any, is logged but not validated.
+1. `stop_reason == "max_tokens"` → invalid, `rejection_kind = "max_tokens"`, error `reply hit the output token limit before submit_plan was complete; reason more briefly and submit the plan sooner`. The tool input, if any, is logged but not validated.
 2. No `submit_plan` block (for example a text-only reply) → invalid, `rejection_kind = "no_tool_call"`, error `no submit_plan call in reply`.
 3. The block's input is validated ([loop-and-context.md](loop-and-context.md#plan-validation)); `rejection_kind` is `horizon`, `schema`, `semantic` or `none`.
 
@@ -119,6 +119,7 @@ The SDK's own retries are disabled (`max_retries=0`); `AnthropicPlanner` retries
 - **No `temperature`.** Not possible on Sonnet 5.5. The cost is non-deterministic planning; the study must account for run-to-run variation.
 - **Non-strict tool mode.** Strict mode cannot enforce `maxItems` or numeric ranges, and it injects an extra system prompt that distorts token counts. The dispatcher's own validation is the enforcer.
 - **`max_tokens` 2048** as headroom against cut-off replies; it does not affect cost or measurements unless a reply would be cut off.
+- **The cut-off error advises briefer reasoning, not only a shorter plan.** A reasoning model can spend the whole output cap on reasoning before it writes the `submit_plan` call, so the retry message names the output limit and asks the model to reason more briefly and submit the plan sooner. Rejected: "keep the plan shorter", which blamed the plan when no plan had been written.
 - **Reject, never truncate, over-long plans**, with the rate logged and a rule for revisiting the choice (above). Truncation would run a plan the model never made and corrupt the data.
 - **Exactly one schema retry**, then `LLM_INVALID`: bounded cost, and a second invalid reply is itself a measurable outcome. Invalid replies are LLM calls but never failures.
 - **The schema retry's user message is rebuilt, not copied.** It goes through the same context builder as every request, so the Budget's model-call count includes the rejected call and stays true to the count the call budget checks. Rejected: resending the original message byte for byte, which showed the model one call fewer than it had used.

@@ -162,7 +162,7 @@ Failures: 1 of 3
 Model calls: 2 of 20
 
 === ERR_MAX_TOKENS ===
-reply was cut off; keep the plan shorter
+reply hit the output token limit before submit_plan was complete; reason more briefly and submit the plan sooner
 
 === ERR_NO_TOOL_CALL ===
 no submit_plan call in reply

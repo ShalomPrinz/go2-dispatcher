@@ -181,7 +181,9 @@ def rejection_section(errors: list[str]) -> str:
 
 # --- Plan validation errors (dispatcher/docs/llm.md) -------------------------------------------
 
-ERR_MAX_TOKENS = "reply was cut off; keep the plan shorter"
+ERR_MAX_TOKENS = (
+    "reply hit the output token limit before submit_plan was complete; reason more briefly and submit the plan sooner"
+)
 ERR_NO_TOOL_CALL = "no submit_plan call in reply"
 HORIZON_EXCEEDED = "plan has {n} steps; the maximum is {horizon}"
 PLAN_NEEDS_STEPS = "status PLAN needs at least one step"
