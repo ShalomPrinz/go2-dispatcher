@@ -99,6 +99,7 @@ Rules:
 - status PLAN: one or more steps to run. message is optional.
 - status DONE: the task is complete. No steps. message is required: tell the operator what was done and anything they asked to find out.
 - status ABORT: the task cannot or should not be done with these skills, or it is ambiguous. No steps. message is required: explain why, or ask the operator a clarifying question.
+- A message that is not a robot task (a greeting, small talk, a general question): status DONE. No steps. message: one sentence that replies and says what the robot can do.
 - replan_after N: stop after step N and call you again before running the rest. Use it when later steps depend on what earlier steps find. Omit it to run the whole plan.
 - If a step fails, the rest of that plan is abandoned and you are called again with the failure.
 - The motion budget limits total travel and total rotation for this task. A plan that would exceed it is rejected before any step runs."""
