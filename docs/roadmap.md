@@ -123,5 +123,5 @@ The gate for experiments with participants, collected from the sections above. E
 | Calibrate the detector closeness thresholds (`NEAR_MIN_H`, `MEDIUM_MIN_H` in `skills/vision.py`) on the robot. With the current values a 0.25 m bottle reads `near` only within about 0.2 m of the camera ([robot.md](../skills/docs/robot.md#object-detection)). | Supervised human check: bottle, chair and person at measured distances; record box height fractions in [robot.md](../skills/docs/robot.md) |
 | Supervised robot checklist: posture thresholds (`body_height` or `mode`), settle waits, what `Move` does while sitting, kill-to-stop latency. | Supervised run on the robot; record results in [robot.md](../skills/docs/robot.md) |
 | First run of the real backend; `uv sync --extra robot` on the lab machine; pin the Python patch version once it works (currently `>=3.10,<3.11`). | Lab machine setup ([setup.md](setup.md)) |
-| Manual Telegram test on a phone: busy reply, stop. | Operator |
+| Manual Telegram test on a phone: busy reply and stop. Basic task and reply flow confirmed working. | Operator |
 | Analyse the old OpenClaw session logs: count compactions, retries and context size per call, to turn the measurement-validity argument ([architecture.md](architecture.md#why-a-purpose-built-dispatcher)) into data. | Obtain the logs from the predecessor's lab machine |
