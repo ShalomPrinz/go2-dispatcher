@@ -316,20 +316,25 @@ class StubSportClient:
 
 
 class StubDetector:
+    """The vision service's stub camera; faults are applied in the skill process (inject_detect_fault)."""
+
+    def warm_up(self) -> None:
+        pass
+
     def detect(self, target: str) -> DetectResult:
-        if _faults.apply_fault() == "error":
-            raise CameraUnavailable("injected camera fault")
         sleep(DETECT_S)
         obj = objects().get(target)
         return DetectResult(found=False) if obj is None else project(read_state().pose, obj)
 
 
+def inject_detect_fault() -> None:
+    """detect_object's action call for fault injection, in the skill process before it asks the vision service."""
+    if _faults.apply_fault() == "error":
+        raise CameraUnavailable("injected camera fault")
+
+
 def get_sport_client() -> StubSportClient:
     return StubSportClient()
-
-
-def get_detector() -> StubDetector:
-    return StubDetector()
 
 
 def sample_state() -> RobotState:

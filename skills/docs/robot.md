@@ -15,17 +15,17 @@ The Go2 EDU side of the system: what the code assumes about the robot, how it ta
 
 ## SDK and DDS usage
 
-All SDK use is in `skills/real.py`, selected in the skill process by `GO2_BACKEND=real` (`backend.py`). The dispatcher itself never imports the SDK ([architecture.md](../../docs/architecture.md#process-model)); every SDK import is inside a function, so importing any `skills` module needs only the standard library ([skills.md](skills.md#no-side-effects-on-import)).
+All SDK use is in `skills/real.py` and, for the camera, `skills/real_detector.py` (run only by the [vision service](skills.md#vision-service)), selected in the skill process by `GO2_BACKEND=real` (`backend.py`). The dispatcher itself never imports the SDK ([architecture.md](../../docs/architecture.md#process-model)); every SDK import is inside a function, so importing any `skills` module needs only the standard library ([skills.md](skills.md#no-side-effects-on-import)).
 
 | What | How |
 |---|---|
 | DDS init | `ChannelFactoryInitialize(0, $GO2_IFACE)`, once per process, before anything touches DDS. An empty `GO2_IFACE` gives `backend_not_configured`. |
 | Sport client | `SportClient()`, `SetTimeout(SPORT_CLIENT_TIMEOUT_S)` (5.0 s, tunable), `Init()`. One per skill process. A call that waits for a reply (`StopMove`, `StandDown`, `Stretch`) returns a non-zero code after this long without one; it must fit inside the skill's timeout ([skills.md](skills.md#policies)). |
 | Calls used | `Move(vx, vy, vyaw)`, `StopMove()`, `StandDown()`, `Stretch()`. Each returns an int; 0 is success, anything else is an `sdk_error` with the code in `observations.sdk_ret`. |
-| Camera | `VideoClient`, `SetTimeout(CAMERA_TIMEOUT_S)`, `Init()`, `GetImageSample()` → JPEG bytes, decoded with OpenCV. |
+| Camera | `VideoClient`, `SetTimeout(CAMERA_TIMEOUT_S)`, `Init()` once in the vision service, then `GetImageSample()` → JPEG bytes per request, decoded with OpenCV. Error 3104 and any other non-zero code is `camera_unavailable`, never retried. |
 | State | `ChannelSubscriber("rt/sportmodestate", SportModeState_)`, queue length `SUBSCRIBER_QUEUE_LEN` ([state sampling](#state-sampling)). |
 
-Constants are module-level in `skills/real.py`, except the detector ones ([object detection](#object-detection)). Each skill call and utility is a fresh process, so DDS is initialised once per call ([skills.md](skills.md#design-decisions)).
+Constants are module-level in `skills/real.py`, except the detector ones ([object detection](#object-detection)). Each skill call and utility is a fresh process, so DDS is initialised once per call ([skills.md](skills.md#design-decisions)); the vision service initialises it once per dispatcher run.
 
 ### Motion
 
@@ -35,9 +35,10 @@ Constants are module-level in `skills/real.py`, except the detector ones ([objec
 
 ### Object detection
 
-`detect_object` on the real backend takes one frame from the front camera and runs YOLO on it (`ultralytics`, weights from `robot.yolo_weights`):
+`detect_object` on the real backend asks the [vision service](skills.md#vision-service), which takes one frame from the front camera per request and runs YOLO on it (`ultralytics`, weights from `robot.yolo_weights`):
 
-- The weights file is checked before the camera is touched and is **never downloaded automatically**; a missing file is `weights_missing`. YOLO is loaded on the first detection in the process.
+- At start the service loads YOLO, runs one predict on a blank `IMGSZ` × `IMGSZ` image (the first predict is slow) and creates the `VideoClient`; it keeps both for its lifetime. A part that failed at start is retried on the next request. Expected warm detection time is one frame RPC plus about 0.04 s of inference (*unverified* on the robot).
+- The weights file is checked before the camera is touched and is **never downloaded automatically**; a missing file is `weights_missing`.
 - Inference at `IMGSZ` with confidence threshold `CONF`. Of the boxes whose class equals the target, the one with the highest confidence is used.
 - **Position** from the box centre's horizontal fraction of the image (`LEFT_MAX_X`, `RIGHT_MIN_X`); **closeness** from the box height's fraction (`NEAR_MIN_H`, `MEDIUM_MIN_H`).
 - Confidence is rounded to `CONFIDENCE_DECIMALS` decimals.

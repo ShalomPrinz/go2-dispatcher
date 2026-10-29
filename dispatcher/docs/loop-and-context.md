@@ -26,7 +26,7 @@ task text
 3. An invalid reply gets exactly one schema retry ([llm.md](llm.md#schema-retry)).
 4. `DONE` and `ABORT` end the task with the model's `message` (`DONE` without one gets `prompts.DONE_DEFAULT_MESSAGE`).
 5. `PLAN`: `stop_at = replan_after or len(steps)`. The whole plan is pre-checked ([below](#whole-plan-pre-check)). A rejected plan runs nothing: one failure is counted and the model is called again with reason `failure`.
-6. Steps `1..stop_at` run in order. Before each step, stop and deadline are checked; the step's motion cost is charged; the skill subprocess starts ([skills.md](../../skills/docs/skills.md)).
+6. Steps `1..stop_at` run in order. Before each step, stop and deadline are checked; the step's motion cost is charged; the skill subprocess starts ([skills.md](../../skills/docs/skills.md)). Before a `detect_object` step the executor first makes sure the vision service runs and waits for it to be ready; that wait counts against the task time limit, not the step timeout ([running.md](../../docs/running.md#vision-service)).
 7. After the plan:
    - a step failed → reason `failure`; the steps after it are listed as `[abandoned]`;
    - `stop_at < len(steps)` → reason `checkpoint`; the steps after `stop_at` are listed as `[pending]`;

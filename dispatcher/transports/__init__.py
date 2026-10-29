@@ -13,7 +13,7 @@ from .. import process_lock, prompts
 from ..config import API_KEY_ENV, Config, load_config_and_env
 from ..context import PromptSurface, render_step
 from ..dispatcher import Dispatcher
-from ..executor import Executor, SkillExecutor
+from ..executor import Executor, SkillExecutor, needs_vision
 from ..llm import AnthropicPlanner, OpenRouterPlanner, PlannerClient
 from ..models import ConfigError, Posture, RegistryError, StartupError, TaskOutcome
 from ..registry import Registry
@@ -76,8 +76,9 @@ def initial_posture(executor: SkillExecutor) -> Posture:
 def build_dispatcher(
     cfg: Config, *, reset_stub: bool, observer: Callable[[Registry], TaskObserver] | None = None
 ) -> Dispatcher:
-    """Lock, registry, stub reset, planner, executor, dispatcher (docs/running.md). ``observer`` builds the
-    dispatcher's task observer from the registry. Raises ``StartupError``; process-lifetime hooks are the caller's."""
+    """Lock, registry, stub reset, planner, executor, dispatcher, vision service start (docs/running.md).
+    ``observer`` builds the dispatcher's task observer from the registry. Raises ``StartupError``;
+    process-lifetime hooks are the caller's, and ``Dispatcher.shutdown`` stops the vision service."""
     process_lock.acquire(cfg.log.dir)  # the root, so all provider/backend folders share one lock
     registry = Registry.load(cfg.skills.dir)
     if reset_stub and cfg.robot.backend == "stub":
@@ -86,7 +87,7 @@ def build_dispatcher(
     planner = make_planner(cfg, surface)
     executor = Executor(cfg, cfg.base_dir)
     posture = initial_posture(executor)
-    return Dispatcher(
+    dispatcher = Dispatcher(
         cfg,
         registry,
         planner,
@@ -94,6 +95,9 @@ def build_dispatcher(
         initial_posture=posture,
         observer=observer(registry) if observer is not None else None,
     )
+    if any(needs_vision(registry[name]) for name in registry.names()):
+        executor.vision.start()  # no wait: the first vision step waits for ready (docs/running.md)
+    return dispatcher
 
 
 def format_outcome(outcome: TaskOutcome, registry: Registry) -> str:

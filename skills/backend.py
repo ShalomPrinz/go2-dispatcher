@@ -43,6 +43,12 @@ class WeightsMissing(DetectorError):
     code = ErrorCode.WEIGHTS_MISSING
 
 
+class VisionUnavailable(DetectorError):
+    """The vision service could not be reached or did not answer (skills/docs/skills.md)."""
+
+    code = ErrorCode.VISION_UNAVAILABLE
+
+
 @dataclass
 class DetectResult:
     found: bool
@@ -82,6 +88,5 @@ def _forward(name: str):
 
 
 get_sport_client = _forward("get_sport_client")  # object with Move, StopMove, StandDown, Stretch -> int
-get_detector = _forward("get_detector")  # object with detect(target) -> DetectResult
 sample_state = _forward("sample_state")  # -> skills.schema.RobotState
 sleep = _forward("sleep")  # real: time.sleep(seconds); stub: scaled by time_scale

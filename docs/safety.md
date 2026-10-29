@@ -33,6 +33,7 @@ Details:
 - If a stop, the time limit or shutdown kills a running step, the executor sends `StopMove` right after the kill, and that is the only one: the task then ends without a second, end-of-task `StopMove`. How the posture is updated: [loop-and-context.md](../dispatcher/docs/loop-and-context.md#user-message).
 - If a stop or the time limit arrives while **no** step runs (during an LLM call or between steps), the dispatcher still sends `StopMove` when the task ends. This is idempotent.
 - `StopMove` is not sent after a step that ends normally: walk and turn already end with `StopMove()`.
+- The [vision service](running.md#vision-service) is not part of the stop path: it only reads the camera and never commands motion, so a stop, a step timeout or the time limit kills only the `detect_object` skill process group, as for any skill. A stop that arrives while the executor waits for the service to become ready ends the wait at once; the step is then killed and `StopMove` sent as usual. The service is stopped only when the dispatcher shuts down.
 - An LLM request already in flight is not cancelled; the stop takes effect when it returns ([llm.md](../dispatcher/docs/llm.md#infrastructure-retries)).
 
 ### StopMove failure
@@ -70,7 +71,7 @@ Every step of a plan is checked against its `SKILL.md` declaration before anythi
 
 ## If the dispatcher dies
 
-Each skill process watches its parent (`GO2_PARENT_PID`) every 0.2 s. If the dispatcher disappears, the `ORPHANED` flag is set; motion loops check it on every iteration, break, and send `StopMove()` themselves (the step reports `orphaned: true`). Any skill still alive 2 s later exits with code 137. The watchdog does nothing when `GO2_PARENT_PID` is unset (manual runs). `stop_move` and `read_state` do not watch their parent, so a `StopMove` always finishes. Every normal exit of the transports calls `Dispatcher.shutdown()`.
+Each skill process watches its parent (`GO2_PARENT_PID`) every 0.2 s. If the dispatcher disappears, the `ORPHANED` flag is set; motion loops check it on every iteration, break, and send `StopMove()` themselves (the step reports `orphaned: true`). Any skill still alive 2 s later exits with code 137. The watchdog does nothing when `GO2_PARENT_PID` is unset (manual runs). `stop_move` and `read_state` do not watch their parent, so a `StopMove` always finishes. The [vision service](../skills/docs/skills.md#vision-service) runs the same watchdog and exits with code 137 too; it never commands motion. Every normal exit of the transports calls `Dispatcher.shutdown()`.
 
 If the dispatcher host loses power or the network drops, none of this helps. Use the e-stop.
 

@@ -25,6 +25,7 @@ class ErrorCode(str, Enum):
     CAMERA_UNAVAILABLE = "camera_unavailable"
     BAD_FRAME = "bad_frame"
     WEIGHTS_MISSING = "weights_missing"
+    VISION_UNAVAILABLE = "vision_unavailable"
     STATE_UNAVAILABLE = "state_unavailable"
 
     def __str__(self) -> str:  # Python 3.10 has no StrEnum; str() and f-strings give the value

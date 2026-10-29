@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import os
+import signal
 import threading
 import time
 
@@ -14,11 +15,13 @@ from dispatcher.registry import Registry, SkillDescriptor
 from dispatcher.tests.helpers import make_config
 from dispatcher.tests.helpers.skill_modules.env_dump import POLICY as ENV_DUMP_POLICY
 from skills import stub
+from skills.env import vision_socket_path
 from tests.helpers import REPO_ROOT
 
 pytestmark = pytest.mark.integration
 
 TURN = {"direction": "left", "angle_deg": 30}
+DETECT = {"target": "chair"}
 LONG_TIMEOUT_S = 20.0
 LONG_REMAINING_S = 60.0
 
@@ -30,7 +33,9 @@ def cfg(tmp_path):
 
 @pytest.fixture
 def executor(cfg):
-    return Executor(cfg, REPO_ROOT)
+    ex = Executor(cfg, REPO_ROOT)
+    yield ex
+    ex.close()  # stops a vision service a test started
 
 
 @pytest.fixture(scope="module")
@@ -207,3 +212,24 @@ def test_stop_move_never_raises(executor, monkeypatch):
     smr = executor.stop_move("internal_error")
     assert smr.ok is False and smr.reason == "internal_error"
     assert "OSError: cannot spawn" in smr.stderr_tail
+
+
+def test_vision_service_started_restarted_and_stopped(executor, registry):
+    """The executor waits for the service before detect_object, restarts it once it died, and stops it on close."""
+    executor.vision.start()
+    assert run(executor, registry, "detect_object", DETECT).outcome == "ok"
+    first = executor.vision.pid
+    assert first is not None
+    os.kill(first, signal.SIGKILL)  # dies between steps
+    deadline = time.monotonic() + LONG_TIMEOUT_S
+    while executor.vision.pid is not None and time.monotonic() < deadline:
+        time.sleep(0.01)
+    res = run(executor, registry, "detect_object", DETECT)
+    assert res.outcome == "ok", res
+    second = executor.vision.pid
+    assert second is not None and second != first
+    executor.close()
+    assert executor.vision.pid is None
+    with pytest.raises(ProcessLookupError):
+        os.kill(second, 0)
+    assert not os.path.exists(vision_socket_path(os.getpid()))

@@ -15,6 +15,7 @@ from pydantic import TypeAdapter
 from skills import stub
 from skills.schema import SkillResponse
 from tests.helpers import REPO_ROOT, run_module, single_response, stub_env
+from tests.integration import vision
 
 pytestmark = pytest.mark.integration
 
@@ -47,7 +48,8 @@ def run_ok(name, params, env):
 
 @pytest.mark.parametrize("name", SKILLS)
 def test_contract_valid(tmp_path, name):
-    resp = run_ok(name, VALID[name], stub_env(tmp_path))
+    with vision.running(stub_env(tmp_path)) as env:
+        resp = run_ok(name, VALID[name], env)
     assert resp.skill == name and resp.error is None
     assert resp.state_before is not None and resp.state_before.backend == "stub"
     assert resp.state_after is not None and resp.state_after.backend == "stub"
@@ -110,6 +112,9 @@ print(json.dumps({"modules": names, "heavy": heavy, "out": buf.getvalue(),
         "motion",
         "stop_move",
         "read_state",
+        "vision_ipc",
+        "vision_service",
+        "real_detector",
         *SKILLS,
     } <= set(out["modules"])
     assert out["heavy"] == [] and out["out"] == "" and proc.stderr == ""
@@ -169,18 +174,21 @@ def test_stretch_while_sitting_fails(tmp_path):
 
 def test_detect_follows_the_pose(tmp_path):
     """A chair behind the camera at the start is ahead after a left turn (pose kept in the state file)."""
-    env = stub_env(tmp_path, objects={"chair": {"x": 0.0, "y": 1.2}})
-    assert run_ok("detect_object", {"target": "chair"}, env).observations["object_found"] is False
-    turned = run_ok("turn", {"direction": "left", "angle_deg": 90}, env).state_after
-    assert turned is not None and turned.imu_rpy == pytest.approx([0.0, 0.0, 1.8])  # 18 commands of 0.1 rad
-    resp = run_ok("detect_object", {"target": "  Chair "}, env)
+    with vision.running(stub_env(tmp_path, objects={"chair": {"x": 0.0, "y": 1.2}})) as env:
+        assert run_ok("detect_object", {"target": "chair"}, env).observations["object_found"] is False
+        turned = run_ok("turn", {"direction": "left", "angle_deg": 90}, env).state_after
+        assert turned is not None and turned.imu_rpy == pytest.approx(
+            [0.0, 0.0, 1.8]
+        )  # 18 commands of 0.1 rad, lead included
+        resp = run_ok("detect_object", {"target": "  Chair "}, env)
     obs = resp.observations
     assert set(obs) == {"target", "object_found", "position", "closeness", "confidence"}
     assert (obs["target"], obs["object_found"], obs["position"]) == ("chair", True, "center")
 
 
 def test_detect_not_found_is_ok(tmp_path):
-    resp = run_ok("detect_object", {"target": "bottle"}, stub_env(tmp_path))
+    with vision.running(stub_env(tmp_path)) as env:
+        resp = run_ok("detect_object", {"target": "bottle"}, env)
     assert resp.observations == {"target": "bottle", "object_found": False}
 
 
@@ -202,13 +210,33 @@ def test_detect_unsupported_without_matches(tmp_path):
     assert resp.error.message == "'xqzv' is not a detectable object."
 
 
+def test_detect_without_vision_service(tmp_path):
+    env = stub_env(tmp_path, GO2_VISION_SOCKET=str(tmp_path / "none.sock"))
+    proc = run_module("detect_object", VALID["detect_object"], env)
+    resp = RESPONSE.validate_python(single_response(proc))
+    assert proc.returncode == 1
+    assert resp.error is not None and resp.error.code == "vision_unavailable"
+    assert resp.error.message.startswith("VisionUnavailable: no vision service at ")
+
+
+def test_vision_service_exits_when_parent_dies(tmp_path):
+    """The service shares the skills' orphan watchdog (skills/process.py)."""
+    env = stub_env(tmp_path, GO2_PARENT_PID=str(os.getppid() or 1), GO2_VISION_SOCKET=str(tmp_path / "v.sock"))
+    proc = vision.start(env)
+    try:
+        assert proc.wait(timeout=5) == 137
+    finally:
+        vision.stop(proc)
+
+
 # --- faults --------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("name", ["walk", "sit", "detect_object"])
 def test_fault_error(tmp_path, name):
     """walk: move loop; sit: single action; detect_object: camera_unavailable."""
-    proc = run_module(name, VALID[name], stub_env(tmp_path, fault="error"))
+    with vision.running(stub_env(tmp_path, fault="error")) as env:
+        proc = run_module(name, VALID[name], env)
     resp = RESPONSE.validate_python(single_response(proc))
     assert proc.returncode == 1 and resp.status == "error"
     assert resp.error is not None

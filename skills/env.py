@@ -4,7 +4,9 @@ executor sets, and the builder that sets them. Standard library only."""
 from __future__ import annotations
 
 import json
+import tempfile
 from collections.abc import Mapping
+from pathlib import Path
 
 BACKEND = "GO2_BACKEND"
 IFACE = "GO2_IFACE"
@@ -14,6 +16,12 @@ STUB_TIME_SCALE = "GO2_STUB_TIME_SCALE"
 STUB_OBJECTS = "GO2_STUB_OBJECTS"
 STUB_FAULT = "GO2_STUB_FAULT"
 PARENT_PID = "GO2_PARENT_PID"
+VISION_SOCKET = "GO2_VISION_SOCKET"
+
+
+def vision_socket_path(parent_pid: int) -> str:
+    """The vision service's Unix socket for one dispatcher: ``<tempdir>/go2-vision-<parent_pid>.sock``."""
+    return str(Path(tempfile.gettempdir()) / f"go2-vision-{parent_pid}.sock")
 
 
 def child_env(
@@ -40,6 +48,7 @@ def child_env(
             STUB_TIME_SCALE: repr(stub_time_scale),
             STUB_OBJECTS: json.dumps({k: dict(v) for k, v in stub_objects.items()}),
             PARENT_PID: str(parent_pid),
+            VISION_SOCKET: vision_socket_path(parent_pid),
         }
     )
     if fault:

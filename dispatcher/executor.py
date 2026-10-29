@@ -15,6 +15,7 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
+from skills import detect_object as vision_client
 from skills import read_state as read_state_utility
 from skills import stop_move as stop_move_utility
 from skills.env import child_env
@@ -24,6 +25,7 @@ from . import prompts
 from .config import SECRET_ENV, Config
 from .models import RobotState, SkillResponse, StopCause, StopMoveResult
 from .registry import SkillDescriptor
+from .vision import VisionService, log_path
 
 POLL_INTERVAL_S = 0.05  # wait-loop poll period (docs/safety.md)
 READER_JOIN_TIMEOUT_S = 2.0  # join timeout per reader thread (docs/safety.md)
@@ -67,6 +69,13 @@ class SkillExecutor(Protocol):
     def stop_move(self, reason: StopCause) -> StopMoveResult: ...
 
     def read_state(self) -> RobotState | None: ...
+
+    def close(self) -> None: ...
+
+
+def needs_vision(skill: SkillDescriptor) -> bool:
+    """Whether ``skill`` is a client of the vision service (skills/docs/skills.md)."""
+    return skill.entrypoint == vision_client.__name__
 
 
 def _stderr_tail(text: str | None) -> str | None:
@@ -144,6 +153,7 @@ class Executor:
         self._lock = threading.Lock()
         self._current: subprocess.Popen | None = None
         self._kill_cause: StopCause | None = None
+        self.vision = VisionService(self.base_dir, log_path(cfg.log.dir), lambda: self._env(None))
 
     # --- environment and process start (skills/docs/skills.md) ----------------------------------
 
@@ -212,6 +222,8 @@ class Executor:
         remaining_task_s: float,
         stop_event: threading.Event,
     ) -> ExecResult:
+        if needs_vision(skill):  # the wait counts against the task, not the step
+            remaining_task_s -= self.vision.ensure_ready(stop_event, remaining_task_s)
         t0 = time.monotonic()
         proc = self._popen(skill.entrypoint, params, self._env(fault))
         readers = _Readers(proc)
@@ -304,3 +316,7 @@ class Executor:
     def read_state(self) -> RobotState | None:
         _, response, _, _ = self._run_utility(read_state_utility)
         return response.state_after if response is not None else None
+
+    def close(self) -> None:
+        """Stop the vision service (docs/running.md); idempotent."""
+        self.vision.stop()

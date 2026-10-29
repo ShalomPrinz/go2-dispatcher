@@ -89,6 +89,7 @@ python -m skills.<name> '<params-json>'
 | `GO2_STUB_OBJECTS` | JSON `{class: {"x": m, "y": m, "height_m": m}}`, the objects in the stub world ([stub backend](#stub-backend)). |
 | `GO2_STUB_FAULT` | Fault kind; set only for the faulted step, never inherited from the dispatcher's environment. |
 | `GO2_PARENT_PID` | Dispatcher PID, for the orphan watchdog. |
+| `GO2_VISION_SOCKET` | Unix socket of the [vision service](#vision-service); `child_env` sets it to `env.vision_socket_path(parent_pid)`. Read by `detect_object` and the service. |
 | `PYTHONUNBUFFERED` | `1`. |
 
 - The process runs with the base dir as working directory, in its own session (`start_new_session=True`), so a kill reaches the whole process group ([safety.md](../../docs/safety.md#the-stop-path)).
@@ -131,7 +132,7 @@ Run a skill by hand ([below](#running-a-skill-by-hand)) to see a full response.
 | `turn` | `Move(0, 0, ±YAW_RATE_RPS)` for `radians(angle_deg) / YAW_RATE_RPS + LEAD_S` s, then `StopMove` | `direction`, `angle_deg`, `duration_s`, `sdk_ret`, `orphaned` | nothing |
 | `sit` | `StandDown()`, then a settle wait | `sdk_ret` | nothing |
 | `stretch` | `Stretch()`, then a settle wait | `sdk_ret` | nothing |
-| `detect_object` | one camera frame + YOLO; never moves | `target`, `object_found`, `position` (left/center/right), `closeness` (near/medium/far), `confidence` | `object_found`, `position`, `closeness`, `confidence` |
+| `detect_object` | asks the [vision service](#vision-service) for one camera frame + YOLO; never moves | `target`, `object_found`, `position` (left/center/right), `closeness` (near/medium/far), `confidence` | `object_found`, `position`, `closeness`, `confidence` |
 
 Params and ranges are in each `SKILL.md`. Walk and turn are open-loop ([robot.md](robot.md#motion)); walk's `left` and `right` are sideways steps that keep the heading. `walk`, `turn` and `stretch` need the robot standing: while sitting, `Move` and `Stretch` return non-zero and the skill reports `sdk_error` (stub behaviour, [below](#stub-backend); *unverified* on the robot). `sit` while already sitting is `ok`. `detect_object` reports the most confident box of the target class; the target must be one of the 80 COCO classes in `skills/coco.py`. Not finding an object is `status = ok` with `object_found: false`, not an error.
 
@@ -148,11 +149,12 @@ The codes are the members of `ErrorCode` in `skills/schema.py`, a `str` enum: sk
 | `unsupported_object` | detect_object | Target is not one of the 80 COCO classes, for example `'phone' is not a detectable object. Closest supported: cell phone, spoon, horse.` (up to 3 close matches, if any). |
 | `detector_error` | detect_object | Any other detector failure (`backend.DetectorError`; the specific cases below are its subclasses). |
 | `camera_unavailable` | detect_object | The camera returned an error or no data (also the stub's `error` fault). |
+| `vision_unavailable` | detect_object | The [vision service](#vision-service) could not be used: `GO2_VISION_SOCKET` unset, nothing listening (`no vision service at <path>: <error>`), the connection lost, no reply within `REPLY_WAIT_S` (`no reply within 5s`), or a malformed reply. |
 | `bad_frame` | detect_object | The image could not be decoded. |
 | `weights_missing` | detect_object | The YOLO weights file does not exist. |
 | `state_unavailable` | read_state | No state could be sampled. |
 
-Detector errors have the message `<ExceptionType>: <message>`. Outcomes the dispatcher adds on its own (`timeout`, `malformed`, `rejected`, `motion_budget_exceeded`, `interrupted`) are listed in [loop-and-context.md](../../dispatcher/docs/loop-and-context.md#step-outcomes).
+Detector errors have the message `<ExceptionType>: <message>`; an error the service raised keeps the message the service built, in the same form. Outcomes the dispatcher adds on its own (`timeout`, `malformed`, `rejected`, `motion_budget_exceeded`, `interrupted`) are listed in [loop-and-context.md](../../dispatcher/docs/loop-and-context.md#step-outcomes).
 
 ## Policies
 
@@ -166,13 +168,13 @@ The dispatcher reads only `name`, `context_observations`, `timeout_s(params)` an
 | `turn` | `motion_timeout(radians(angle_deg) / YAW_RATE_RPS + LEAD_S)` | `rotation_deg = angle_deg` |
 | `sit`, `stretch`, `detect_object` | `TIMEOUT_S` | zero |
 
-`motion.motion_timeout(motion_s)` is `MOTION_BASE_S + MOTION_FACTOR × motion_s` (10.0 s and 1.5): `MOTION_BASE_S = PROCESS_OVERHEAD_S + SPORT_CLIENT_TIMEOUT_S`, where `PROCESS_OVERHEAD_S` (5.0 s, tunable) covers process start, SDK init and the two state samples, and `SPORT_CLIENT_TIMEOUT_S` (5.0 s, tunable, `skills/real.py`) is one lost `StopMove` reply; `MOTION_FACTOR` (tunable) is a margin on the commanded motion time `motion_s`. Each of `walk` and `turn` computes `motion_s` in one private `_motion_s(params)`, used by both its timeout and its body, and commands it through `motion.move_loop(Velocity(vx, vy, vyaw), duration_s)` at the shared period `motion.CMD_PERIOD_S` (0.1 s, 10 Hz); `detect_object`'s `TIMEOUT_S` covers loading YOLO on CPU. The timeout covers the whole process from start to exit, including any [settle wait](robot.md#settle-waits). Every process that calls the sport client (`walk`, `turn`, `sit`, `stretch`, `stop_move`) has a timeout of at least `PROCESS_OVERHEAD_S + SPORT_CLIENT_TIMEOUT_S` plus its motion or settle time at max params, so a reply that never arrives ends the call as `sdk_error` before the dispatcher kills it. Each makes at most one reply-waiting call (`StopMove`, `StandDown` or `Stretch`; `Move` sends without a reply). `tests/integration/test_skill_policies.py` enforces this. The motion cost feeds the motion budget ([safety.md](../../docs/safety.md#motion-budget)).
+`motion.motion_timeout(motion_s)` is `MOTION_BASE_S + MOTION_FACTOR × motion_s` (10.0 s and 1.5): `MOTION_BASE_S = PROCESS_OVERHEAD_S + SPORT_CLIENT_TIMEOUT_S`, where `PROCESS_OVERHEAD_S` (5.0 s, tunable) covers process start, SDK init and the two state samples, and `SPORT_CLIENT_TIMEOUT_S` (5.0 s, tunable, `skills/real.py`) is one lost `StopMove` reply; `MOTION_FACTOR` (tunable) is a margin on the commanded motion time `motion_s`. Each of `walk` and `turn` computes `motion_s` in one private `_motion_s(params)`, used by both its timeout and its body, and commands it through `motion.move_loop(Velocity(vx, vy, vyaw), duration_s)` at the shared period `motion.CMD_PERIOD_S` (0.1 s, 10 Hz); `detect_object`'s `TIMEOUT_S` is `PROCESS_OVERHEAD_S + REPLY_WAIT_S` (10.0 s), where `REPLY_WAIT_S` (5.0 s, tunable) is its wait for the vision service's reply: one camera frame (`CAMERA_TIMEOUT_S`, 3.0 s) plus inference on a detector the service has already loaded, so a service that does not answer ends the call as `vision_unavailable` before the dispatcher kills it. The timeout covers the whole process from start to exit, including any [settle wait](robot.md#settle-waits). Every process that calls the sport client (`walk`, `turn`, `sit`, `stretch`, `stop_move`) has a timeout of at least `PROCESS_OVERHEAD_S + SPORT_CLIENT_TIMEOUT_S` plus its motion or settle time at max params, so a reply that never arrives ends the call as `sdk_error` before the dispatcher kills it. Each makes at most one reply-waiting call (`StopMove`, `StandDown` or `Stretch`; `Move` sends without a reply). `tests/integration/test_skill_policies.py` enforces this. The motion cost feeds the motion budget ([safety.md](../../docs/safety.md#motion-budget)).
 
 The utilities `stop_move` and `read_state` export a `POLICY` too, so every module the dispatcher runs carries its name and timeout the same way: `SkillPolicy(name, timeout=TIMEOUT_S)` with `TIMEOUT_S` 12.0 s for `stop_move` (one lost `StopMove` reply plus its settle wait, tunable) and 10.0 s for `read_state`, zero motion cost and no `context_observations` (the defaults). They have no `SKILL.md`, so the registry never loads them; their `POLICY` is never in the catalog or the registry hash.
 
 ## No side effects on import
 
-Importing a skill module must do nothing: no SDK import, no DDS init, no argument parsing, no output. All work happens in `main()`, under `if __name__ == "__main__": main()`. At top level a skill imports only the standard library and `skills`. Third-party imports (`unitree_sdk2py`, `cv2`, `ultralytics`, `numpy`) happen inside functions in `skills/real.py`. A test imports every `skills` module in a fresh interpreter and checks that none of these were loaded. This is what lets the dispatcher read policies without touching the SDK. `skills` never imports `dispatcher`, pydantic or PyYAML, directly or indirectly; the one exception is `skills/manifest.py`, which imports pydantic and PyYAML at top level and is imported only by the dispatcher and the skill tests, never by a skill.
+Importing a skill module must do nothing: no SDK import, no DDS init, no argument parsing, no output. All work happens in `main()`, under `if __name__ == "__main__": main()`. At top level a skill imports only the standard library and `skills`. Third-party imports happen inside functions: `unitree_sdk2py` in `skills/real.py`, and `cv2`, `ultralytics` and `numpy` only in `skills/real_detector.py`, which only the [vision service](#vision-service) imports, so no skill process loads torch. A test imports every `skills` module in a fresh interpreter and checks that none of these were loaded. This is what lets the dispatcher read policies without touching the SDK. `skills` never imports `dispatcher`, pydantic or PyYAML, directly or indirectly; the one exception is `skills/manifest.py`, which imports pydantic and PyYAML at top level and is imported only by the dispatcher and the skill tests, never by a skill.
 
 The import-linter contracts enforce these rules before every commit and in CI for every import chain through the repo's own modules, including imports inside functions ([testing.md](../../tests/docs/testing.md#import-boundaries)). They treat third-party packages as leaves, so a third-party import that pulls in pydantic or PyYAML (`import anthropic`, at top level or inside a function) passes them, and the fresh-interpreter test checks only the modules it lists; code review is what enforces the import rule above for such imports. That gap is accepted because the rule exists to keep skill spawn time low and already forbids the import.
 
@@ -190,7 +192,7 @@ It keeps posture and an odometry pose in one JSON state file, `{"posture": "stan
 | `Stretch` | 0; waits `STRETCH_S` | 1 |
 
 - **Odometry.** An accepted `Move(vx, vy, vyaw)` (return 0) stores the command and `StopMove()` clears it. While a command is stored, every `sleep(seconds)` advances the pose by the **unscaled** seconds, integrating the body-frame velocity exactly along the arc, and writes it to the state file. Body frame as on the Go2: +vx forward, +vy left, +vyaw counter-clockwise (left). The stub does not model the start ramp, so walk and turn overshoot on the stub by their lead time ([robot.md](robot.md#motion)).
-- **Camera.** `detect(target)` waits `DETECT_S`, then projects the object listed under `target` in `GO2_STUB_OBJECTS` through a pinhole camera `CAMERA_OFFSET_M` ahead of the body centre (`CAMERA_WIDTH_PX` × `CAMERA_HEIGHT_PX`, horizontal field of view `CAMERA_HFOV_DEG`, square pixels; [robot.md](robot.md#object-detection)). The box centre-x fraction is `0.5 − f × tan(bearing) / width`, so a positive bearing (left) gives a small x; the box height fraction is `f × height_m / depth / height`, clipped to 1, where depth is the distance along the camera axis. The box goes to the real detector's classifier, `vision.classify_box`. Not found when the target is not listed, is behind the camera, is outside the horizontal field of view, or its box height fraction is below `MIN_BOX_H`. Confidence is deterministic: `CONFIDENCE_MIN` + (`CONFIDENCE_MAX` − `CONFIDENCE_MIN`) × box height fraction.
+- **Camera.** `StubDetector`, served by the [vision service](#vision-service) with the service's own env: `detect(target)` waits `DETECT_S`, then projects the object listed under `target` in `GO2_STUB_OBJECTS` through a pinhole camera `CAMERA_OFFSET_M` ahead of the body centre (`CAMERA_WIDTH_PX` × `CAMERA_HEIGHT_PX`, horizontal field of view `CAMERA_HFOV_DEG`, square pixels; [robot.md](robot.md#object-detection)). The box centre-x fraction is `0.5 − f × tan(bearing) / width`, so a positive bearing (left) gives a small x; the box height fraction is `f × height_m / depth / height`, clipped to 1, where depth is the distance along the camera axis. The box goes to the real detector's classifier, `vision.classify_box`. Not found when the target is not listed, is behind the camera, is outside the horizontal field of view, or its box height fraction is below `MIN_BOX_H`. Confidence is deterministic: `CONFIDENCE_MIN` + (`CONFIDENCE_MAX` − `CONFIDENCE_MIN`) × box height fraction.
 - **Objects.** `GO2_STUB_OBJECTS` is a JSON object: each key is a COCO class name and each value is `{"x": number, "y": number}` in metres in the world frame, with an optional `"height_m": number > 0`; no other keys. Without `height_m` the class's entry in `DEFAULT_HEIGHTS_M` is used (bottle 0.25, cup 0.10, chair 0.90, person 1.70); a class without one is an error naming the class. `stub.parse_objects(data)` holds these rules and raises `ValueError`. One object per class.
 - `sample_state()` reports `body_height` per posture (`BODY_HEIGHT_*_M`), `position` = [x, y, `body_height`], `imu_rpy` = [0, 0, yaw], and `velocity` (world frame) and `yaw_speed` from the stored command, so zero at rest. `mode`, `gait_type`, `foot_force` and `error_code` are `null`.
 - All stub waits go through `backend.sleep()` and are multiplied by `stub.time_scale`. Skills never call `time.sleep` themselves.
@@ -210,7 +212,7 @@ faults = [ { step = 2, kind = "hang" } ]
 or on the command line with `--fault STEP:KIND` (repeatable), which replaces the whole list ([running.md](../../docs/running.md)).
 
 - `step` counts **dispatched** steps in the task, 1-based, across plans. Rejected steps are not counted. Steps must be unique.
-- The dispatcher sets `GO2_STUB_FAULT` for that step only. Inside the process, the fault hits the first action call the skill makes (`Move`, `StopMove`, `StandDown`, `Stretch` or `detect`); later calls behave normally.
+- The dispatcher sets `GO2_STUB_FAULT` for that step only. Inside the process, the fault hits the first action call the skill makes (`Move`, `StopMove`, `StandDown`, `Stretch` or `detect`); later calls behave normally. For `detect_object` the fault is applied in the skill process (`stub.inject_detect_fault()`), after it connects to the vision service and before it sends the request, so the service never sees a fault.
 - Utilities (`stop_move`, `read_state`) ignore faults (they call `stub.disable_faults()` first), so the stop path always works.
 - The fault kinds are `stub.FaultKind` (`FAULT_KINDS`); the dispatcher's `stub.faults[].kind` config type is that same `Literal`, as `stub.initial_posture` is `stub.StubPosture`. The `stub.time_scale`, `stub.initial_posture` and `stub.state_file` config defaults are `stub.DEFAULT_TIME_SCALE`, `DEFAULT_POSTURE` and `DEFAULT_STATE_FILE`, the same values the stub uses when its env is unset.
 
@@ -222,6 +224,26 @@ or on the command line with `--fault STEP:KIND` (repeatable), which replaces the
 | `garbage` | prints `not json` and exits 0 | `malformed` |
 
 For one process run by hand, set `GO2_STUB_FAULT=<kind>` directly.
+
+## Vision service
+
+`detect_object` does not load a detector itself. It asks the vision service (`skills/vision_service.py`), a long-running process that loads the detector once, warms it up and answers requests on a Unix socket. On the real backend that is `RealDetector` (`skills/real_detector.py`: YOLO plus a `VideoClient` kept open across requests, [robot.md](robot.md#object-detection)); on the stub it is `StubDetector`, the simulated camera ([stub backend](#stub-backend)). The service only reads the camera: it never creates a `SportClient` and never commands motion. It grabs a frame only when a request arrives.
+
+**Protocol** (`skills/vision_ipc.py`). `multiprocessing.connection` over the Unix socket at `GO2_VISION_SOCKET`, one request and one reply per connection, each a UTF-8 JSON object sent with `send_bytes` (never pickle), at most `MAX_MESSAGE_BYTES`:
+
+- Request: `{"target": "<COCO class>"}`. The skill checks the target first; the service does not.
+- Reply: the `DetectResult` fields `{"found": bool, "position", "closeness", "confidence"}` (the last three `null` when not found), or `{"error": {"code": "<error code>", "message": "<ExceptionType>: <message>"}}` with `camera_unavailable`, `bad_frame`, `weights_missing`, `backend_not_configured` or `detector_error`.
+
+In `detect_object`, `init_ms` is the connect and `exec_ms` the request until the reply. The service answers one connection at a time and drops a connection that sends no request within `REQUEST_WAIT_S` (1.0 s). If warm-up fails (weights missing, camera client not created), the service still becomes ready and logs the error to stderr; each request retries the part that failed and replies with its error code, so the model sees `weights_missing` rather than a dead service.
+
+**Lifecycle contract** (owned by the dispatcher; the constants are in `skills/vision_service.py`):
+
+- **Start:** `python -m skills.vision_service`, no arguments, working directory the base dir, environment `child_env(...)` with `fault` unset: the same call the executor makes for a skill, so `GO2_VISION_SOCKET` is `vision_socket_path(os.getpid())` = `<tempfile.gettempdir()>/go2-vision-<dispatcher pid>.sock` on both sides. Start it in its own session (`start_new_session=True`), with stdin `/dev/null`, stdout a pipe, and stderr (its log) to a file or inherited, never an unread pipe.
+- **Ready:** the service writes exactly one line, `ready` (`READY_LINE`), to stdout once it is warmed up and listening; nothing else is ever written to stdout. Wait for it up to `STARTUP_TIMEOUT_S` (30.0 s, tunable). Exit before the line is a failed start; exit code 2 means `GO2_BACKEND` or `GO2_VISION_SOCKET` is missing or unknown.
+- **Restart:** before each `detect_object` step, if the process has exited, start it again and wait for `ready`. A step whose service is down or slow is not retried: `detect_object` reports `vision_unavailable`.
+- **Stop:** `SIGTERM`; it closes the listener, removes the socket file and exits 0. Send `SIGKILL` if it is still alive after `STOP_GRACE_S` (2.0 s).
+- **Socket file:** created with mode `0600`. A file left by a killed service is removed by the next service at start.
+- **Parent death:** the service runs the skills' orphan watchdog (`process.start_orphan_watchdog`, `GO2_PARENT_PID`): when its parent is gone it exits with code 137 within about 2.2 s, leaving the socket file for the next start to remove. Without `GO2_PARENT_PID` (a manual run) it runs until stopped.
 
 ## Adding a new skill
 
@@ -242,18 +264,21 @@ On the stub:
 export GO2_BACKEND=stub GO2_STUB_STATE_FILE=logs/.stub_state.json GO2_STUB_TIME_SCALE=0.1
 uv run python -m skills.walk '{"direction":"forward","distance_m":1}'
 uv run python -m skills.turn '{"direction":"left","angle_deg":90}'
+export GO2_VISION_SOCKET=logs/.vision.sock GO2_STUB_OBJECTS='{"chair":{"x":1.5,"y":0}}'
+uv run python -m skills.vision_service &       # prints "ready"; stop it with: kill %1
 uv run python -m skills.detect_object '{"target":"chair"}'
-GO2_STUB_OBJECTS='{"chair":{"x":1.5,"y":0}}' uv run python -m skills.detect_object '{"target":"chair"}'
+uv run python -m skills.detect_object '{"target":"bottle"}'
 GO2_STUB_FAULT=crash uv run python -m skills.sit '{}'; echo "exit=$?"
 uv run python -m skills.read_state '{}'
 uv run python -m skills.stop_move '{}'
 ```
 
-Without `GO2_STUB_STATE_FILE` and `GO2_STUB_TIME_SCALE` the stub uses `logs/.stub_state.json` (relative to the working directory) and 0.1. On the real robot set `GO2_BACKEND=real GO2_IFACE=<nic>` (and `GO2_YOLO_WEIGHTS` for detection), with the robot supervised ([safety.md](../../docs/safety.md#supervised-operation-rules)). Pass all params: skills do not fill defaults.
+The vision service reads `GO2_STUB_OBJECTS` once at its start; restart it after changing the objects. Without `GO2_STUB_STATE_FILE` and `GO2_STUB_TIME_SCALE` the stub uses `logs/.stub_state.json` (relative to the working directory) and 0.1. On the real robot set `GO2_BACKEND=real GO2_IFACE=<nic>` (and `GO2_YOLO_WEIGHTS` for detection), with the robot supervised ([safety.md](../../docs/safety.md#supervised-operation-rules)). Pass all params: skills do not fill defaults.
 
 ## Design decisions
 
 - **One subprocess per skill call, never reused.** The Unitree SDK initialises DDS through a process-wide singleton, so a fresh process guarantees a clean channel. It also lets a hung call be killed and isolates crashes in the native bindings.
+- **Detection runs in a long-running [vision service](#vision-service); `detect_object` stays a short process that asks it.** Loading torch and YOLO, the first predict, DDS init and `VideoClient.Init` took about 5 s of every detection on the lab machine, while a warm predict takes 0.04 s. The service pays that once per dispatcher run. The rule above still holds for skills: `detect_object` is one process per call with the same response, timeout and kill path, and the service never touches the sport client, so the clean-channel and kill reasons, which are about motion, do not apply to it. Requests carry only a target and the service grabs a frame per request, so no state leaks between calls. IPC is `multiprocessing.connection` with JSON bytes, standard library only. Rejected: exporting YOLO to ONNX to drop torch from the skill process (still a model load and first inference per call, and a second model format to maintain); streaming frames in the background (camera traffic and a stale-frame question for no gain, since a frame costs one RPC per request); retrying `GetImageSample` on error 3104.
 - **`walk` was split into `walk` and `turn`.** The predecessor's single range mixed metres and degrees. Separate skills give the model clearer parameters and allow separate travel and rotation budgets. `turn` uses **degrees** at the interface because that is what operators say; the skill converts to radians.
 - **One common JSON response schema for all skills**, replacing the predecessor's three incompatible output formats, so the executor, the log and the context renderer handle every skill the same way.
 - **Each skill owns its policy** (timeout formula, motion cost, observations shown to the model) as module constants next to the code that shares them, so a number like walking speed is defined once and tuned in one place.

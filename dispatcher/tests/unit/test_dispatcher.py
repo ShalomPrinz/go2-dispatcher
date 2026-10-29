@@ -577,6 +577,12 @@ def test_shutdown_idle_is_noop(tmp_path, registry):
     assert (r.executor.kills, r.executor.stop_moves) == ([], [])
 
 
+def test_shutdown_closes_executor(tmp_path, registry):
+    r = Rig(tmp_path, registry, [])
+    r.d.shutdown(0)
+    assert r.executor.closed
+
+
 def test_shutdown_task_ends_within_wait(tmp_path, registry):
     """The operator kill ends the step in time: no shutdown kill and no extra StopMove."""
     entered, release = threading.Event(), threading.Event()

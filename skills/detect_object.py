@@ -5,14 +5,16 @@ from __future__ import annotations
 import difflib
 import time
 
-from skills import backend, policy, runner
+from skills import backend, policy, runner, stub, vision_ipc
 from skills.coco import COCO_CLASSES
+from skills.motion import PROCESS_OVERHEAD_S
 from skills.schema import ErrorCode
 
 SUGGESTIONS_N = 3
 SUGGESTIONS_CUTOFF = 0.5
 CONFIDENCE_DECIMALS = 2
-TIMEOUT_S = 45.0  # YOLO load on CPU (tunable)
+REPLY_WAIT_S = 5.0  # vision service reply: one camera frame (CAMERA_TIMEOUT_S 3 s) + inference (tunable)
+TIMEOUT_S = PROCESS_OVERHEAD_S + REPLY_WAIT_S  # the detector is loaded by the vision service, not here
 
 POLICY = policy.SkillPolicy(
     name="detect_object",
@@ -36,17 +38,24 @@ def body(params: dict) -> runner.SkillOutcome:
             ErrorCode.UNSUPPORTED_OBJECT, unsupported_message(target), observations=obs, timing={}
         )
     t = time.monotonic()
-    detector = backend.get_detector()
+    try:
+        conn = vision_ipc.connect(vision_ipc.socket_path())
+    except backend.DetectorError as e:
+        timing = {"init_ms": runner.ms_since(t)}
+        return runner.SkillOutcome.error(e.code, vision_ipc.error_message(e), observations=obs, timing=timing)
     timing = {"init_ms": runner.ms_since(t)}
     t = time.monotonic()
     try:
-        found = detector.detect(target)
+        with conn:
+            if backend.backend_name() == "stub":
+                stub.inject_detect_fault()
+            found = vision_ipc.detect(conn, target, REPLY_WAIT_S)
     except backend.DetectorError as e:
         timing["exec_ms"] = runner.ms_since(t)
-        return runner.SkillOutcome.error(e.code, f"{type(e).__name__}: {e}", observations=obs, timing=timing)
+        return runner.SkillOutcome.error(e.code, vision_ipc.error_message(e), observations=obs, timing=timing)
     timing["exec_ms"] = runner.ms_since(t)
     obs["object_found"] = bool(found.found)
-    if found.found:
+    if found.found and found.confidence is not None:  # vision_ipc.parse_reply checked the fields
         obs.update(
             position=found.position,
             closeness=found.closeness,

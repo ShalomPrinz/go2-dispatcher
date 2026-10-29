@@ -36,7 +36,10 @@ def test_live_turn_and_find_chair(tmp_path):
         Executor(cfg, cfg.base_dir),
         initial_posture=cfg.stub.initial_posture,
     )
-    o = d.run_task(TASK, source="test")
+    try:
+        o = d.run_task(TASK, source="test")
+    finally:
+        d.shutdown(0)  # stops the vision service
     print(f"run log: {o.log_path}")
     assert o.outcome == "DONE", o.message
     assert "chair" in o.message.lower()

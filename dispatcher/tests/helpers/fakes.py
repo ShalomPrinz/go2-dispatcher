@@ -118,6 +118,7 @@ class FakeExecutor:
         self.runs: list[dict[str, Any]] = []
         self.kills: list[StopCause] = []
         self.stop_moves: list[StopCause] = []
+        self.closed = False
 
     def run(
         self,
@@ -160,3 +161,6 @@ class FakeExecutor:
 
     def read_state(self) -> RobotState | None:
         return None
+
+    def close(self) -> None:
+        self.closed = True

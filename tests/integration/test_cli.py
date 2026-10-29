@@ -92,6 +92,14 @@ def test_run_done(cfg_path):
     assert proc.stderr.splitlines()[-1].startswith("DONE · 2 LLM calls · 1 steps run, 0 failed")
 
 
+def test_run_starts_and_stops_vision_service(cfg_path):
+    proc = cli(cfg_path, "run", "turn left", script=[PLAN_TURN, DONE])
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    log = (cfg_path.parent / "logs" / "vision_service.log").read_text(encoding="utf-8")
+    assert "dispatcher: vision service started" in log
+    assert "dispatcher: vision service stopped (exit code 0)" in log
+
+
 def test_run_abort(cfg_path):
     proc = cli(cfg_path, "run", "fly", script=[ABORT])
     assert proc.returncode == 1, proc.stdout + proc.stderr

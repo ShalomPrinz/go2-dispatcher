@@ -146,6 +146,13 @@ class Dispatcher:
         return "stopping"
 
     def shutdown(self, wait_s: float) -> None:
+        """End a running task, then close the executor (the vision service); safe to call twice."""
+        try:
+            self._end_running_task(wait_s)
+        finally:
+            self.executor.close()
+
+    def _end_running_task(self, wait_s: float) -> None:
         if not self.is_busy():
             return
         self.request_stop("shutdown")

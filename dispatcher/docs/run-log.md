@@ -11,6 +11,7 @@ What counts as a failure, an LLM call or a rejection is defined in [loop-and-con
 - One file per task: `{folder}/{YYYYMMDDTHHMMSS}_{run_id[:8]}.jsonl`, using the local time at task start. Example: `logs/anthropic/stub/20261001T113603_b6bb52fe.jsonl`.
 - `{folder}/index.jsonl`: one line per finished task in that folder, including the experimental `condition`, `provider`, `model` and `thinking`.
 - `{log.dir}/.dispatcher.lock`: the single-instance lock, at the root so it covers every folder (not a log).
+- `{log.dir}/vision_service.log`: the vision service's stderr and the dispatcher's notes on starting, restarting and stopping it, for diagnosis only (not study data, no records; [running.md](../../docs/running.md#vision-service)).
 
 **Research data is `logs/anthropic/real/` only.** Analysis reads one folder and its `index.jsonl`; it never globs across folders, so stub runs and OpenRouter runs cannot leak into the dataset. The other folders are for development and testing.
 
