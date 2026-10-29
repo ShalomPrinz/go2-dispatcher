@@ -79,6 +79,12 @@ type = "protected"                      # a forbidden contract skips skills -> s
 protected_modules = ["skills.manifest"]
 allowed_importers = ["dispatcher", "skills.tests"]
 
+[[tool.importlinter.contracts]]
+name = "Only the vision service imports the detector stack"
+type = "protected"                      # skill processes must never load torch, ultralytics or cv2
+protected_modules = ["skills.real_detector", "skills.vision_service"]
+allowed_importers = ["skills.vision_service", "dispatcher.vision", "skills.tests", "tests.integration"]  # dispatcher.vision: lifecycle constants only
+
 [tool.basedpyright]                     # type check: uv run basedpyright (tests/docs/testing.md)
 include = ["dispatcher", "skills", "tests"]
 exclude = ["**/__pycache__", "**/.*"]   # replaces the defaults; .venv and caches sit outside include anyway
