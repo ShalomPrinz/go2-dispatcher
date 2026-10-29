@@ -13,7 +13,7 @@ from skills import backend, policy, runner, stub
 from skills.runner import SkillOutcome, StateSampler
 from skills.schema import ErrorCode
 
-TIMEOUT_S = 10.0
+TIMEOUT_S = 12.0  # covers one lost StopMove reply (tunable, skills/docs/skills.md)
 SETTLE_S = 0.5
 
 POLICY = policy.SkillPolicy(name="stop_move", timeout=TIMEOUT_S)  # utility: zero cost, no observations

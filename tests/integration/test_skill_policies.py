@@ -1,4 +1,5 @@
-"""Skill policies: timeouts cover the commanded motion, motion costs (skills/docs/skills.md)."""
+"""Skill policies: timeouts cover the commanded motion and the SDK reply waits, motion costs
+(skills/docs/skills.md)."""
 
 from __future__ import annotations
 
@@ -7,7 +8,7 @@ import math
 import pytest
 
 from dispatcher.registry import Registry
-from skills import detect_object, read_state, sit, stop_move, stretch, turn, walk
+from skills import detect_object, motion, read_state, real, sit, stop_move, stretch, turn, walk
 from skills.policy import MotionCost
 from tests.helpers import REPO_ROOT
 
@@ -47,6 +48,15 @@ def test_utility_policies_stay_out_of_registry():
 def test_timeout_exceeds_motion_at_max_params(name):
     p = max_params(name)
     assert REGISTRY[name].policy.timeout_s(p) > MOTION_S[name](p)
+
+
+def test_sport_client_timeouts_cover_a_lost_reply():
+    """A lost reply ends as sdk_error, not a kill: overhead + one reply wait + motion or settle fits."""
+    budget_s = motion.PROCESS_OVERHEAD_S + real.SPORT_CLIENT_TIMEOUT_S
+    for name in ("walk", "turn", "sit", "stretch"):
+        p = max_params(name)
+        assert REGISTRY[name].policy.timeout_s(p) >= budget_s + MOTION_S[name](p), name
+    assert stop_move.POLICY.timeout_s({}) >= budget_s + stop_move.SETTLE_S
 
 
 def test_motion_costs():

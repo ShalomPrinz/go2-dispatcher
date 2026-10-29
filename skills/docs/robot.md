@@ -20,7 +20,7 @@ All SDK use is in `skills/real.py`, selected in the skill process by `GO2_BACKEN
 | What | How |
 |---|---|
 | DDS init | `ChannelFactoryInitialize(0, $GO2_IFACE)`, once per process, before anything touches DDS. An empty `GO2_IFACE` gives `backend_not_configured`. |
-| Sport client | `SportClient()`, `SetTimeout(SPORT_CLIENT_TIMEOUT_S)`, `Init()`. One per skill process. |
+| Sport client | `SportClient()`, `SetTimeout(SPORT_CLIENT_TIMEOUT_S)` (5.0 s, tunable), `Init()`. One per skill process. A call that waits for a reply (`StopMove`, `StandDown`, `Stretch`) returns a non-zero code after this long without one; it must fit inside the skill's timeout ([skills.md](skills.md#policies)). |
 | Calls used | `Move(vx, vy, vyaw)`, `StopMove()`, `StandDown()`, `Stretch()`. Each returns an int; 0 is success, anything else is an `sdk_error` with the code in `observations.sdk_ret`. |
 | Camera | `VideoClient`, `SetTimeout(CAMERA_TIMEOUT_S)`, `Init()`, `GetImageSample()` → JPEG bytes, decoded with OpenCV. |
 | State | `ChannelSubscriber("rt/sportmodestate", SportModeState_)`, queue length `SUBSCRIBER_QUEUE_LEN` ([state sampling](#state-sampling)). |

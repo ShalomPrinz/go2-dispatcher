@@ -24,7 +24,7 @@ from skills.env import IFACE, YOLO_WEIGHTS
 from skills.schema import Posture, RobotState
 
 DDS_DOMAIN_ID = 0
-SPORT_CLIENT_TIMEOUT_S = 10.0
+SPORT_CLIENT_TIMEOUT_S = 5.0  # per-call reply wait; must fit in the process timeouts (tunable, skills/docs/skills.md)
 SPORT_STATE_TOPIC = "rt/sportmodestate"
 SUBSCRIBER_QUEUE_LEN = 10
 STATE_WAIT_S = 1.0

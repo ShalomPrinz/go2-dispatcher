@@ -10,10 +10,12 @@ import traceback
 from typing import NamedTuple
 
 from skills import backend, process, runner
+from skills.real import SPORT_CLIENT_TIMEOUT_S
 from skills.schema import ErrorCode
 
 CMD_PERIOD_S = 0.1  # Move command period of the move loop (10 Hz)
-MOTION_BASE_S = 10.0  # process start + SDK init + state samples (tunable)
+PROCESS_OVERHEAD_S = 5.0  # process start + SDK init + two state samples (tunable)
+MOTION_BASE_S = PROCESS_OVERHEAD_S + SPORT_CLIENT_TIMEOUT_S  # plus one lost StopMove reply (skills/docs/skills.md)
 MOTION_FACTOR = 1.5  # safety factor on commanded motion time (tunable)
 
 
