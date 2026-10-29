@@ -7,12 +7,13 @@ from dataclasses import replace
 from skills import motion, policy, runner
 
 VELOCITY_MPS = 0.3
+LEAD_S = 1.1  # extra command time for the start ramp (tunable, skills/docs/robot.md)
 # direction -> (vx, vy) as multiples of VELOCITY_MPS
 DIRECTION_VECTORS = {"forward": (1, 0), "backward": (-1, 0), "left": (0, 1), "right": (0, -1)}
 
 
 def _motion_s(params: dict) -> float:
-    return float(params["distance_m"]) / VELOCITY_MPS
+    return float(params["distance_m"]) / VELOCITY_MPS + LEAD_S
 
 
 POLICY = policy.SkillPolicy(

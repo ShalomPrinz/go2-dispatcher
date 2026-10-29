@@ -8,11 +8,12 @@ from dataclasses import replace
 from skills import motion, policy, runner
 
 YAW_RATE_RPS = 1.0  # rad/s
+LEAD_S = 0.2  # extra command time for the start ramp (tunable, skills/docs/robot.md)
 DIRECTION_SIGN = {"left": 1, "right": -1}
 
 
 def _motion_s(params: dict) -> float:
-    return math.radians(float(params["angle_deg"])) / YAW_RATE_RPS
+    return math.radians(float(params["angle_deg"])) / YAW_RATE_RPS + LEAD_S
 
 
 POLICY = policy.SkillPolicy(

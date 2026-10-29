@@ -122,12 +122,12 @@ print(json.dumps({"modules": names, "heavy": heavy, "out": buf.getvalue(),
 
 def test_walk_observations(tmp_path):
     resp = run_ok("walk", {"direction": "backward", "distance_m": 0.3}, stub_env(tmp_path))
-    assert resp.observations == {"direction": "backward", "distance_m": 0.3, "duration_s": 1.0, "sdk_ret": 0}
+    assert resp.observations == {"direction": "backward", "distance_m": 0.3, "duration_s": 2.1, "sdk_ret": 0}
 
 
 def test_turn_observations(tmp_path):
     resp = run_ok("turn", {"direction": "right", "angle_deg": 90}, stub_env(tmp_path))
-    assert resp.observations == {"direction": "right", "angle_deg": 90.0, "duration_s": 1.6, "sdk_ret": 0}
+    assert resp.observations == {"direction": "right", "angle_deg": 90.0, "duration_s": 1.8, "sdk_ret": 0}
 
 
 # --- stub behaviour -----------------------------------------------------------------
@@ -172,7 +172,7 @@ def test_detect_follows_the_pose(tmp_path):
     env = stub_env(tmp_path, objects={"chair": {"x": 0.0, "y": 1.2}})
     assert run_ok("detect_object", {"target": "chair"}, env).observations["object_found"] is False
     turned = run_ok("turn", {"direction": "left", "angle_deg": 90}, env).state_after
-    assert turned is not None and turned.imu_rpy == pytest.approx([0.0, 0.0, 1.6])  # 16 commands of 0.1 rad
+    assert turned is not None and turned.imu_rpy == pytest.approx([0.0, 0.0, 1.8])  # 18 commands of 0.1 rad
     resp = run_ok("detect_object", {"target": "  Chair "}, env)
     obs = resp.observations
     assert set(obs) == {"target", "object_found", "position", "closeness", "confidence"}

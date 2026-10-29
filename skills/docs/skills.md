@@ -127,8 +127,8 @@ Run a skill by hand ([below](#running-a-skill-by-hand)) to see a full response.
 
 | Skill | Action | Observations | Shown to the model on `ok` |
 |---|---|---|---|
-| `walk` | `Move` for `distance_m / VELOCITY_MPS` s, then `StopMove` | `direction`, `distance_m`, `duration_s` (commanded), `sdk_ret`, `orphaned` (only if set) | nothing |
-| `turn` | `Move(0, 0, ±YAW_RATE_RPS)` for `radians(angle_deg) / YAW_RATE_RPS` s, then `StopMove` | `direction`, `angle_deg`, `duration_s`, `sdk_ret`, `orphaned` | nothing |
+| `walk` | `Move` for `distance_m / VELOCITY_MPS + LEAD_S` s, then `StopMove` | `direction`, `distance_m`, `duration_s` (commanded), `sdk_ret`, `orphaned` (only if set) | nothing |
+| `turn` | `Move(0, 0, ±YAW_RATE_RPS)` for `radians(angle_deg) / YAW_RATE_RPS + LEAD_S` s, then `StopMove` | `direction`, `angle_deg`, `duration_s`, `sdk_ret`, `orphaned` | nothing |
 | `sit` | `StandDown()`, then a settle wait | `sdk_ret` | nothing |
 | `stretch` | `Stretch()`, then a settle wait | `sdk_ret` | nothing |
 | `detect_object` | one camera frame + YOLO; never moves | `target`, `object_found`, `position` (left/center/right), `closeness` (near/medium/far), `confidence` | `object_found`, `position`, `closeness`, `confidence` |
@@ -162,8 +162,8 @@ The dispatcher reads only `name`, `context_observations`, `timeout_s(params)` an
 
 | Skill | Timeout | Motion cost |
 |---|---|---|
-| `walk` | `motion_timeout(distance_m / VELOCITY_MPS)` | `distance_m` |
-| `turn` | `motion_timeout(radians(angle_deg) / YAW_RATE_RPS)` | `rotation_deg = angle_deg` |
+| `walk` | `motion_timeout(distance_m / VELOCITY_MPS + LEAD_S)` | `distance_m` |
+| `turn` | `motion_timeout(radians(angle_deg) / YAW_RATE_RPS + LEAD_S)` | `rotation_deg = angle_deg` |
 | `sit`, `stretch`, `detect_object` | `TIMEOUT_S` | zero |
 
 `motion.motion_timeout(motion_s)` is `MOTION_BASE_S + MOTION_FACTOR × motion_s` (10.0 s and 1.5): `MOTION_BASE_S = PROCESS_OVERHEAD_S + SPORT_CLIENT_TIMEOUT_S`, where `PROCESS_OVERHEAD_S` (5.0 s, tunable) covers process start, SDK init and the two state samples, and `SPORT_CLIENT_TIMEOUT_S` (5.0 s, tunable, `skills/real.py`) is one lost `StopMove` reply; `MOTION_FACTOR` (tunable) is a margin on the commanded motion time `motion_s`. Each of `walk` and `turn` computes `motion_s` in one private `_motion_s(params)`, used by both its timeout and its body, and commands it through `motion.move_loop(Velocity(vx, vy, vyaw), duration_s)` at the shared period `motion.CMD_PERIOD_S` (0.1 s, 10 Hz); `detect_object`'s `TIMEOUT_S` covers loading YOLO on CPU. The timeout covers the whole process from start to exit, including any [settle wait](robot.md#settle-waits). Every process that calls the sport client (`walk`, `turn`, `sit`, `stretch`, `stop_move`) has a timeout of at least `PROCESS_OVERHEAD_S + SPORT_CLIENT_TIMEOUT_S` plus its motion or settle time at max params, so a reply that never arrives ends the call as `sdk_error` before the dispatcher kills it. Each makes at most one reply-waiting call (`StopMove`, `StandDown` or `Stretch`; `Move` sends without a reply). `tests/integration/test_skill_policies.py` enforces this. The motion cost feeds the motion budget ([safety.md](../../docs/safety.md#motion-budget)).
@@ -189,7 +189,7 @@ It keeps posture and an odometry pose in one JSON state file, `{"posture": "stan
 | `StandDown` | 0; posture → sitting; waits `STAND_DOWN_S` | 0; no change |
 | `Stretch` | 0; waits `STRETCH_S` | 1 |
 
-- **Odometry.** An accepted `Move(vx, vy, vyaw)` (return 0) stores the command and `StopMove()` clears it. While a command is stored, every `sleep(seconds)` advances the pose by the **unscaled** seconds, integrating the body-frame velocity exactly along the arc, and writes it to the state file. Body frame as on the Go2: +vx forward, +vy left, +vyaw counter-clockwise (left).
+- **Odometry.** An accepted `Move(vx, vy, vyaw)` (return 0) stores the command and `StopMove()` clears it. While a command is stored, every `sleep(seconds)` advances the pose by the **unscaled** seconds, integrating the body-frame velocity exactly along the arc, and writes it to the state file. Body frame as on the Go2: +vx forward, +vy left, +vyaw counter-clockwise (left). The stub does not model the start ramp, so walk and turn overshoot on the stub by their lead time ([robot.md](robot.md#motion)).
 - **Camera.** `detect(target)` waits `DETECT_S`, then projects the object listed under `target` in `GO2_STUB_OBJECTS` through a pinhole camera `CAMERA_OFFSET_M` ahead of the body centre (`CAMERA_WIDTH_PX` × `CAMERA_HEIGHT_PX`, horizontal field of view `CAMERA_HFOV_DEG`, square pixels; [robot.md](robot.md#object-detection)). The box centre-x fraction is `0.5 − f × tan(bearing) / width`, so a positive bearing (left) gives a small x; the box height fraction is `f × height_m / depth / height`, clipped to 1, where depth is the distance along the camera axis. The box goes to the real detector's classifier, `vision.classify_box`. Not found when the target is not listed, is behind the camera, is outside the horizontal field of view, or its box height fraction is below `MIN_BOX_H`. Confidence is deterministic: `CONFIDENCE_MIN` + (`CONFIDENCE_MAX` − `CONFIDENCE_MIN`) × box height fraction.
 - **Objects.** `GO2_STUB_OBJECTS` is a JSON object: each key is a COCO class name and each value is `{"x": number, "y": number}` in metres in the world frame, with an optional `"height_m": number > 0`; no other keys. Without `height_m` the class's entry in `DEFAULT_HEIGHTS_M` is used (bottle 0.25, cup 0.10, chair 0.90, person 1.70); a class without one is an error naming the class. `stub.parse_objects(data)` holds these rules and raises `ValueError`. One object per class.
 - `sample_state()` reports `body_height` per posture (`BODY_HEIGHT_*_M`), `position` = [x, y, `body_height`], `imu_rpy` = [0, 0, yaw], and `velocity` (world frame) and `yaw_speed` from the stored command, so zero at rest. `mode`, `gait_type`, `foot_force` and `error_code` are `null`.
