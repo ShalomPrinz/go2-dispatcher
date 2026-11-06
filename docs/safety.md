@@ -7,6 +7,7 @@ Everything that limits or stops the robot. The dispatcher bounds what the LLM ca
 - Run the real robot only under supervision, with the remote (e-stop) in hand and a clear area around the robot. This holds for both planner providers: `llm.provider = "openrouter"` with `robot.backend = "real"` is allowed and follows exactly these rules; a free or untested model is no reason to relax them, since every safety limit below is enforced by the dispatcher whatever the model plans.
 - Before the first real run on a machine, work through the robot checklist in [robot.md](../skills/docs/robot.md), in order. The real backend has never been run.
 - Keep one dispatcher per robot. The lock ([below](#single-instance-lock)) prevents a second process on the same `log.dir`, not one on another machine or with another `log.dir`.
+- When the system runs on the computer mounted on the robot, keep a physical stop within reach at all times: the robot's own remote or a separate stop button. The dispatcher's stop arrives over Wi-Fi; if the Wi-Fi drops, `stop` no longer reaches it.
 - After a `sit`, stand the robot up with the remote: no skill can stand it up ([robot.md](../skills/docs/robot.md)).
 - If an outcome ends with `WARNING: the stop command to the robot failed. Stop the robot manually.`, use the remote at once.
 - Do not raise `motion_budget.*`, the walk/turn ranges in `SKILL.md`, or the policy timeouts without recording the reason in the owning document.
@@ -73,7 +74,7 @@ Every step of a plan is checked against its `SKILL.md` declaration before anythi
 
 Each skill process watches its parent (`GO2_PARENT_PID`) every 0.2 s. If the dispatcher disappears, the `ORPHANED` flag is set; motion loops check it on every iteration, break, and send `StopMove()` themselves (the step reports `orphaned: true`). Any skill still alive 2 s later exits with code 137. The watchdog does nothing when `GO2_PARENT_PID` is unset (manual runs). `stop_move` and `read_state` do not watch their parent, so a `StopMove` always finishes. The [vision service](../skills/docs/skills.md#vision-service) runs the same watchdog and exits with code 137 too; it never commands motion. Every normal exit of the transports calls `Dispatcher.shutdown()`.
 
-If the dispatcher host loses power or the network drops, none of this helps. Use the e-stop.
+If the dispatcher host loses power or the network drops, none of this helps, and the operator can no longer send `stop`. Use the physical stop, which is why it must be within reach at all times ([above](#supervised-operation-rules)).
 
 ## Single-instance lock
 
@@ -97,4 +98,5 @@ If the dispatcher host loses power or the network drops, none of this helps. Use
 - **One dispatcher process per machine (file lock)**, so two processes can never drive one robot, overwrite the stub state, or interleave `index.jsonl`.
 - **The robot is stationary during LLM calls**, so a slow or failing LLM call never leaves the robot moving.
 - **Agent limits are permission rules, not only CLAUDE.md prose**, because instructions are context, not enforcement. Bash argument patterns can be bypassed (`sh -c`, a changed config file); a PreToolUse guard hook is pending ([roadmap.md](roadmap.md#future-ideas)).
+- **A physical stop within reach whenever the system runs on the onboard computer** (the robot's remote or a separate stop button). The operator sends `stop` over Wi-Fi, and if the Wi-Fi drops it no longer reaches the dispatcher, while a running skill may keep the robot moving until its motion loop ends.
 - **The physical/remote e-stop remains the final safety measure.** The software stops are best effort; their real latency is still to be measured.

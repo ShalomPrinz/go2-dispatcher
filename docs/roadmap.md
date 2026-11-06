@@ -128,3 +128,5 @@ The gate for experiments with participants, collected from the sections above. E
 | First run of the real backend; `uv sync --extra robot` on the lab machine; pin the Python patch version once it works (currently `>=3.10,<3.11`). | Lab machine setup ([setup.md](setup.md)) |
 | Manual Telegram test on a phone: busy reply and stop. Basic task and reply flow confirmed working. | Operator |
 | Analyse the old OpenClaw session logs: count compactions, retries and context size per call, to turn the measurement-validity argument ([architecture.md](architecture.md#why-a-purpose-built-dispatcher)) into data. | Obtain the logs from the predecessor's lab machine |
+| Choose the onboard computer that runs the whole system on the robot ([architecture.md](architecture.md#design-decisions)) and have it ordered. | The student chooses; the advisor orders through university purchasing |
+| Check whether the lab Wi-Fi allows Telegram and the LLM API. The university network is known to block Telegram; a lab hotspot is the stopgap. | The student |
