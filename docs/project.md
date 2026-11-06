@@ -22,6 +22,10 @@ The advisor's original complaint about the inherited system was that the LLM gui
 
 He also defined what counts as a failure (skill error, bounds rejection, timeout); the dispatcher's failure budget follows that definition ([loop-and-context.md](../dispatcher/docs/loop-and-context.md)).
 
+**Latency is a comparison dimension in its own right.** A design that plans better but responds much more slowly is a trade-off, not a win, and an operator who waits half a minute after the first prompt gives up. Latency is measured per call kind (first plan, follow-up, replan) from the run log; no target is set yet.
+
+The goal is a paper that proposes the design and tests it. A design that only works is not a result, so the system must reach the comparison: objective measures from run logs and a study with participants.
+
 ### Main study
 
 Proposed by the advisor. Participants interact with the Go2 under several **skill-library granularities**: atomic, medium and composite. Measures:
@@ -45,6 +49,7 @@ The **planning horizon** (maximum steps per plan) is one config value. Horizon 1
 
 OpenClaw (the runtime the predecessor used) is included as a **system-level** baseline. Why this project does not run on OpenClaw is explained in [architecture.md](architecture.md#why-a-purpose-built-dispatcher).
 
+- The baseline is **OpenClaw 2**, set up and run by the student with this project's skills. The predecessor's original OpenClaw install is not used: OpenClaw has moved to version 2, and a baseline on the old version would not use the same skills. Setting it up comes after this system runs smoothly on the robot.
 - Assumption: every experimental task can run on both systems.
 - Open: whether OpenClaw runs under one granularity condition or all of them. Decide when designing the task set ([roadmap](roadmap.md#open-questions)).
 - **Caveat for any write-up:** requiring an explicit plan changes model behaviour, and the two systems also differ in context design, prompt, compaction and loop. Differences are therefore attributed to the **system as a whole**, never to planning or to any single component.
@@ -68,4 +73,4 @@ OpenClaw (the runtime the predecessor used) is included as a **system-level** ba
 - **The real backend has never been run on the robot.** Robot-side values (posture thresholds, settle waits, stop latency, `Move` while sitting) are unverified; the supervised checklist in [robot.md](../skills/docs/robot.md) resolves them.
 - **The LLM request has not been verified against the live API** (Sonnet 5.5 with `thinking: between_tools` and auto tool choice). See [llm.md](../dispatcher/docs/llm.md).
 - All numeric limits are starting values to be tuned from logs and robot runs.
-- Next: the v2 verification layer, then experiment design. See [roadmap.md](roadmap.md).
+- Next: latency, measured with Claude; then the v2 verification layer and experiment design. See [roadmap.md](roadmap.md).
