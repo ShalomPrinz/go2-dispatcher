@@ -11,7 +11,7 @@ The Go2 EDU side of the system: what the code assumes about the robot, how it ta
 - DDS domain 0.
 - The IMU and sport mode are assumed available through `SportModeState` on topic `rt/sportmodestate` (*unverified*).
 - **SDK action calls return when the command is accepted, not when the motion ends.** This is why `sit` and `stretch` wait after their call ([settle waits](#settle-waits)).
-- The robot's low-level contact person is Achiya ([project.md](../../docs/project.md)); ask him about SDK topics, state fields and odometry.
+- The robot's low-level contact person is Achiya ([project.md](../../docs/project.md)); ask him about SDK topics and state fields. Odometry is available relative to the power-on pose; its source and accuracy are *unverified* (checklist item 2).
 
 ## SDK and DDS usage
 
@@ -80,7 +80,7 @@ State is **logged only** in v1. No step gets a verdict from it; the model sees o
 
 `derive_posture(body_height, mode)` in `skills/real.py` is the only place posture is derived from a state sample; the stub stores posture directly in its state file. `body_height` below `POSTURE_SITTING_MAX_M` is `sitting`, at or above `POSTURE_STANDING_MIN_M` is `standing`; in between or `null` is `unknown`.
 
-`mode` is passed in but not used yet, so the rule can switch to `mode` after the checklist without touching any caller. Both thresholds are *tunable* and *unverified*; checklist items 1 and 7 decide them. How posture is carried through a task and shown to the model: [loop-and-context.md](../../dispatcher/docs/loop-and-context.md#user-message).
+`mode` is passed in but not used yet, so the rule can switch to `mode` after the checklist without touching any caller. Both thresholds are *tunable* and *unverified*; checklist items 1 and 7 decide them. If neither `body_height` nor `mode` separates sitting from standing, joint angles from `rt/lowstate` (motor `q`) are the fallback source (*unverified*). How posture is carried through a task and shown to the model: [loop-and-context.md](../../dispatcher/docs/loop-and-context.md#user-message).
 
 ## Settle waits
 
@@ -94,7 +94,7 @@ The waits are guesses, *tunable* and *unverified*; checklist items 3 and 7 measu
 
 The list of open questions with owners is in [roadmap.md](../../docs/roadmap.md#open-questions) and [pending human work](../../docs/roadmap.md#pending-human-work). What they mean on the robot side, and what v1 does meanwhile:
 
-- **Odometry.** `SportModeState` has `position` and `velocity`, and Go2 topic lists include `rt/utlidar/robot_odom` and `rt/utlidar/robot_pose`. Whether the robot's own estimate is available and usable is unknown (ask Achiya). v1 logs `position` and `velocity` in every sample and uses neither. The answer decides whether `walk` can be verified in v2 and whether a geofence is possible ([roadmap.md](../../docs/roadmap.md#verifiability-per-skill)).
+- **Odometry.** The robot provides odometry relative to the pose at power-on, which is its origin. `SportModeState` has `position` and `velocity`, and Go2 topic lists include `rt/utlidar/robot_odom` and `rt/utlidar/robot_pose`; which of these carries the estimate, and its accuracy and drift, are *unverified* (checklist item 2). v1 logs `position` and `velocity` in every sample and uses neither. `walk` verification in v2 would use the position delta between `state_before` and `state_after`, so the power-on origin does not matter for it ([roadmap.md](../../docs/roadmap.md#verifiability-per-skill)). A geofence would need a recorded start pose ([roadmap.md](../../docs/roadmap.md#future-ideas)).
 - **No skill can stand the robot up.** After `sit`, motion fails until a person stands the robot up with the remote; in a batch run one `sit` affects every later task. On the stub, `go2 --reset-stub` restores the posture. A `stand` skill (`StandUp()` then `BalanceStand()`, with a settle wait) is recommended before experiments ([skills.md](skills.md#adding-a-new-skill)).
 - **`Move` while sitting.** v1 treats a non-zero return code as `sdk_error` (the stub returns 1). If the real robot silently ignores `Move` and returns 0, `walk` and `turn` report `ok` while nothing moved. Checklist item 8 finds out.
 - **Kill-to-stop latency** and whether the sport service stops by itself when `Move` commands stop arriving: [safety.md](../../docs/safety.md#between-kill-and-stopmove). Checklist item 5 measures the latency.
@@ -105,22 +105,22 @@ The list of open questions with owners is in [roadmap.md](../../docs/roadmap.md#
 - **Posture is derived from sampled state, never inferred from the last skill.** A skill can fail, be killed, or be followed by a manual stand-up with the remote; only the robot's state says what it is doing now. One function holds the rule, so it changes in one place.
 - **Fixed settle waits after `StandDown` and `Stretch`**, rather than waiting for the state to settle: simple and inspectable; the values are tuned from the checklist.
 - **The network interface is never hardcoded.** A blank `robot.network_interface` with `robot.backend = "real"` is a config error, so the backend never guesses an interface.
-- **A fixed lead time per motion skill compensates the start ramp.** In a supervised run, six `turn 90°` (1.6 s commanded) covered 72.6–81.0° by the robot's own `imu_rpy` yaw (mean ~78°, ~0.2 s short at 1 rad/s), and three `walk forward 1 m` (3.3 s commanded) covered 0.59–0.72 m by `position` (mean ~0.67 m, ~1.1 s short at 0.3 m/s); coasting after `StopMove` adds only 1–3° or 0.01 m. The cause is the acceleration ramp at the start of each `Move` sequence, so `LEAD_S` (walk 1.1 s, turn 0.2 s) is added to the commanded time. The budget's motion cost stays the commanded distance or angle; `duration_s` reports the longer time. A constant offset was chosen over a gain only as a single-parameter start: all data is at 90° and 1 m, so the two cannot be separated yet ([roadmap](../../docs/roadmap.md#open-questions)). Rejected for now: closed-loop control on yaw or position, pending the odometry question.
+- **A fixed lead time per motion skill compensates the start ramp.** In a supervised run, six `turn 90°` (1.6 s commanded) covered 72.6–81.0° by the robot's own `imu_rpy` yaw (mean ~78°, ~0.2 s short at 1 rad/s), and three `walk forward 1 m` (3.3 s commanded) covered 0.59–0.72 m by `position` (mean ~0.67 m, ~1.1 s short at 0.3 m/s); coasting after `StopMove` adds only 1–3° or 0.01 m. The cause is the acceleration ramp at the start of each `Move` sequence, so `LEAD_S` (walk 1.1 s, turn 0.2 s) is added to the commanded time. The budget's motion cost stays the commanded distance or angle; `duration_s` reports the longer time. A constant offset was chosen over a gain only as a single-parameter start: all data is at 90° and 1 m, so the two cannot be separated yet ([roadmap](../../docs/roadmap.md#open-questions)). Rejected for now: closed-loop control on yaw or position, pending the odometry accuracy check (checklist item 2).
 - **Translation is not estimated from commanded velocity.** Dead reckoning restates the walk skill's own open-loop assumption, so it is not a measurement. The robot's own measurement-based estimator is acceptable, with a drift tolerance, if it turns out usable. The stub's pose does integrate commanded velocity, but only as a simulation of that estimator for offline runs ([skills.md](skills.md#stub-backend)).
 
 ## Supervised robot checklist
 
 Run this on the lab machine with `robot.backend = "real"`, **in this order**, with the robot **standing**, the area clear and the remote (e-stop) in hand. Read [safety.md](../../docs/safety.md) first.
 
-Commands use `go2` with a real-backend config. Run a step as a one-step task, or run the skill by hand ([skills.md](skills.md#running-a-skill-by-hand)), whichever is easier to observe. The run log has every state sample and timing ([run-log.md](../../dispatcher/docs/run-log.md)).
+Commands use `go2` with a real-backend config. Run a step as a one-step task, or run the skill by hand ([skills.md](skills.md#running-a-skill-by-hand)), whichever is easier to observe. The run log has every state sample and timing ([run-log.md](../../dispatcher/docs/run-log.md)). State samples do not include `rt/lowstate`, `rt/utlidar/robot_odom` or `rt/utlidar/robot_pose`; read those with a separate DDS subscriber.
 
-1. `go2 state` returns within about 1 s. Record `mode`, `body_height` and `position` while standing.
-2. `walk` forward 0.5 m; `turn` left 90°. Check the distance and angle visually. Record `position` and `imu_rpy` from `state_before` / `state_after` in the run log (evidence for the odometry question).
+1. `go2 state` returns within about 1 s. Record `mode`, `body_height` and `position` while standing. Also record the joint angles (motor `q`) from `rt/lowstate` (fallback posture source).
+2. `walk` forward a measured 1 m; `turn` left 90°. Measure the walked distance on the floor (ground truth) and check the angle visually. Record `position` and `imu_rpy` from `state_before` / `state_after` in the run log, and `rt/utlidar/robot_odom` and `rt/utlidar/robot_pose` before and after the walk. Compare each position delta with ground truth (decides the odometry source, accuracy and drift).
 3. `stretch` from standing. Measure how long the routine takes (tunes `SETTLE_S` in `stretch.py`).
 4. `detect_object` with target `person`, with a person in view. Check position and closeness against what you see.
 5. Operator `stop` during a 3 m walk. **Measure** kill-to-stop latency: `stop_move.response.timing.stop_call_ms` from the run log, plus the observed time. Record it; there is no pass threshold.
 6. Step timeout during a walk: temporarily set the module constants `MOTION_BASE_S = 0` and `MOTION_FACTOR = 0.5` in `skills/motion.py` (they apply to `turn` too). The robot must stop and the step outcome must be `timeout`. Restore the values afterwards.
-7. `sit`. Measure how long `StandDown` takes (tunes `SETTLE_S` in `sit.py`). Then `go2 state`: record `mode` and `body_height` while sitting (decides the [posture rule](#posture-rule)).
+7. `sit`. Measure how long `StandDown` takes (tunes `SETTLE_S` in `sit.py`). Then `go2 state`: record `mode` and `body_height` while sitting, and the joint angles (motor `q`) from `rt/lowstate` (decides the [posture rule](#posture-rule)).
 8. `walk` while sitting. Record the SDK return code and what the robot does (answers `Move` while sitting).
 9. Stand the robot up with the remote.
 

@@ -39,7 +39,7 @@ Assuming no usable position estimate:
 | `walk` | no | needs a position estimate |
 | `detect_object` | trivially | self-reporting |
 
-**Dependency on odometry.** Whether the robot's own position estimate is usable is open ([pending work](#pending-human-work)). `SportModeState` has `position` and `velocity` fields, and Go2 topic lists include `rt/utlidar/robot_odom` and `rt/utlidar/robot_pose`. v1 already logs `position` and `velocity` from `rt/sportmodestate` in every state sample. If the estimate is usable, `walk` becomes verifiable (with a drift tolerance) and a geofence becomes possible. Keep this distinction:
+**Dependency on odometry.** The robot provides odometry relative to its power-on pose ([robot.md](../skills/docs/robot.md#open-robot-side-questions)). Which source carries it (`SportModeState.position` on `rt/sportmodestate`, or `rt/utlidar/robot_odom` / `rt/utlidar/robot_pose`) and its accuracy and drift are open ([pending work](#pending-human-work)). v1 already logs `position` and `velocity` from `rt/sportmodestate` in every state sample. If the estimate is accurate enough, `walk` becomes verifiable from the position delta over the step (with a drift tolerance; the power-on origin does not matter) and a geofence becomes possible. Keep this distinction:
 
 - the robot's **own measurement-based estimator** is acceptable as a verification source;
 - **dead reckoning from commanded velocity** is not, because it restates the walk skill's own assumption (walk is open-loop: it commands a speed for a time).
@@ -79,7 +79,9 @@ Not scheduled.
 - **Further granularity tiers** (medium, composite) as separate skill folders selected with `skills.dir`. This is the main study's manipulated variable, so it is needed before the participant study.
 - **Forward messages received during a run to the LLM.** Decide between letting the model update the plan in place (the dispatcher would need to support replacing a running plan) and limiting it to classifying the message as a stop or replying to the sender with text. In v1 only the stop word is recognised during a task; other messages get a busy reply.
 - **Prompt caching** for the static slots (tools, system text, catalog). Reduces cost, but cached tokens are reported separately and cache behaviour differs between skill sets of different sizes, so token comparisons would need uncached-equivalent reporting. The slot order already allows it.
-- **Geofence**, if a position source exists (see odometry above).
+- **Geofence**, if the odometry is accurate enough (see odometry above). At every session start the dispatcher records the start pose, and the fence is defined relative to it. Two limits:
+  - The fence is relative to the start pose, not to the room. A fence around fixed obstacles needs the robot started from a known spot.
+  - A robot reboot mid-session resets the odometry origin, so the start pose must be recorded again.
 - **Continuous monitoring during a skill**: a watchdog that can abort mid-motion rather than only between steps.
 - **Independent batch tasks.** `batch` carries the previous task and posture across lines; experiments may need a reset per task (for example an `--independent` flag).
 - **Send the optional `PLAN` message to the operator** as progress. Currently it is logged only.
@@ -107,7 +109,7 @@ Not scheduled.
 
 The gate for experiments with participants, collected from the sections above. Each item is specified where it is linked.
 
-1. Resolve the [pending human work](#pending-human-work) below (live API check, robot checklist, lab-machine install, Telegram test, odometry answer).
+1. Resolve the [pending human work](#pending-human-work) below (live API check, robot checklist, lab-machine install, Telegram test, odometry source and accuracy).
 2. Implement the [v2 plan](#v2-plan), including the stub upgrade.
 3. Build the medium and composite skill tiers ([future ideas](#future-ideas)); decide the `stand` skill and whether `batch` needs a per-task reset.
 4. Run phase one: characterise the system in simulation and from run logs ([project.md](project.md#study-design)); tune the starting values.
@@ -118,11 +120,11 @@ The gate for experiments with participants, collected from the sections above. E
 
 | Item | Owner / how |
 |---|---|
-| Is the robot's position estimate (odometry) available and usable? Decides `walk` verification and the geofence. | Ask Achiya |
+| Odometry: which source carries the robot's position estimate (`SportModeState.position`, `rt/utlidar/robot_odom` or `rt/utlidar/robot_pose`), and its accuracy and drift. Decides `walk` verification and the geofence. | Supervised robot checklist item 2 in [robot.md](../skills/docs/robot.md#supervised-robot-checklist) |
 | Live API check of the LLM request parameters (Sonnet 5.5, `between_tools`, auto tool choice). | `ANTHROPIC_API_KEY=... uv run pytest --run-live -s tests/integration/test_live_llm.py` ([testing.md](../tests/docs/testing.md#live-llm-test)) |
 | Live check of the OpenRouter request with a free model (function tool, forced `submit_plan` `tool_choice`, two-part system message, `finish_reason` and `usage` shape). | `OPENROUTER_API_KEY` in `.env`, `llm.provider = "openrouter"`, `llm.model = "<free model>"`, then one `go2 run` on the stub; inspect `logs/openrouter/stub/` |
 | Calibrate the detector closeness thresholds (`NEAR_MIN_H`, `MEDIUM_MIN_H` in `skills/vision.py`) on the robot. With the current values a 0.25 m bottle reads `near` only within about 0.2 m of the camera ([robot.md](../skills/docs/robot.md#object-detection)). | Supervised human check: bottle, chair and person at measured distances; record box height fractions in [robot.md](../skills/docs/robot.md) |
-| Supervised robot checklist: posture thresholds (`body_height` or `mode`), settle waits, what `Move` does while sitting, kill-to-stop latency. | Supervised run on the robot; record results in [robot.md](../skills/docs/robot.md) |
+| Supervised robot checklist: posture thresholds (`body_height` or `mode`, with `rt/lowstate` joint angles recorded as fallback), settle waits, what `Move` does while sitting, kill-to-stop latency. | Supervised run on the robot; record results in [robot.md](../skills/docs/robot.md) |
 | First run of the real backend; `uv sync --extra robot` on the lab machine; pin the Python patch version once it works (currently `>=3.10,<3.11`). | Lab machine setup ([setup.md](setup.md)) |
 | Manual Telegram test on a phone: busy reply and stop. Basic task and reply flow confirmed working. | Operator |
 | Analyse the old OpenClaw session logs: count compactions, retries and context size per call, to turn the measurement-validity argument ([architecture.md](architecture.md#why-a-purpose-built-dispatcher)) into data. | Obtain the logs from the predecessor's lab machine |
