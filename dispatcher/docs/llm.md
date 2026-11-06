@@ -20,7 +20,7 @@ An alternative LLM layer (Jev, a "TypeSafe AI" decision model) is under consider
 client = anthropic.Anthropic(api_key=api_key, max_retries=0)  # own retries, below
 client.with_options(timeout=min(llm.request_timeout_s, remaining_task_s)).messages.create(
     model=llm.model,  # "claude-sonnet-5-5"
-    max_tokens=llm.max_tokens,  # 2048
+    max_tokens=llm.max_tokens,  # 8192
     system=[{"type": "text", "text": system_text}, {"type": "text", "text": "## Skills\n" + catalog}],
     tools=[submit_plan_definition],  # the only tool; no "strict"
     tool_choice={"type": "auto"},
@@ -38,7 +38,7 @@ Nothing else is sent: no `temperature` or other sampling parameter, no `output_c
 ```json
 {
   "model": "<llm.model>",
-  "max_tokens": 2048,
+  "max_tokens": 8192,
   "messages": [
     {"role": "system", "content": [{"type": "text", "text": "<system_text>"}, {"type": "text", "text": "## Skills\n<catalog>"}]},
     {"role": "user", "content": "<user_message>"}
@@ -62,7 +62,7 @@ Sonnet 5.5 returns HTTP 400 for three things an earlier design relied on. A 400 
 
 **Thinking.** On Sonnet 5.5, `between_tools` is the lowest thinking setting: the model does no extended thinking; short progress notes it writes between tool calls may still come back as `thinking` blocks. Thinking cannot be switched off completely on Sonnet 5.5 (`disabled` is rejected), so "thinking off" means this lowest setting, not zero thinking output. Any such blocks are logged in `llm_response.content`; that their tokens are counted in `usage` is *unverified on the live API*. It is accepted only at effort `high` or below; we send no effort, so the model default (`high`) applies. It takes no other field inside `thinking`. The other allowed value, `llm.thinking = "adaptive"`, lets the model think and is meant only as a deliberate experimental condition; `thinking` is logged in every `index.jsonl` row. `between_tools` is accepted by Sonnet 5.5 only: to run another model, set `llm.thinking = "adaptive"` (which means thinking on) or change the code.
 
-**`max_tokens` 2048** is headroom against cut-off replies. It is only a ceiling: cost follows the tokens actually generated, and it affects measurements only if a reply would be cut off. A 5-step plan at `between_tools` needs far less. A reply cut off at the limit is invalid (below).
+**`max_tokens` 8192** (tunable), for every provider, is headroom against cut-off replies. It is only a ceiling: cost and latency follow the tokens actually generated, and it affects measurements only if a reply would be cut off. A 5-step plan at `between_tools` needs far less, but reasoning models can spend thousands of tokens reasoning before they write `submit_plan`. A reply cut off at the limit is invalid (below).
 
 ### Live-API verification status
 
@@ -118,7 +118,7 @@ The SDK's own retries are disabled (`max_retries=0`); `AnthropicPlanner` retries
 - **Forced `tool_choice` for OpenRouter only.** Free models often answer in plain text under `auto`, which costs a `no_tool_call` schema retry and free-tier quota; forcing `submit_plan` avoids that. The Anthropic request keeps `auto` (Sonnet 5.5 rejects a forced choice), so the research request and golden files are unchanged. The `no_tool_call` check stays, because a model or provider may ignore the forced choice. Rejected: `auto` for OpenRouter too, which mirrored Anthropic but wasted retries on free models.
 - **No `temperature`.** Not possible on Sonnet 5.5. The cost is non-deterministic planning; the study must account for run-to-run variation.
 - **Non-strict tool mode.** Strict mode cannot enforce `maxItems` or numeric ranges, and it injects an extra system prompt that distorts token counts. The dispatcher's own validation is the enforcer.
-- **`max_tokens` 2048** as headroom against cut-off replies; it does not affect cost or measurements unless a reply would be cut off.
+- **`max_tokens` 8192 for every provider.** At 2048, reasoning models on OpenRouter spent the whole cap on reasoning alone; each such call took 18–60 s and returned an invalid `max_tokens` reply. The value is only a ceiling, so replies that fit under 2048 are unchanged in cost and latency, and no Claude research runs used the old value. The cost: a runaway reply can run about 4× longer before it is cut off; the task time limit still bounds it. Rejected: raising it only for OpenRouter, which would give the providers different request parameters for no gain.
 - **The cut-off error advises briefer reasoning, not only a shorter plan.** A reasoning model can spend the whole output cap on reasoning before it writes the `submit_plan` call, so the retry message names the output limit and asks the model to reason more briefly and submit the plan sooner. Rejected: "keep the plan shorter", which blamed the plan when no plan had been written.
 - **Reject, never truncate, over-long plans**, with the rate logged and a rule for revisiting the choice (above). Truncation would run a plan the model never made and corrupt the data.
 - **Exactly one schema retry**, then `LLM_INVALID`: bounded cost, and a second invalid reply is itself a measurable outcome. Invalid replies are LLM calls but never failures.

@@ -7,7 +7,7 @@ condition = ""                      # free-text experiment label, copied into ta
 [llm]
 provider = "anthropic"              # "anthropic" | "openrouter"; key from .env: ANTHROPIC_API_KEY | OPENROUTER_API_KEY
 model = "claude-sonnet-5-5"         # (tunable); with openrouter, an OpenRouter model id (required)
-max_tokens = 2048
+max_tokens = 8192                   # ceiling only; cost follows tokens generated (tunable)
 thinking = "between_tools"          # "between_tools" (lowest thinking setting, Sonnet 5.5 only; not zero thinking) | "adaptive"; anthropic only
 request_timeout_s = 60.0            # cap per attempt (tunable)
 infra_backoff_s = [1.0, 4.0]        # sleep before retry 1, retry 2; one retry per value

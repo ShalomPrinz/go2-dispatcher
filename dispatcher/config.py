@@ -61,7 +61,7 @@ class RunConfig(_Section):
 class LLMConfig(_Section):
     provider: Provider = "anthropic"
     model: StrictStr = "claude-sonnet-5-5"  # (tunable)
-    max_tokens: StrictInt = Field(default=2048, ge=1)
+    max_tokens: StrictInt = Field(default=8192, ge=1)
     thinking: Literal["between_tools", "adaptive"] = "between_tools"  # anthropic only; ignored for openrouter
     request_timeout_s: FiniteFloat = Field(default=60.0, gt=0)  # (tunable)
     infra_backoff_s: list[FiniteFloat] = [1.0, 4.0]  # one sleep per retry; length = retry count

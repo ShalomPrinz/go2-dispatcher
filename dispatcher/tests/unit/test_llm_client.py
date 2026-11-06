@@ -105,7 +105,7 @@ def test_request_body(tmp_path):
     assert "temperature" not in json.dumps(body) and "extra_body" not in body
     cfg = make_config(tmp_path).llm  # the defaults (dispatcher/docs/llm.md)
     assert body["model"] == cfg.model == "claude-sonnet-5-5"
-    assert body["max_tokens"] == cfg.max_tokens == 2048
+    assert body["max_tokens"] == cfg.max_tokens == 8192
 
 
 def test_request_thinking_adaptive(tmp_path):

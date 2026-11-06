@@ -45,7 +45,7 @@ Types:
 |---|---|---|---|---|
 | `provider` | `"anthropic"` \| `"openrouter"` | `"anthropic"` | | Planner API ([llm.md](../dispatcher/docs/llm.md#provider-and-model)). Selects the API key (`ANTHROPIC_API_KEY` / `OPENROUTER_API_KEY`) and the log folder `{log.dir}/{provider}/{backend}/`. Logged in `task_start.config` and `index.jsonl`. |
 | `model` | str | `"claude-sonnet-5-5"` *tunable* | required when `provider = "openrouter"` | Anthropic model id, or with `openrouter` an OpenRouter model id (for example a `:free` model). Logged in `task_start.config` and `index.jsonl`. |
-| `max_tokens` | int | `2048` | ≥ 1 | `max_tokens` for each request. |
+| `max_tokens` | int | `8192` | ≥ 1 | `max_tokens` for each request. |
 | `thinking` | `"between_tools"` \| `"adaptive"` | `"between_tools"` | | Sent as `thinking={"type": ...}`. `between_tools` is the lowest setting (no extended thinking; [llm.md](../dispatcher/docs/llm.md#sonnet-55-parameter-constraints)); `adaptive` lets the model think (use it only as a deliberate experimental condition). Logged in `index.jsonl`. Anthropic only: ignored with `provider = "openrouter"` (not sent; `null` in `index.jsonl`). |
 | `request_timeout_s` | float | `60.0` *tunable* | > 0 | Upper limit for one HTTP attempt. Each attempt uses `min(request_timeout_s, remaining task time)`. |
 | `infra_backoff_s` | list of float | `[1.0, 4.0]` | each ≥ 0 | Retries after transport or overload errors: one retry per value, sleeping that many seconds before it (`[]` = no retries). Infra retries are not LLM calls. A `retry-after` header can raise a sleep, capped at 30 s. |
