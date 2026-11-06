@@ -31,7 +31,7 @@ This creates `.venv/` from `uv.lock`. Stub mode and the default tests need no SD
 
 ## Lab machine (real robot)
 
-**Unverified.** These steps have not yet been run on the lab machine; `uv sync --extra robot` has not been tried anywhere. Correct this section when it has been done.
+These steps have been run on the lab machine: `uv sync --extra robot --extra vision` installs both extras with Python 3.10.12, and the real backend has run on the robot from it ([robot.md](../skills/docs/robot.md)).
 
 ### 1. Robot and vision extras
 
@@ -122,7 +122,7 @@ uv run go2 --backend real state     # should return within about 1 s
 
 ## Design decisions
 
-- **Python 3.10 only.** `unitree_sdk2py` pins `cyclonedds==0.10.2`, which ships a prebuilt wheel only for Python 3.10 on x86-64; any other version needs a CycloneDDS C build on every machine. CI tests 3.10 only, so the tested version is the one the lab machine runs. Rejected: allowing 3.11 as well, which would add a CI job for a version the robot setup cannot use without that build. `tomli` covers TOML parsing on 3.10. Pin the patch version once the lab machine is set up ([roadmap.md](roadmap.md#pending-human-work)).
+- **Python 3.10 only.** `unitree_sdk2py` pins `cyclonedds==0.10.2`, which ships a prebuilt wheel only for Python 3.10 on x86-64; any other version needs a CycloneDDS C build on every machine. CI tests 3.10 only, so the tested version is the one the lab machine runs. Rejected: allowing 3.11 as well, which would add a CI job for a version the robot setup cannot use without that build. `tomli` covers TOML parsing on 3.10. The lab machine runs 3.10.12; pinning the patch version is pending ([roadmap.md](roadmap.md#pending-human-work)).
 - **The robot packages are a locked optional extra, not a manual install.** `uv lock` works with the `robot` extra on the development machine (WSL2, Python 3.10, no CycloneDDS installed): `unitree_sdk2py` resolves from git and its `cyclonedds` dependency from PyPI, so `uv.lock` pins the robot packages too and the lab machine installs from the same lock as everyone else. The worry was that locking would fail on machines without CycloneDDS; it did not. The manual install stays documented as a fallback for a machine where the extra cannot be resolved or built.
 - **`cyclonedds` is not listed in the `robot` extra.** The project never imports it; the SDK declares and pins it, and `uv.lock` records the version. Building the C library is a troubleshooting step, not a setup step, because the Python 3.10 x86-64 wheel needs none.
 - **`robot` and `vision` are optional extras**, so the core install, stub mode and the default tests need no SDK, CycloneDDS or vision libraries ([architecture.md](architecture.md#design-decisions)).

@@ -105,13 +105,16 @@ Not scheduled.
 | Is the horizon-rejection rate acceptable, or should long plans be handled differently? | Rejected, never truncated; rate logged ([llm.md](../dispatcher/docs/llm.md)) | Inspect the rate of `plan_invalid` with `rejection_kind == "horizon"` from runs |
 | Jev (a "TypeSafe AI" decision model) as an alternative LLM layer? The planner only needs decision making plus quantified parameters (for example "walk 3"). | Under consideration, not decided | Advisor and student |
 | Is the walk and turn shortfall a constant lead time or a gain? Every real run so far is `turn 90°` or `walk 1 m`, which cannot separate the two. Every walk also veers about 5–10° in heading. | Fixed `LEAD_S` per skill (walk 1.1 s, turn 0.2 s), open-loop, no heading correction ([robot.md](../skills/docs/robot.md#motion)) | User, with supervised runs at other angles and distances (e.g. 45° and 180°, 0.3 m and 2 m) |
+| Why do skill processes fail with `channel factory init error.`, most often `stop_move` (5 of 8 calls in the first supervised runs, so `StopMove` was never sent), and how did the robot come to rest in those cases? ([known issues](../skills/docs/robot.md#known-issues)) | The operator gets the stop-failed warning; no retry; the physical e-stop is the reliable stop ([safety.md](safety.md#the-stop-path)) | skills-dev investigates the SDK channel setup from the logs in `logs/openrouter/real/`; the user confirms a fix in a supervised run |
+| Why do `StopMove` (end of `turn`) and `GetImageSample` return 3104, and did the robot stop after the `StopMove` cases? ([known issues](../skills/docs/robot.md#known-issues)) | Reported as `sdk_error` / `camera_unavailable` | skills-dev investigates; the user observes the robot in a supervised run |
+| Why is a 90° `turn` sometimes killed by its step timeout at 12.36 s instead of finishing in 1.6–1.8 s? ([known issues](../skills/docs/robot.md#known-issues)) | Outcome `timeout`, then a replan | skills-dev investigates from the logs; the user reproduces in a supervised run |
 | Every starting value: budgets, limits, timeouts, parameter ranges, settle waits, posture thresholds. | Marked *tunable* in [configuration.md](configuration.md) and the topic docs | Tune from logs and robot runs |
 
 ## Before experiments
 
 The gate for experiments with participants, collected from the sections above. Each item is specified where it is linked.
 
-1. Resolve the [pending human work](#pending-human-work) below (live API check, robot checklist, lab-machine install, Telegram test, odometry source and accuracy).
+1. Resolve the [pending human work](#pending-human-work) below (live API check, robot checklist, Python pin, Telegram test, odometry source and accuracy).
 2. Implement the [v2 plan](#v2-plan), including the stub upgrade.
 3. Build the medium and composite skill tiers ([future ideas](#future-ideas)); decide the `stand` skill and whether `batch` needs a per-task reset.
 4. Run phase one: characterise the system in simulation and from run logs ([project.md](project.md#study-design)); tune the starting values.
@@ -124,10 +127,9 @@ The gate for experiments with participants, collected from the sections above. E
 |---|---|
 | Odometry: which source carries the robot's position estimate (`SportModeState.position`, `rt/utlidar/robot_odom` or `rt/utlidar/robot_pose`), and its accuracy and drift. Decides `walk` verification and the geofence. | Supervised robot checklist item 2 in [robot.md](../skills/docs/robot.md#supervised-robot-checklist) |
 | Live API check of the LLM request parameters (Sonnet 5.5, `between_tools`, auto tool choice). | `ANTHROPIC_API_KEY=... uv run pytest --run-live -s tests/integration/test_live_llm.py` ([testing.md](../tests/docs/testing.md#live-llm-test)) |
-| Live check of the OpenRouter request with a free model (function tool, forced `submit_plan` `tool_choice`, two-part system message, `finish_reason` and `usage` shape). | `OPENROUTER_API_KEY` in `.env`, `llm.provider = "openrouter"`, `llm.model = "<free model>"`, then one `go2 run` on the stub; inspect `logs/openrouter/stub/` |
 | Calibrate the detector closeness thresholds (`NEAR_MIN_H`, `MEDIUM_MIN_H` in `skills/vision.py`) on the robot. With the current values a 0.25 m bottle reads `near` only within about 0.2 m of the camera ([robot.md](../skills/docs/robot.md#object-detection)). | Supervised human check: bottle, chair and person at measured distances; record box height fractions in [robot.md](../skills/docs/robot.md) |
 | Supervised robot checklist: posture thresholds (`body_height` or `mode`, with `rt/lowstate` joint angles recorded as fallback), settle waits, what `Move` does while sitting, kill-to-stop latency. | Supervised run on the robot; record results in [robot.md](../skills/docs/robot.md) |
-| First run of the real backend; `uv sync --extra robot` on the lab machine; pin the Python patch version once it works (currently `>=3.10,<3.11`). | Lab machine setup ([setup.md](setup.md)) |
+| Pin the Python patch version the real backend runs with (currently `>=3.10,<3.11`). | Lab machine setup ([setup.md](setup.md)) |
 | Manual Telegram test on a phone: busy reply and stop. Basic task and reply flow confirmed working. | Operator |
 | Analyse the old OpenClaw session logs: count compactions, retries and context size per call, to turn the measurement-validity argument ([architecture.md](architecture.md#why-a-purpose-built-dispatcher)) into data. | Obtain the logs from the predecessor's lab machine |
 | Choose the onboard computer that runs the whole system on the robot ([architecture.md](architecture.md#design-decisions)) and have it ordered. | The student chooses; the advisor orders through university purchasing |

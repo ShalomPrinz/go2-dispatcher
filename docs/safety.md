@@ -5,7 +5,7 @@ Everything that limits or stops the robot. The dispatcher bounds what the LLM ca
 ## Supervised-operation rules
 
 - Run the real robot only under supervision, with the remote (e-stop) in hand and a clear area around the robot. This holds for both planner providers: `llm.provider = "openrouter"` with `robot.backend = "real"` is allowed and follows exactly these rules; a free or untested model is no reason to relax them, since every safety limit below is enforced by the dispatcher whatever the model plans.
-- Before the first real run on a machine, work through the robot checklist in [robot.md](../skills/docs/robot.md), in order. The real backend has never been run.
+- Before the first real run on a machine, work through the robot checklist in [robot.md](../skills/docs/robot.md), in order. The real backend has run on the robot under supervision with the normal CLI; checklist items 1 (standing posture; sitting not yet measured) and 5 (stop latency, from successful stops only) are partly measured, and the other items are still open ([roadmap.md](roadmap.md#pending-human-work)).
 - Keep one dispatcher per robot. The lock ([below](#single-instance-lock)) prevents a second process on the same `log.dir`, not one on another machine or with another `log.dir`.
 - When the system runs on the computer mounted on the robot, keep a physical stop within reach at all times: the robot's own remote or a separate stop button. The dispatcher's stop arrives over Wi-Fi; if the Wi-Fi drops, `stop` no longer reaches it.
 - After a `sit`, stand the robot up with the remote: no skill can stand it up ([robot.md](../skills/docs/robot.md)).
@@ -30,7 +30,7 @@ All stops use one path: **kill the running skill process group, then send `StopM
 Details:
 
 - Each skill runs in its own session; the kill is `SIGKILL` to the whole process group. The executor checks for process exit and sends the kill under one lock, so a reused PID is never signalled. The first kill cause wins.
-- `StopMove` runs as `python -m skills.stop_move '{}'` in a new process. A fresh process gets a clean DDS channel (the SDK uses a process-wide singleton). It is never registered as the current process, so a stop can never kill it. It waits up to its `POLICY` timeout (12 s, [skills.md](../skills/docs/skills.md)) and is not retried. It sends `StopMove` even if its params are invalid, then waits ([settle waits](../skills/docs/robot.md#settle-waits)) and samples the state. `Executor.stop_move()` never raises: if the process cannot even be started, it returns a failed result, so the operator still gets the warning.
+- `StopMove` runs as `python -m skills.stop_move '{}'` in a new process. A fresh process is meant to get a clean DDS channel (the SDK uses a process-wide singleton). The first supervised runs contradict this: 5 of 8 `stop_move` calls failed at channel initialisation and never sent `StopMove` ([known issues](../skills/docs/robot.md#known-issues), [roadmap.md](roadmap.md#open-questions)). Until the cause is known, treat the software stop as unreliable: the physical e-stop is the reliable stop. It is never registered as the current process, so a stop can never kill it. It waits up to its `POLICY` timeout (12 s, [skills.md](../skills/docs/skills.md)) and is not retried. It sends `StopMove` even if its params are invalid, then waits ([settle waits](../skills/docs/robot.md#settle-waits)) and samples the state. `Executor.stop_move()` never raises: if the process cannot even be started, it returns a failed result, so the operator still gets the warning.
 - If a stop, the time limit or shutdown kills a running step, the executor sends `StopMove` right after the kill, and that is the only one: the task then ends without a second, end-of-task `StopMove`. How the posture is updated: [loop-and-context.md](../dispatcher/docs/loop-and-context.md#user-message).
 - If a stop or the time limit arrives while **no** step runs (during an LLM call or between steps), the dispatcher still sends `StopMove` when the task ends. This is idempotent.
 - `StopMove` is not sent after a step that ends normally: walk and turn already end with `StopMove()`.
@@ -47,7 +47,7 @@ A SIGKILL runs no cleanup, so the killed skill cannot send `StopMove()` itself. 
 
 ### Measured latency
 
-`stop_move` records `timing.stop_call_ms` ([skills.md](../skills/docs/skills.md#response-schema)). Kill-to-stop latency = executor kill + process start + `stop_call_ms`. There is no required number; the real value is **unverified on the robot** and is measured by the robot checklist ([robot.md](../skills/docs/robot.md)).
+`stop_move` records `timing.stop_call_ms` ([skills.md](../skills/docs/skills.md#response-schema)). Kill-to-stop latency = executor kill + process start + `stop_call_ms`. There is no required number. On the robot, successful stops measured `stop_call_ms` 891–900 ms and `total_ms` 1404–1428 ms (3 of 8 calls); the other calls failed ([robot.md results](../skills/docs/robot.md#results), row 5, and [known issues](../skills/docs/robot.md#known-issues)).
 
 ## Busy-reject
 

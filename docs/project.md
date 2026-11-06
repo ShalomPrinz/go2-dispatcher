@@ -70,7 +70,7 @@ OpenClaw (the runtime the predecessor used) is included as a **system-level** ba
 ## Current status
 
 - **v1 is implemented** and tested against the stub backend: the dispatcher loop, five skills, the stop path and limits, CLI and Telegram transports, and the run log.
-- **The real backend has never been run on the robot.** Robot-side values (posture thresholds, settle waits, stop latency, `Move` while sitting) are unverified; the supervised checklist in [robot.md](../skills/docs/robot.md) resolves them.
-- **The LLM request has not been verified against the live API** (Sonnet 5.5 with `thinking: between_tools` and auto tool choice). See [llm.md](../dispatcher/docs/llm.md).
+- **The real backend has run on the robot** in supervised runs with OpenRouter free models (logs in `logs/openrouter/real/`). Robot-side values not yet measured by a run stay open in the supervised checklist in [robot.md](../skills/docs/robot.md).
+- **The Claude request has not been verified against the live API** (Sonnet 5.5 with `thinking: between_tools` and auto tool choice); the OpenRouter request has. See [llm.md](../dispatcher/docs/llm.md).
 - All numeric limits are starting values to be tuned from logs and robot runs.
 - Next: latency, measured with Claude; then the v2 verification layer and experiment design. See [roadmap.md](roadmap.md).

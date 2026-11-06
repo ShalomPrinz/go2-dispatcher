@@ -2,7 +2,7 @@
 
 The Go2 EDU side of the system: what the code assumes about the robot, how it talks to it through the Unitree SDK over DDS, how state is sampled and turned into a posture, and the supervised checklist that verifies all of this on the robot. The skill contract (invocation, response schema, error codes, policies, stub backend) is in [skills.md](skills.md); stopping the robot is in [safety.md](../../docs/safety.md); installing the SDK is in [setup.md](../../docs/setup.md).
 
-**Status: the real backend has never been run on the robot.** Everything on this page that depends on the robot's behaviour is *unverified* until the [checklist](#supervised-robot-checklist) has been worked through.
+**Status: the real backend has run on the robot under supervision** (26 tasks on 2026-10-29, normal CLI from the lab machine). The [checklist](#supervised-robot-checklist) is partly worked through: the [results](#results) table lists what was measured and the [known issues](#known-issues) what failed. Everything else on this page that depends on the robot's behaviour stays *unverified*.
 
 ## Robot facts
 
@@ -98,7 +98,7 @@ The list of open questions with owners is in [roadmap.md](../../docs/roadmap.md#
 - **No skill can stand the robot up.** After `sit`, motion fails until a person stands the robot up with the remote; in a batch run one `sit` affects every later task. On the stub, `go2 --reset-stub` restores the posture. A `stand` skill (`StandUp()` then `BalanceStand()`, with a settle wait) is recommended before experiments ([skills.md](skills.md#adding-a-new-skill)).
 - **`Move` while sitting.** v1 treats a non-zero return code as `sdk_error` (the stub returns 1). If the real robot silently ignores `Move` and returns 0, `walk` and `turn` report `ok` while nothing moved. Checklist item 8 finds out.
 - **Kill-to-stop latency** and whether the sport service stops by itself when `Move` commands stop arriving: [safety.md](../../docs/safety.md#between-kill-and-stopmove). Checklist item 5 measures the latency.
-- **Installing the `robot` extra on the lab machine** (CycloneDDS build) and the Python version to pin: [setup.md](../../docs/setup.md#lab-machine-real-robot).
+- **The Python patch version to pin** for the real backend (the lab machine runs 3.10.12): [setup.md](../../docs/setup.md#lab-machine-real-robot).
 
 ## Design decisions
 
@@ -130,12 +130,21 @@ Record each result here: date, measured value or observation, and what was chang
 
 | # | Date | Result / value | Follow-up |
 |---|---|---|---|
-| 1 | | | |
+| 1 | 2026-10-29 | Standing: `body_height` 0.297–0.324 m, `mode` 0, over 109 state samples; all derived `standing`. `go2 state` time, `position` and motor `q` not recorded. | Sitting values (item 7) still needed before the thresholds can be set. |
 | 2 | | | |
 | 3 | | | |
 | 4 | | | |
-| 5 | | | |
+| 5 | 2026-10-29 | Successful `stop_move` (3 of 8 calls; 1 operator stop, 2 step timeouts): `stop_call_ms` 891–900 ms, `total_ms` 1404–1428 ms (includes the 0.5 s settle wait and the state sample). Observed time not recorded. | The other 5 calls failed ([known issues](#known-issues)). |
 | 6 | | | |
 | 7 | | | |
 | 8 | | | |
 | 9 | | | |
+
+### Known issues
+
+Failures seen in the supervised runs of 2026-10-29. Causes are not yet known; no code was changed because of them.
+
+- **`stop_move` fails with `Exception: channel factory init error.`** in 5 of 8 calls (reasons: operator 3, step timeout 1, task time limit 1), about 0.13–0.22 s after it starts, so `StopMove()` is never sent. `walk` (once) and `detect_object` (twice) hit the same error. Open: the cause, and how the robot came to rest in those cases ([safety.md](../../docs/safety.md)).
+- **`StopMove returned 3104`** at the end of 4 `turn` calls (`sdk_error`). Each took about 6.6–6.8 s, i.e. the turn plus the 5 s `SPORT_CLIENT_TIMEOUT_S`, so the reply to `StopMove` did not arrive in time. Open: whether the robot stopped, and why the reply was missing.
+- **`GetImageSample returned 3104`** in 2 `detect_object` calls (`camera_unavailable`).
+- **`turn` 90° killed by its step timeout** 3 times, at 12.36 s, where a successful 90° turn takes 1.6–1.8 s. Open: cause.

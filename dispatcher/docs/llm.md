@@ -66,7 +66,9 @@ Sonnet 5.5 returns HTTP 400 for three things an earlier design relied on. A 400 
 
 ### Live-API verification status
 
-**Unverified.** No request has yet been sent to the live API with these parameters. In particular it has not been confirmed that Sonnet 5.5 accepts `between_tools` together with auto `tool_choice` and a tool definition. The parameter facts above come from Anthropic's documentation ([references.md](../../docs/references.md#llm)). The OpenRouter request is equally unverified on the live API. To verify, run the live test with an API key ([testing.md](../../tests/docs/testing.md)); it is tracked in [roadmap.md](../../docs/roadmap.md#pending-human-work).
+**Anthropic: unverified.** No request has yet been sent to the live Anthropic API with these parameters. In particular it has not been confirmed that Sonnet 5.5 accepts `between_tools` together with auto `tool_choice` and a tool definition. The parameter facts above come from Anthropic's documentation ([references.md](../../docs/references.md#llm)). To verify, run the live test with an API key ([testing.md](../../tests/docs/testing.md)); it is tracked in [roadmap.md](../../docs/roadmap.md#pending-human-work).
+
+**OpenRouter: verified** on the live API with several free models (`logs/openrouter/real/`). The request above (function tool, forced `submit_plan` `tool_choice`, two-part system message) is accepted; replies come back with `finish_reason` `tool_calls` (or `length` when cut off) and a `usage` object carrying `prompt_tokens` and `completion_tokens`, as [Response handling](#response-handling) expects. Free-tier models also return HTTP 429, 403 and 404 for some model ids; these go through the [retry rules](#infrastructure-retries).
 
 ## Response handling
 
