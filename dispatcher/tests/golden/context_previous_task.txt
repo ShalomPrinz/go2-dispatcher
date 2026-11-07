@@ -6,6 +6,7 @@ Last step: sit() -> ok
 
 ## Robot
 Posture: sitting
+Obstacles (m): unavailable
 
 ## Task
 Walk forward, then  find the chair

@@ -34,6 +34,9 @@ __all__ = [
     "OMITTED_ENTRIES",
     "PREVIOUS_TASK_TEMPLATE",
     "POSTURE_TEMPLATE",
+    "OBSTACLES_TEMPLATE",
+    "OBSTACLES_UNAVAILABLE",
+    "NO_READING",
     "BUDGET_TEMPLATE",
     "NOTICES",
     "notice",
@@ -97,12 +100,13 @@ __all__ = [
 
 # --- System (S1, S2), dispatcher/docs/loop-and-context.md ---------------------------------------------------
 
+# the obstacle margin (0.3 m) in the text is a starting value (tunable) (dispatcher/docs/loop-and-context.md)
 SYSTEM_TEMPLATE = """\
 You plan actions for a Unitree Go2 quadruped robot. An operator gives you a task in natural language. You answer by calling the submit_plan tool exactly once.
 
 How the loop works:
 - You return a plan: an ordered list of skill calls. The system runs the steps in order and then calls you again with the results.
-- Each call is independent. Everything you know is in the message: the previous task, the robot's posture, the task, the remaining budget, the steps already executed, and any steps left over from your previous plan.
+- Each call is independent. Everything you know is in the message: the previous task, the robot's posture and obstacle distances, the task, the remaining budget, the steps already executed, and any steps left over from your previous plan.
 - A new plan replaces any previous plan. Steps listed under "Remaining plan" do not run unless you include them again.
 
 Rules:
@@ -114,7 +118,14 @@ Rules:
 - A message that is not a robot task (a greeting, small talk, a general question): status DONE. No steps. message: one sentence that replies and says what the robot can do.
 - replan_after N: stop after step N and call you again before running the rest. Use it when later steps depend on what earlier steps find. Omit it to run the whole plan.
 - If a step fails, the rest of that plan is abandoned and you are called again with the failure.
-- The motion budget limits total travel and total rotation for this task. A plan that would exceed it is rejected before any step runs."""
+- The motion budget limits total travel and total rotation for this task. A plan that would exceed it is rejected before any step runs.
+
+Obstacle distances:
+- The Robot section gives the distance in metres to the nearest obstacle in front of, behind, left of and right of the robot, measured when the robot state was last read. "no reading" means the sensor reported nothing in that direction; "unavailable" means no distances are known.
+- The values are a snapshot. Any walk or turn makes them stale. To use distances after a walk or turn, set replan_after to that step and plan the rest with the new values.
+- A value is the nearest thing the sensor detected in that direction. It does not prove that the path of a walk is clear and does not say what the object is. The sensor misses glass, thin objects and low objects. "no reading" and "unavailable" do not mean the way is clear. The values are not a safety stop.
+- Never plan a walk farther than the distance in its direction (forward: front, backward: back, left: left, right: right) minus 0.3 m. If the task needs more, walk the shorter distance and say why in message, or return ABORT with a message that explains or asks the operator.
+- For tasks that ask about distances, such as "walk to the wall" or "how far is the nearest thing", use the values directly."""
 
 SKILLS_HEADER = "## Skills\n"
 
@@ -146,6 +157,9 @@ OMITTED_ENTRIES = "({n} earlier entries omitted)"
 
 PREVIOUS_TASK_TEMPLATE = "Task: {task}\nOutcome: {outcome}\nMessage: {message}\nLast step: {last_step}"
 POSTURE_TEMPLATE = "Posture: {posture}"
+OBSTACLES_TEMPLATE = "Obstacles (m): front {front}, back {back}, left {left}, right {right}"
+OBSTACLES_UNAVAILABLE = "Obstacles (m): unavailable"
+NO_READING = "no reading"
 BUDGET_TEMPLATE = (
     "Travel: {travel_used} of {travel_max} m used\n"
     "Rotation: {rotation_used} of {rotation_max} deg used\n"

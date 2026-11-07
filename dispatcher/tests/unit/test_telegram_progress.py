@@ -15,6 +15,7 @@ from dispatcher.dispatcher import Dispatcher
 from dispatcher.models import Plan, PlanStep
 from dispatcher.registry import Registry
 from dispatcher.tests.helpers import FakeExecutor, ScriptedPlanner, exec_result, fake_context, make_config, replies
+from dispatcher.tests.helpers.fakes import state
 from dispatcher.transports.telegram_bot import on_text
 from dispatcher.transports.telegram_progress import TelegramProgress
 from tests.helpers import REPO_ROOT
@@ -42,7 +43,7 @@ def make_dispatcher(cfg, registry, progress):
     surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
     planner = ScriptedPlanner([Plan(status="PLAN", steps=[turn]), Plan(status="DONE", message="Turned left.")], surface)
     executor = FakeExecutor([exec_result("ok", skill="turn")])
-    return Dispatcher(cfg, registry, planner, executor, initial_posture="standing", observer=progress)
+    return Dispatcher(cfg, registry, planner, executor, initial_state=state("standing"), observer=progress)
 
 
 def test_edits_are_coalesced(registry):

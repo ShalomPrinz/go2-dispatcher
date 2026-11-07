@@ -53,7 +53,7 @@ Robot state is sampled:
 
 - at the start and end of every skill call (`state_before`, `state_after`);
 - by the `stop_move` utility after `StopMove()` and its [settle wait](#settle-waits) (`state_after`);
-- by the `read_state` utility: `go2 state`, and at startup on the real backend to set the initial posture (`unknown` if it fails).
+- by the `read_state` utility: `go2 state`, and at startup on either backend to set the dispatcher's initial state, posture and obstacle distances included (no state, posture `unknown`, if it fails).
 
 **How.** On the first sample in a process, the backend subscribes to `rt/sportmodestate`. A sample waits up to `STATE_WAIT_S` for a message that arrived *after* the sample was requested; if none arrives, it uses the latest earlier message; if there is none at all, the sample fails. A failed sample does not fail the step: it is reported in `state_error` and the state is `null` ([skills.md](skills.md#response-schema)).
 
@@ -76,15 +76,15 @@ Robot state is sampled:
 
 numpy and ctypes values are converted to plain numbers. A missing attribute or a non-finite value becomes `null`; a list field other than `range_obstacle_raw` becomes `null` as a whole if any element is bad or its length is wrong.
 
-**Obstacle distances are *unverified*.** Unitree documents neither the units, the index order nor when firmware fills `range_obstacle` (the SDK IDL and `unitree_ros2`'s `SportModeState.msg` declare only `float32[4] range_obstacle`, without a comment; no SDK example or community code found reads it). The code assumes metres and the index order `RANGE_OBSTACLE_ORDER` = front, back, left, right, a convention, not a sourced fact. The firmware may fill it only with the robot's own obstacle avoidance on, and may report 0 or a large value for "nothing seen". Checklist item 10 settles all of this; until then `obstacle_m` must not be trusted without `range_obstacle_raw` beside it.
+**Obstacle distances are *unverified*.** Unitree documents neither the units, the index order nor when firmware fills `range_obstacle` (the SDK IDL and `unitree_ros2`'s `SportModeState.msg` declare only `float32[4] range_obstacle`, without a comment; no SDK example or community code found reads it). The code assumes metres and the index order `RANGE_OBSTACLE_ORDER` = front, back, left, right, a convention, not a sourced fact. The firmware may fill it only with the robot's own obstacle avoidance on, and may report 0 or a large value for "nothing seen". Checklist item 10 settles all of this; until then the model uses `obstacle_m` alone, on the assumption that the field works, and `range_obstacle_raw` stays log-only so a supervised run can verify it.
 
-State is **logged only** in v1. No step gets a verdict from it; the model sees only the derived posture. The samples are the data from which v2 verification thresholds will be set ([roadmap.md](../../docs/roadmap.md#v2-plan)).
+State is **logged only** in v1. No step gets a verdict from it; the model sees only the derived posture and `obstacle_m` ([loop-and-context.md](../../dispatcher/docs/loop-and-context.md#user-message)). The samples are the data from which v2 verification thresholds will be set ([roadmap.md](../../docs/roadmap.md#v2-plan)).
 
 ## Posture rule
 
 `derive_posture(body_height, mode)` in `skills/real.py` is the only place posture is derived from a state sample; the stub stores posture directly in its state file. `body_height` below `POSTURE_SITTING_MAX_M` is `sitting`, at or above `POSTURE_STANDING_MIN_M` is `standing`; in between or `null` is `unknown`.
 
-`mode` is passed in but not used yet, so the rule can switch to `mode` after the checklist without touching any caller. Both thresholds are *tunable* and *unverified*; checklist items 1 and 7 decide them. If neither `body_height` nor `mode` separates sitting from standing, joint angles from `rt/lowstate` (motor `q`) are the fallback source (*unverified*). How posture is carried through a task and shown to the model: [loop-and-context.md](../../dispatcher/docs/loop-and-context.md#user-message).
+`mode` is passed in but not used yet, so the rule can switch to `mode` after the checklist without touching any caller. Both thresholds are *tunable* and *unverified*; checklist items 1 and 7 decide them. If neither `body_height` nor `mode` separates sitting from standing, joint angles from `rt/lowstate` (motor `q`) are the fallback source (*unverified*). How posture and obstacle distances are carried through a task and shown to the model: [loop-and-context.md](../../dispatcher/docs/loop-and-context.md#user-message).
 
 ## Settle waits
 

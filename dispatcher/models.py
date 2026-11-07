@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr, model_validato
 from skills.policy import MotionCost
 
 # the response schema is owned by skills and re-exported here (skills/docs/skills.md)
+from skills.schema import ObstacleDistances as ObstacleDistances
 from skills.schema import Posture as Posture
 from skills.schema import RobotState as RobotState
 from skills.schema import SkillError as SkillError

@@ -12,7 +12,16 @@ from dispatcher import prompts
 from dispatcher.context import PromptSurface
 from dispatcher.dispatcher import Dispatcher
 from dispatcher.executor import STDERR_TAIL_CHARS
-from dispatcher.models import BusyError, LLMInterrupted, LLMUnavailable, Plan, PlanStep, Posture, StopCause
+from dispatcher.models import (
+    BusyError,
+    LLMInterrupted,
+    LLMUnavailable,
+    ObstacleDistances,
+    Plan,
+    PlanStep,
+    Posture,
+    StopCause,
+)
 from dispatcher.registry import Registry
 from dispatcher.runlog import RunLog, RunLogFactory
 from dispatcher.tests.helpers import (
@@ -23,6 +32,7 @@ from dispatcher.tests.helpers import (
     make_config,
     stop_move_result,
 )
+from dispatcher.tests.helpers.fakes import state
 from tests.helpers import REPO_ROOT
 
 WAIT_S = 5.0
@@ -77,7 +87,7 @@ class Rig:
             self.planner,
             self.executor,
             clock=self.clock.now,
-            initial_posture=posture,
+            initial_state=state(posture),
         )
 
     def run(self, task="do the thing"):
@@ -450,20 +460,22 @@ def test_previous_task(tmp_path, registry):
     assert r.d.previous.task == "second task"
 
 
-def test_posture(tmp_path, registry):
+def test_robot_state(tmp_path, registry):
     sit = PlanStep(skill="sit", params={})
     timeout = exec_result("timeout", stop_move=stop_move_result(StopCause.STEP_TIMEOUT))
+    near = ObstacleDistances(front=0.4)
     r = Rig(
         tmp_path,
         registry,
         [plan(sit), done(), plan(walk()), done()],
-        [exec_result(skill="sit", posture="sitting"), timeout],
+        [exec_result(skill="sit", posture="sitting", obstacle_m=near), timeout],
     )
     r.run("sit down")
-    assert "Posture: sitting" in r.user(1)
+    assert "Posture: standing\nObstacles (m): unavailable" in r.user(0)
+    assert "Posture: sitting\nObstacles (m): front 0.4, back no reading" in r.user(1)  # the step's state_after
     r.run("walk")
-    assert "Posture: sitting" in r.user(2)
-    assert "Posture: unknown" in r.user(3)
+    assert "Posture: sitting\nObstacles (m): front 0.4," in r.user(2)
+    assert "Posture: unknown\nObstacles (m): unavailable" in r.user(3)  # killed step without state_after
     assert r.d.posture == "unknown"
 
 

@@ -48,6 +48,7 @@ TEXT_ARGS: dict[str, dict[str, object]] = {
     "OMITTED_ENTRIES": {"n": 3},
     "PREVIOUS_TASK_TEMPLATE": {"task": "sit", "outcome": "DONE", "message": "Sitting.", "last_step": "sit: ok"},
     "POSTURE_TEMPLATE": {"posture": "standing"},
+    "OBSTACLES_TEMPLATE": {"front": 1.2, "back": "no reading", "left": 0.6, "right": "no reading"},
     "BUDGET_TEMPLATE": {
         **{"travel_used": 0.5, "travel_max": 5.0, "rotation_used": 90, "rotation_max": 720},
         **{"failures": 1, "max_failures": 3, "calls_made": 2, "max_llm_calls": 20},

@@ -15,7 +15,7 @@ from dispatcher.transports import (
     MISSING_API_KEY,
     TEST_PLANNER_ENV,
     cli,
-    initial_posture,
+    initial_state,
     make_planner,
 )
 from tests.helpers import REPO_ROOT
@@ -57,13 +57,14 @@ def test_entry_point_prints_startup_error_and_returns_2(tmp_path, capsys, argv):
 
 
 def test_failed_state_read_is_unknown_with_warning(capsys):
-    assert initial_posture(FakeExecutor()) == "unknown"
+    assert initial_state(FakeExecutor()) is None
     assert "Warning" in capsys.readouterr().err
 
 
-def test_posture_comes_from_state_read():
+def test_state_comes_from_state_read():
     class SittingExecutor(FakeExecutor):
         def read_state(self) -> RobotState | None:
             return state("sitting")
 
-    assert initial_posture(SittingExecutor()) == "sitting"
+    s = initial_state(SittingExecutor())
+    assert s is not None and s.posture == "sitting"

@@ -82,7 +82,7 @@ walk forward one metre, then tell me if you see a person
 sit down
 ```
 
-Tasks run one after another in one process. The previous task's summary and the robot posture **carry over** from line to line, as they do between Telegram messages. One `sit` affects every later task, because no skill can stand the robot up ([robot.md](../skills/docs/robot.md#open-robot-side-questions)). A reset per task is a future idea ([roadmap.md](roadmap.md#future-ideas)).
+Tasks run one after another in one process. The previous task's summary and the last robot state (posture and obstacle distances) **carry over** from line to line, as they do between Telegram messages. One `sit` affects every later task, because no skill can stand the robot up ([robot.md](../skills/docs/robot.md#open-robot-side-questions)). A reset per task is a future idea ([roadmap.md](roadmap.md#future-ideas)).
 
 ## Telegram bot
 
@@ -173,12 +173,12 @@ The first line is `{OUTCOME}: {message}`. `Steps:` counts dispatched steps and f
 | Motion | none; the stub keeps standing/sitting and an odometry pose integrated from `Move` in `stub.state_file` ([skills.md](../skills/docs/skills.md#stub-backend)) | real SDK calls ([robot.md](../skills/docs/robot.md)) |
 | Durations | real durations × `stub.time_scale` | real time |
 | `detect_object` | projects the objects in `stub.objects` from the current pose through a simulated camera ([skills.md](../skills/docs/skills.md#stub-backend)) | front camera + YOLO |
-| Startup posture | reset to `stub.initial_posture`, then read with `read_state` (`unknown` if that fails) | read with `read_state` (`unknown` if that fails) |
+| Startup state | reset to `stub.initial_posture`, then read with `read_state` (unknown if that fails) | read with `read_state` (unknown if that fails) |
 | Faults | `stub.faults` / `--fault` | not allowed (config error) |
 
 The stub replaces only the SDK layer inside the skill process. Processes, timeouts, kills and StopMove run for real.
 
-`go2 --reset-stub` puts the stub back in `stub.initial_posture`. Use it after a `sit`, because there is no `stand` skill. `run`, `batch` and `go2 bot` reset the stub once at startup (through `skills.stub.reset`), then take the start-up posture from the `read_state` utility as on the real robot. If that read fails, they print `Warning: robot state unavailable; posture unknown.` to stderr and start with posture `unknown`. The stub is not reset between tasks.
+`go2 --reset-stub` puts the stub back in `stub.initial_posture`. Use it after a `sit`, because there is no `stand` skill. `run`, `batch` and `go2 bot` reset the stub once at startup (through `skills.stub.reset`), then take the start-up state (posture and obstacle distances) from the `read_state` utility as on the real robot. If that read fails, they print `Warning: robot state unavailable; posture unknown.` to stderr and start with posture `unknown` and obstacle distances unavailable. The stub is not reset between tasks.
 
 ## Vision service
 
@@ -229,5 +229,5 @@ and exit code 2. This stops two processes from driving one robot, overwriting th
 - **The vision client is recognised by its entrypoint module (`skills.detect_object`), not by its catalog name**, so a skill set that renames the skill still gets the service. Rejected: a `SkillPolicy` flag, which would change the skills contract for one skill.
 - **The service log is one file under `log.dir`, next to the run logs, emptied per dispatcher process.** It is for diagnosing a failed start or a crash, not study data, so it stays out of the provider/backend folders. The lifecycle events go into the same file rather than the run log, because the run log has no record type for them and its records are the study's contract ([run-log.md](../dispatcher/docs/run-log.md)). Rejected: an unread pipe (the service blocks once it fills); inheriting the dispatcher's stderr (YOLO and SDK output would interleave with the CLI trace).
 - **Long polling**, so the bot needs no public address on the lab network.
-- **Start-up posture comes from `read_state` on both backends**, and the dispatcher changes stub state only through `skills.stub.reset`. Reading the stub state file directly was rejected: it couples the dispatcher to stub internals (file path and format). The cost is one utility subprocess at stub start-up.
+- **Start-up state comes from `read_state` on both backends**, and the dispatcher changes stub state only through `skills.stub.reset`. Reading the stub state file directly was rejected: it couples the dispatcher to stub internals (file path and format). The cost is one utility subprocess at stub start-up.
 - **Start-up failures are typed errors; only the entry points print and exit.** `ConfigError` and `RegistryError` subclass `StartupError` (`dispatcher/models.py`); the lock, the planner choice and `build_dispatcher` raise them, and `cli.main` and the bot's `main` print the stderr line and exit 2. The entry points also own the process-lifetime hooks (`atexit` shutdown, signal handlers). Library code that printed and raised `SystemExit` was rejected: it could not be reused or tested without catching `SystemExit`, and `build_dispatcher` registered an `atexit` hook for a process it does not own. Separate subclasses for the lock and the planner were left out because no caller tells them apart.

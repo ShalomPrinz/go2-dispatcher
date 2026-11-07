@@ -12,11 +12,11 @@ from . import prompts
 from .bounds import cut_message
 from .budget import MotionBudget
 from .llm import plan_tool_schema
-from .models import PlanStep, Posture, StepResult, TaskSummary
+from .models import ObstacleDistances, PlanStep, RobotState, StepResult, TaskSummary
 from .registry import Registry, registry_hash
 
 NOT_DISPATCHED_OUTCOMES = frozenset({"rejected", "motion_budget_exceeded"})
-BUDGET_DECIMALS = 2  # budget numbers: round(x, 2) then :g (dispatcher/docs/loop-and-context.md)
+NUM_DECIMALS = 2  # budget and obstacle numbers: round(x, 2) then :g (dispatcher/docs/loop-and-context.md)
 
 ReturnReason = Literal["initial", "plan_complete", "checkpoint", "failure"]
 RequestReason = ReturnReason | Literal["schema_retry"]  # logged on llm_request (dispatcher/docs/run-log.md)
@@ -169,7 +169,7 @@ class ContextInput:
     """Per-task state the user message is built from (dispatcher/docs/loop-and-context.md)."""
 
     task: str  # verbatim (after the transport's .strip())
-    posture: Posture  # last known posture (dispatcher/docs/loop-and-context.md)
+    state: RobotState | None  # last known robot state, None if unknown (dispatcher/docs/loop-and-context.md)
     budget: MotionBudget
     failures: int
     max_failures: int
@@ -182,7 +182,7 @@ class ContextInput:
 
 
 def _num(x: float) -> str:
-    return f"{round(x, BUDGET_DECIMALS):g}"
+    return f"{round(x, NUM_DECIMALS):g}"
 
 
 def _section(header: str, body: str) -> str:
@@ -196,6 +196,25 @@ def previous_task_block(previous: TaskSummary | None, registry: Registry) -> str
     return prompts.PREVIOUS_TASK_TEMPLATE.format(
         task=previous.task, outcome=previous.outcome, message=previous.message, last_step=last
     )
+
+
+def _distance(d: float | None) -> str:
+    return prompts.NO_READING if d is None else _num(d)
+
+
+def robot_block(state: RobotState | None) -> str:
+    posture = state.posture if state is not None else "unknown"
+    obstacles: ObstacleDistances | None = state.obstacle_m if state is not None else None
+    if obstacles is None:
+        obstacle_line = prompts.OBSTACLES_UNAVAILABLE
+    else:
+        obstacle_line = prompts.OBSTACLES_TEMPLATE.format(
+            front=_distance(obstacles.front),
+            back=_distance(obstacles.back),
+            left=_distance(obstacles.left),
+            right=_distance(obstacles.right),
+        )
+    return prompts.POSTURE_TEMPLATE.format(posture=posture) + "\n" + obstacle_line
 
 
 def budget_block(inp: ContextInput) -> str:
@@ -236,7 +255,7 @@ def build_user_message(inp: ContextInput, registry: Registry) -> str:
     """
     sections = [
         _section(prompts.SECTION_PREVIOUS_TASK, previous_task_block(inp.previous, registry)),
-        _section(prompts.SECTION_ROBOT, prompts.POSTURE_TEMPLATE.format(posture=inp.posture)),
+        _section(prompts.SECTION_ROBOT, robot_block(inp.state)),
         _section(prompts.SECTION_TASK, inp.task),
         _section(prompts.SECTION_BUDGET, budget_block(inp)),
         _section(prompts.SECTION_EXECUTED, executed_block(inp.steps, registry, inp.history_k)),

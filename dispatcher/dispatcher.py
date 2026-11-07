@@ -26,6 +26,7 @@ from .models import (
     LLMUnavailable,
     Plan,
     Posture,
+    RobotState,
     StepDispatch,
     StepRef,
     StepResult,
@@ -103,7 +104,7 @@ class Dispatcher:
         executor: SkillExecutor,
         *,
         clock: Callable[[], float] = time.monotonic,
-        initial_posture: Posture = "unknown",
+        initial_state: RobotState | None = None,
         observer: TaskObserver | None = None,
     ):
         self.cfg = cfg
@@ -117,7 +118,7 @@ class Dispatcher:
         self.registry_hash = planner.surface.registry_hash
         self.clock = clock
         self.observer = observer  # sees every record, e.g. the CLI console trace (dispatcher/docs/run-log.md)
-        self.posture: Posture = initial_posture
+        self.state: RobotState | None = initial_state  # last known state (dispatcher/docs/loop-and-context.md)
         self.previous: TaskSummary | None = None
 
         self._task_lock = threading.Lock()
@@ -252,15 +253,19 @@ class Dispatcher:
         if stop is not None:
             t.log.stop_move(stop)
 
+    @property
+    def posture(self) -> Posture:
+        return self.state.posture if self.state is not None else "unknown"
+
     def _apply_state(self, t: _Task, sr: StepResult | None, stop: StopMoveResult | None) -> None:
-        """Update the last known posture and the StopMove flag (dispatcher/docs/loop-and-context.md)."""
+        """Update the last known state and the StopMove flag (dispatcher/docs/loop-and-context.md)."""
         for resp in (sr.response if sr else None, stop.response if stop else None):
             if resp is not None and resp.state_after is not None:
-                self.posture = resp.state_after.posture  # the step's state_after wins over StopMove's
+                self.state = resp.state_after  # the step's state_after wins over StopMove's
                 break
         else:
             if sr is not None and sr.outcome in KILLED_OUTCOMES:
-                self.posture = "unknown"
+                self.state = None
         if stop is not None and not stop.ok:
             t.stop_move_failed = True
 
@@ -269,7 +274,7 @@ class Dispatcher:
         return build_user_message(
             ContextInput(
                 task=t.task,
-                posture=self.posture,
+                state=self.state,
                 budget=t.budget,
                 failures=t.failures,
                 max_failures=loop.max_failures,

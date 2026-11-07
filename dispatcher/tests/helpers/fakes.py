@@ -8,7 +8,15 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 from dispatcher.executor import ExecOutcome, ExecResult
-from dispatcher.models import Posture, RobotState, SkillError, SkillResponse, StopCause, StopMoveResult
+from dispatcher.models import (
+    ObstacleDistances,
+    Posture,
+    RobotState,
+    SkillError,
+    SkillResponse,
+    StopCause,
+    StopMoveResult,
+)
 from dispatcher.registry import SkillDescriptor
 
 FAKE_CLOCK_START = 1000.0
@@ -30,8 +38,8 @@ class FakeClock:
             self._t += seconds
 
 
-def state(posture: Posture) -> RobotState:
-    return RobotState(t=time.time(), backend="stub", posture=posture)
+def state(posture: Posture, obstacle_m: ObstacleDistances | None = None) -> RobotState:
+    return RobotState(t=time.time(), backend="stub", posture=posture, obstacle_m=obstacle_m)
 
 
 def exec_result(
@@ -40,6 +48,7 @@ def exec_result(
     skill: str = "walk",
     observations: dict | None = None,
     posture: Posture | None = None,
+    obstacle_m: ObstacleDistances | None = None,
     error_code: str | None = None,
     error_message: str | None = None,
     interrupt_cause: StopCause | None = None,
@@ -60,7 +69,7 @@ def exec_result(
             status=outcome,
             observations=observations or {},
             error=error,
-            state_after=state(posture) if posture else None,
+            state_after=state(posture, obstacle_m) if posture else None,
         )
     elif outcome != "ok" and error_code is None:
         error_code, error_message = outcome, error_message or f"step {outcome}"

@@ -16,9 +16,11 @@ from dispatcher.context import (
     format_value,
     render_remaining,
     render_step,
+    robot_block,
     schema_retry_message,
 )
 from dispatcher.models import (
+    ObstacleDistances,
     PlanStep,
     RobotState,
     SkillError,
@@ -82,10 +84,15 @@ def ok_step(index, skill, params, *, plan_step=None, call_index=1, observations=
     )
 
 
+STANDING = RobotState(
+    t=0.0, backend="stub", posture="standing", obstacle_m=ObstacleDistances(front=1.234, left=0.6, right=0.0)
+)
+
+
 def make_input(budget: MotionBudget | None = None, **kw: Any) -> ContextInput:
     base = ContextInput(
         task=TASK,
-        posture="standing",
+        state=STANDING,
         budget=budget or MotionBudget(10.0, 720.0),
         failures=0,
         max_failures=3,
@@ -299,10 +306,12 @@ def test_previous_task_and_posture(registry, update_golden):
         response=response("sit", posture="sitting"),
     )
     prev = TaskSummary(task="sit down", outcome="DONE", message="I sat down.", last_step=last)
-    text = build_user_message(make_input(posture="sitting", previous=prev), registry)
+    text = build_user_message(
+        make_input(state=RobotState(t=0.0, backend="stub", posture="sitting"), previous=prev), registry
+    )
     assert text.startswith(
         "## Previous task\nTask: sit down\nOutcome: DONE\n"
-        "Message: I sat down.\nLast step: sit() -> ok\n\n## Robot\nPosture: sitting\n"
+        "Message: I sat down.\nLast step: sit() -> ok\n\n## Robot\nPosture: sitting\nObstacles (m): unavailable\n"
     )
     check_golden("context_previous_task.txt", text, update_golden)
 
@@ -319,3 +328,10 @@ def test_schema_retry_appends_rejection(registry, update_golden):
         "PLAN needs at least one step\nstatus: bad value\nCall submit_plan again with a corrected plan."
     )
     check_golden("context_schema_retry.txt", retry, update_golden)
+
+
+def test_robot_block_obstacles():
+    assert robot_block(STANDING) == ("Posture: standing\nObstacles (m): front 1.23, back no reading, left 0.6, right 0")
+    no_obstacles = RobotState(t=0.0, backend="stub", posture="sitting")
+    assert robot_block(no_obstacles) == "Posture: sitting\nObstacles (m): unavailable"
+    assert robot_block(None) == "Posture: unknown\nObstacles (m): unavailable"

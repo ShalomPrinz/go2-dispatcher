@@ -3,6 +3,7 @@
 
 ## Robot
 Posture: standing
+Obstacles (m): front 1.23, back no reading, left 0.6, right 0
 
 ## Task
 Walk forward, then  find the chair

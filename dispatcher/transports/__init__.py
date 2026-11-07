@@ -15,7 +15,7 @@ from ..context import PromptSurface, render_step
 from ..dispatcher import Dispatcher
 from ..executor import Executor, SkillExecutor, needs_vision
 from ..llm import AnthropicPlanner, OpenRouterPlanner, PlannerClient
-from ..models import ConfigError, Posture, RegistryError, StartupError, TaskOutcome
+from ..models import ConfigError, RegistryError, RobotState, StartupError, TaskOutcome
 from ..registry import Registry
 from ..runlog import TaskObserver
 
@@ -25,7 +25,7 @@ __all__ = [
     "startup_error_text",
     "format_outcome",
     "make_planner",
-    "initial_posture",
+    "initial_state",
     "API_KEY_ENV",
     "TEST_PLANNER_ENV",
     "OUTCOME_MAX_CHARS",
@@ -64,13 +64,12 @@ def make_planner(cfg: Config, surface: PromptSurface) -> PlannerClient:
     return AnthropicPlanner(key, cfg.llm, surface)
 
 
-def initial_posture(executor: SkillExecutor) -> Posture:
-    """Posture at start-up from a ``read_state`` call on either backend (docs/running.md)."""
+def initial_state(executor: SkillExecutor) -> RobotState | None:
+    """State at start-up from a ``read_state`` call on either backend (docs/running.md)."""
     state = executor.read_state()
     if state is None:
         print("Warning: robot state unavailable; posture unknown.", file=sys.stderr)
-        return "unknown"
-    return state.posture
+    return state
 
 
 def build_dispatcher(
@@ -86,13 +85,13 @@ def build_dispatcher(
     surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
     planner = make_planner(cfg, surface)
     executor = Executor(cfg, cfg.base_dir)
-    posture = initial_posture(executor)
+    state = initial_state(executor)
     dispatcher = Dispatcher(
         cfg,
         registry,
         planner,
         executor,
-        initial_posture=posture,
+        initial_state=state,
         observer=observer(registry) if observer is not None else None,
     )
     if any(needs_vision(registry[name]) for name in registry.names()):

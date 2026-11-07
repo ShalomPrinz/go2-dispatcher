@@ -36,13 +36,8 @@ def build(tmp_path, registry, items, **cfg_over):
     stub.reset(cfg.stub.initial_posture, cfg.stub.state_file)
     surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
     planner = ScriptedPlanner(items, surface)
-    d = Dispatcher(
-        cfg,
-        registry,
-        planner,
-        Executor(cfg, cfg.base_dir),
-        initial_posture=cfg.stub.initial_posture,
-    )
+    executor = Executor(cfg, cfg.base_dir)
+    d = Dispatcher(cfg, registry, planner, executor, initial_state=executor.read_state())
     return d, planner, cfg
 
 
