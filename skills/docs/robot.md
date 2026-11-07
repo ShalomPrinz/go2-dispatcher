@@ -2,7 +2,7 @@
 
 The Go2 EDU side of the system: what the code assumes about the robot, how it talks to it through the Unitree SDK over DDS, how state is sampled and turned into a posture, and the supervised checklist that verifies all of this on the robot. The skill contract (invocation, response schema, error codes, policies, stub backend) is in [skills.md](skills.md); stopping the robot is in [safety.md](../../docs/safety.md); installing the SDK is in [setup.md](../../docs/setup.md).
 
-**Status: the real backend has run on the robot under supervision** (26 tasks on 2026-10-29, normal CLI from the lab machine). The [checklist](#supervised-robot-checklist) is partly worked through: the [results](#results) table lists what was measured and the [known issues](#known-issues) what failed. Everything else on this page that depends on the robot's behaviour stays *unverified*.
+**Status: the real backend has run on the robot under supervision** (26 tasks on 2026-10-29, normal CLI from the lab machine). The [checklist](#supervised-robot-checklist) is partly worked through: the [results](#results) table lists what was measured and the [known issues](#known-issues) the causes of what failed. Everything else on this page that depends on the robot's behaviour stays *unverified*.
 
 ## Robot facts
 
@@ -110,7 +110,7 @@ The list of open questions with owners is in [roadmap.md](../../docs/roadmap.md#
 
 ## Supervised robot checklist
 
-Run this on the lab machine with `robot.backend = "real"`, **in this order**, with the robot **standing**, the area clear and the remote (e-stop) in hand. Read [safety.md](../../docs/safety.md) first.
+Run this on the lab machine with `robot.backend = "real"`, **in this order**, with the robot **standing**, the Ethernet link to the robot secured, the area clear and the remote (e-stop) in hand. Read [safety.md](../../docs/safety.md) first.
 
 Commands use `go2` with a real-backend config. Run a step as a one-step task, or run the skill by hand ([skills.md](skills.md#running-a-skill-by-hand)), whichever is easier to observe. The run log has every state sample and timing ([run-log.md](../../dispatcher/docs/run-log.md)). State samples do not include `rt/lowstate`, `rt/utlidar/robot_odom` or `rt/utlidar/robot_pose`; read those with a separate DDS subscriber.
 
@@ -134,7 +134,7 @@ Record each result here: date, measured value or observation, and what was chang
 | 2 | | | |
 | 3 | | | |
 | 4 | | | |
-| 5 | 2026-10-29 | Successful `stop_move` (3 of 8 calls; 1 operator stop, 2 step timeouts): `stop_call_ms` 891–900 ms, `total_ms` 1404–1428 ms (includes the 0.5 s settle wait and the state sample). Observed time not recorded. | The other 5 calls failed ([known issues](#known-issues)). |
+| 5 | 2026-10-29 | Successful `stop_move` (3 of 8 calls; 1 operator stop, 2 step timeouts): `stop_call_ms` 891–900 ms, `total_ms` 1404–1428 ms (includes the 0.5 s settle wait and the state sample). Observed time not recorded. | The other 5 calls failed from link loss ([known issues](#known-issues)). |
 | 6 | | | |
 | 7 | | | |
 | 8 | | | |
@@ -142,9 +142,8 @@ Record each result here: date, measured value or observation, and what was chang
 
 ### Known issues
 
-Failures seen in the supervised runs of 2026-10-29. Causes are not yet known; no code was changed because of them.
+Causes of the failures in the supervised runs of 2026-10-29. None is a defect in the stop design.
 
-- **`stop_move` fails with `Exception: channel factory init error.`** in 5 of 8 calls (reasons: operator 3, step timeout 1, task time limit 1), about 0.13–0.22 s after it starts, so `StopMove()` is never sent. `walk` (once) and `detect_object` (twice) hit the same error. Open: the cause, and how the robot came to rest in those cases ([safety.md](../../docs/safety.md)).
-- **`StopMove returned 3104`** at the end of 4 `turn` calls (`sdk_error`). Each took about 6.6–6.8 s, i.e. the turn plus the 5 s `SPORT_CLIENT_TIMEOUT_S`, so the reply to `StopMove` did not arrive in time. Open: whether the robot stopped, and why the reply was missing.
-- **`GetImageSample returned 3104`** in 2 `detect_object` calls (`camera_unavailable`).
-- **`turn` 90° killed by its step timeout** 3 times, at 12.36 s, where a successful 90° turn takes 1.6–1.8 s. Open: cause.
+- **Link loss.** The Ethernet cable between the lab machine and the robot was unstable and disconnected. This caused every `Exception: channel factory init error.` (`stop_move` 5 times, `walk` once, `detect_object` twice), every `StopMove returned 3104` at the end of a `turn` (`sdk_error`) and every `GetImageSample returned 3104` (`camera_unavailable`).
+- **`turn` 90° killed by its step timeout at 12.36 s** (3 times). The same link loss lost the `StopMove` reply, and the old 10 s `SPORT_CLIENT_TIMEOUT_S` waited past the step timeout. Fixed since: the reply timeout is now 5 s and fits inside every sport-client process timeout, so a lost reply ends as `sdk_error`, not a kill ([skills.md](skills.md#policies)).
+- **Every skill needs the robot link, `stop_move` included.** With the link down no software stop reaches the robot; the physical e-stop is the stop ([safety.md](../../docs/safety.md)).
