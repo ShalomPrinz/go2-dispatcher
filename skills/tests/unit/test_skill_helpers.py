@@ -11,7 +11,7 @@ import time
 
 import pytest
 
-from skills import backend, env, process, runner, sit, turn, walk
+from skills import backend, env, process, robot_ipc, runner, sit, turn, walk
 from skills.policy import MotionCost
 from skills.runner import InvalidParams, SkillOutcome, StateSampler, parse_params
 from skills.schema import ErrorCode, RobotState
@@ -62,8 +62,8 @@ def test_error_code_serialises_as_plain_string():
 def test_run_skill_keeps_state_sampled_before_an_exception(monkeypatch):
     """The state taken before the body raised survives into the error response."""
     state = RobotState(t=1.0, backend="stub", posture="standing", body_height=0.32)
-    monkeypatch.setattr(backend, "init_dds", lambda: None)
-    monkeypatch.setattr(backend, "sample_state", lambda: state)
+    monkeypatch.setattr(robot_ipc.ServiceStateReader, "__call__", lambda self: state)
+    monkeypatch.setenv(env.BACKEND, "stub")
     monkeypatch.setattr(process, "capture_stdout", lambda: None)
     monkeypatch.setattr(sys, "argv", ["walk", "{}"])
     sent = []
@@ -85,10 +85,10 @@ def test_run_skill_keeps_state_sampled_before_an_exception(monkeypatch):
 
 
 def test_state_ms_excludes_dds_init(monkeypatch):
-    """DDS init before the first sample is reported as dds_init_ms by the backend, not in state_ms."""
+    """A utility's own DDS init before its first sample is reported as dds_init_ms, not in state_ms."""
     monkeypatch.setattr(backend, "init_dds", lambda: time.sleep(0.05))
     monkeypatch.setattr(backend, "sample_state", lambda: None)
-    states = StateSampler()
+    states = StateSampler(source="process")
     states.take("before")
     assert states.used and states.seconds < 0.05
 

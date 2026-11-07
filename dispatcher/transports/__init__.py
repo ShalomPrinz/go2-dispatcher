@@ -15,7 +15,7 @@ from ..context import PromptSurface, render_step
 from ..dispatcher import Dispatcher
 from ..executor import Executor, SkillExecutor, needs_vision
 from ..llm import AnthropicPlanner, OpenRouterPlanner, PlannerClient
-from ..models import ConfigError, RegistryError, RobotState, StartupError, TaskOutcome
+from ..models import ConfigError, RegistryError, RobotState, StartupError, StateReadError, TaskOutcome
 from ..registry import Registry
 from ..runlog import TaskObserver
 
@@ -65,19 +65,20 @@ def make_planner(cfg: Config, surface: PromptSurface) -> PlannerClient:
 
 
 def initial_state(executor: SkillExecutor) -> RobotState | None:
-    """State at start-up from a ``read_state`` call on either backend (docs/running.md)."""
-    state = executor.read_state()
-    if state is None:
-        print("Warning: robot state unavailable; posture unknown.", file=sys.stderr)
-    return state
+    """State at start-up, read through the robot service on either backend (docs/running.md)."""
+    try:
+        return executor.fresh_state()
+    except StateReadError as e:
+        print(f"Warning: robot state unavailable; posture unknown ({e}).", file=sys.stderr)
+        return None
 
 
 def build_dispatcher(
     cfg: Config, *, reset_stub: bool, observer: Callable[[Registry], TaskObserver] | None = None
 ) -> Dispatcher:
-    """Lock, registry, stub reset, planner, executor, dispatcher, vision service start (docs/running.md).
-    ``observer`` builds the dispatcher's task observer from the registry. Raises ``StartupError``;
-    process-lifetime hooks are the caller's, and ``Dispatcher.shutdown`` stops the vision service."""
+    """Lock, registry, stub reset, planner, executor, robot service start, dispatcher, vision service start
+    (docs/running.md). ``observer`` builds the dispatcher's task observer from the registry. Raises
+    ``StartupError``; process-lifetime hooks are the caller's, and ``Dispatcher.shutdown`` stops both services."""
     process_lock.acquire(cfg.log.dir)  # the root, so all provider/backend folders share one lock
     registry = Registry.load(cfg.skills.dir)
     if reset_stub and cfg.robot.backend == "stub":
@@ -85,15 +86,19 @@ def build_dispatcher(
     surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
     planner = make_planner(cfg, surface)
     executor = Executor(cfg, cfg.base_dir)
-    state = initial_state(executor)
-    dispatcher = Dispatcher(
-        cfg,
-        registry,
-        planner,
-        executor,
-        initial_state=state,
-        observer=observer(registry) if observer is not None else None,
-    )
+    executor.robot.start()  # waits for ready; raises RobotServiceError (docs/running.md)
+    try:
+        dispatcher = Dispatcher(
+            cfg,
+            registry,
+            planner,
+            executor,
+            initial_state=initial_state(executor),
+            observer=observer(registry) if observer is not None else None,
+        )
+    except BaseException:
+        executor.close()  # no dispatcher, so no shutdown hook stops the robot service
+        raise
     if any(needs_vision(registry[name]) for name in registry.names()):
         executor.vision.start()  # no wait: the first vision step waits for ready (docs/running.md)
     return dispatcher

@@ -5,6 +5,7 @@ from __future__ import annotations
 import threading
 import time
 from collections.abc import Callable, Sequence
+from pathlib import Path
 from typing import Any
 
 from dispatcher.executor import ExecOutcome, ExecResult
@@ -14,10 +15,12 @@ from dispatcher.models import (
     RobotState,
     SkillError,
     SkillResponse,
+    StateReadError,
     StopCause,
     StopMoveResult,
 )
 from dispatcher.registry import SkillDescriptor
+from skills.schema import SCHEMA_VERSION
 
 FAKE_CLOCK_START = 1000.0
 
@@ -64,7 +67,7 @@ def exec_result(
             error_message = error_message or "Move returned 1"
             error = SkillError(code=error_code, message=error_message)
         response = SkillResponse(
-            schema_version=1,
+            schema_version=SCHEMA_VERSION,
             skill=skill,
             status=outcome,
             observations=observations or {},
@@ -91,8 +94,21 @@ def stop_move_result(
 ) -> StopMoveResult:
     response = None
     if posture is not None:
-        response = SkillResponse(schema_version=1, skill="stop_move", status="ok", state_after=state(posture))
+        response = SkillResponse(
+            schema_version=SCHEMA_VERSION, skill="stop_move", status="ok", state_after=state(posture)
+        )
     return StopMoveResult(ok=ok, reason=reason, duration_ms=1.0, exit_code=0 if ok else 1, response=response)
+
+
+class FakeStream:
+    """A state stream that writes nothing; records its path and whether it was closed."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
 
 
 ScriptItem = ExecResult | BaseException | Callable[[dict], ExecResult]
@@ -109,7 +125,8 @@ class FakeExecutor:
     Records ``runs`` (kwargs dicts incl. ``skill`` and ``params``), ``kills`` (causes)
     and ``stop_moves`` (reasons). ``stop_move`` returns ok unless ``stop_move_ok=False``;
     its ``state_after`` posture is ``stop_move_posture`` (none if ``None``).
-    ``on_kill(cause)`` runs on every ``kill_current``.
+    ``on_kill(cause)`` runs on every ``kill_current``. ``fresh_state`` returns ``fresh``, or raises
+    ``StateReadError`` when it is None (the robot service is down); ``streams`` records each task's stream.
     """
 
     def __init__(
@@ -119,8 +136,12 @@ class FakeExecutor:
         stop_move_ok: bool = True,
         stop_move_posture: Posture | None = None,
         on_kill: Callable[[StopCause], None] | None = None,
+        fresh: RobotState | None = None,
     ):
         self.results = list(results)
+        self.fresh = fresh
+        self.fresh_reads = 0
+        self.streams: list[FakeStream] = []
         self.stop_move_ok = stop_move_ok
         self.stop_move_posture: Posture | None = stop_move_posture
         self.on_kill = on_kill
@@ -168,8 +189,16 @@ class FakeExecutor:
         self.stop_moves.append(reason)
         return stop_move_result(reason, ok=self.stop_move_ok, posture=self.stop_move_posture)
 
-    def read_state(self) -> RobotState | None:
-        return None
+    def fresh_state(self) -> RobotState:
+        self.fresh_reads += 1
+        if self.fresh is None:
+            raise StateReadError("ServiceUnavailable: no robot service")
+        return self.fresh
+
+    def state_stream(self, path: Path, t_start: float) -> FakeStream:
+        stream = FakeStream(path)
+        self.streams.append(stream)
+        return stream
 
     def close(self) -> None:
         self.closed = True

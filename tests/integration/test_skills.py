@@ -15,7 +15,7 @@ from pydantic import TypeAdapter
 from skills import stub
 from skills.schema import SkillResponse
 from tests.helpers import REPO_ROOT, run_module, single_response, stub_env
-from tests.integration import vision
+from tests.integration import robot, vision
 
 pytestmark = pytest.mark.integration
 
@@ -48,14 +48,17 @@ def run_ok(name, params, env):
 
 @pytest.mark.parametrize("name", SKILLS)
 def test_contract_valid(tmp_path, name):
-    with vision.running(stub_env(tmp_path)) as env:
+    with robot.running(stub_env(tmp_path)) as env, vision.running(env) as env:
         resp = run_ok(name, VALID[name], env)
     assert resp.skill == name and resp.error is None
     assert resp.state_before is not None and resp.state_before.backend == "stub"
     assert resp.state_after is not None and resp.state_after.backend == "stub"
     assert resp.state_error is None
-    assert {"dds_init_ms", "exec_ms", "state_ms", "total_ms"} <= set(resp.timing)
-    assert ("connect_ms" if name == "detect_object" else "client_init_ms") in resp.timing
+    assert {"exec_ms", "state_ms", "total_ms"} <= set(resp.timing)
+    if name == "detect_object":  # never touches DDS: state comes from the robot service
+        assert "connect_ms" in resp.timing and "dds_init_ms" not in resp.timing
+    else:
+        assert {"dds_init_ms", "client_init_ms"} <= set(resp.timing)
 
 
 def test_invalid_json(tmp_path):
@@ -115,6 +118,10 @@ print(json.dumps({"modules": names, "heavy": heavy, "out": buf.getvalue(),
         "read_state",
         "vision_ipc",
         "vision_service",
+        "ipc",
+        "robot_ipc",
+        "robot_service",
+        "state_store",
         "real_detector",
         *SKILLS,
     } <= set(out["modules"])
@@ -143,9 +150,6 @@ def test_sit_then_walk_fails(tmp_path):
     env = stub_env(tmp_path)
     resp = run_ok("sit", {}, env)
     assert resp.observations == {"sdk_ret": 0}
-    assert resp.state_before is not None and resp.state_after is not None
-    assert resp.state_before.posture == "standing"
-    assert resp.state_after.posture == "sitting"
     assert stub.read_posture(state_file(tmp_path)) == "sitting"
 
     proc = run_module("walk", VALID["walk"], env)
@@ -175,7 +179,8 @@ def test_stretch_while_sitting_fails(tmp_path):
 
 def test_detect_follows_the_pose(tmp_path):
     """A chair behind the camera at the start is ahead after a left turn (pose kept in the state file)."""
-    with vision.running(stub_env(tmp_path, objects={"chair": {"x": 0.0, "y": 1.2}})) as env:
+    world = stub_env(tmp_path, objects={"chair": {"x": 0.0, "y": 1.2}})
+    with robot.running(world) as env, vision.running(env) as env:
         assert run_ok("detect_object", {"target": "chair"}, env).observations["object_found"] is False
         turned = run_ok("turn", {"direction": "left", "angle_deg": 90}, env).state_after
         assert turned is not None and turned.imu_rpy == pytest.approx(

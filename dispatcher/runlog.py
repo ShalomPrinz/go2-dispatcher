@@ -22,9 +22,21 @@ if TYPE_CHECKING:
     from .budget import MotionBudget
     from .context import PromptSurface, RequestReason, ReturnReason
     from .llm import LLMResult, PlanCheck
-    from .models import Plan, Posture, StepDispatch, StepRef, StepResult, StopMoveResult, TaskOutcome, TaskSummary
+    from .models import (
+        Plan,
+        Posture,
+        StartState,
+        StepDispatch,
+        StepRef,
+        StepResult,
+        StopMoveResult,
+        TaskOutcome,
+        TaskSummary,
+    )
 
 INDEX_FILE = "index.jsonl"
+STREAM_SUFFIX = ".state_stream.jsonl"  # beside the task's log file (dispatcher/docs/run-log.md)
+ROBOT_IO = "service"  # how robot state is read; set by the code, never by config (dispatcher/docs/run-log.md)
 FILE_TIME_FORMAT = "%Y%m%dT%H%M%S"  # local time at task start (dispatcher/docs/run-log.md)
 RUN_ID_PREFIX_LEN = 8
 ENVELOPE_KEYS = frozenset({"ts", "t_mono_ms", "session_id", "run_id", "seq", "type"})
@@ -148,7 +160,13 @@ class RunLog:
     # --- records (dispatcher/docs/run-log.md) -------------------------------------------------
 
     def task_start(
-        self, task: str, source: str, sender_id: str | None, previous: TaskSummary | None, posture: Posture
+        self,
+        task: str,
+        source: str,
+        sender_id: str | None,
+        previous: TaskSummary | None,
+        posture: Posture,
+        start_state: StartState,
     ) -> None:
         s = self._session
         self._write(
@@ -165,6 +183,10 @@ class RunLog:
             skills=s.skills,
             previous_task=previous.model_dump(mode="json") if previous else None,
             posture=posture,
+            robot_io=ROBOT_IO,
+            state_source=start_state.source,
+            state_age_ms=start_state.age_ms,
+            state_error=start_state.error,
             versions=s.versions,
             git_commit=s.git_commit,
         )
@@ -267,7 +289,13 @@ class TaskObserver(Protocol):
     console trace receive the records through ``TeeLog`` (dispatcher/docs/run-log.md)."""
 
     def task_start(
-        self, task: str, source: str, sender_id: str | None, previous: TaskSummary | None, posture: Posture
+        self,
+        task: str,
+        source: str,
+        sender_id: str | None,
+        previous: TaskSummary | None,
+        posture: Posture,
+        start_state: StartState,
     ) -> None: ...
 
     def llm_request(
@@ -323,7 +351,13 @@ class NullLog:
         pass
 
     def task_start(
-        self, task: str, source: str, sender_id: str | None, previous: TaskSummary | None, posture: Posture
+        self,
+        task: str,
+        source: str,
+        sender_id: str | None,
+        previous: TaskSummary | None,
+        posture: Posture,
+        start_state: StartState,
     ) -> None:
         pass
 
@@ -400,10 +434,16 @@ class TeeLog:
         notify(self._observer, record)
 
     def task_start(
-        self, task: str, source: str, sender_id: str | None, previous: TaskSummary | None, posture: Posture
+        self,
+        task: str,
+        source: str,
+        sender_id: str | None,
+        previous: TaskSummary | None,
+        posture: Posture,
+        start_state: StartState,
     ) -> None:
-        self._log.task_start(task, source, sender_id, previous, posture)
-        self._notify(lambda o: o.task_start(task, source, sender_id, previous, posture))
+        self._log.task_start(task, source, sender_id, previous, posture, start_state)
+        self._notify(lambda o: o.task_start(task, source, sender_id, previous, posture, start_state))
 
     def llm_request(
         self, call_index: int, return_reason: RequestReason, retry_of: ReturnReason | None, user_text: str
@@ -476,6 +516,11 @@ class TeeLog:
         )
 
 
+def stream_path(log_path: Path) -> Path:
+    """The task's ``state_stream.jsonl``: its log file's name with ``STREAM_SUFFIX``."""
+    return log_path.with_name(log_path.stem + STREAM_SUFFIX)
+
+
 class RunLogFactory:
     def __init__(self, log_dir: Path, session_id: str, session: SessionInfo):
         self.log_dir = Path(log_dir)
@@ -510,6 +555,7 @@ class RunLogFactory:
             "condition": self.session.condition,
             "provider": cfg.llm.provider,
             "backend": cfg.robot.backend,
+            "robot_io": ROBOT_IO,
             "model": cfg.llm.model,
             "thinking": cfg.llm.thinking if cfg.llm.provider == "anthropic" else None,
             "planning_horizon": cfg.loop.planning_horizon,

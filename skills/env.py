@@ -17,11 +17,22 @@ STUB_OBJECTS = "GO2_STUB_OBJECTS"
 STUB_FAULT = "GO2_STUB_FAULT"
 PARENT_PID = "GO2_PARENT_PID"
 VISION_SOCKET = "GO2_VISION_SOCKET"
+ROBOT_SOCKET = "GO2_ROBOT_SOCKET"
 
 
 def vision_socket_path(parent_pid: int) -> str:
     """The vision service's Unix socket for one dispatcher: ``<tempdir>/go2-vision-<parent_pid>.sock``."""
     return str(Path(tempfile.gettempdir()) / f"go2-vision-{parent_pid}.sock")
+
+
+def robot_socket_path(log_dir: str | Path) -> str:
+    """The robot service's Unix socket, one per log dir: ``<log_dir>/robot.sock``."""
+    return str(Path(log_dir) / "robot.sock")
+
+
+def robot_lock_path(socket_path: str | Path) -> str:
+    """The lock file that guards the robot service's socket: the socket path with suffix ``.lock``."""
+    return str(Path(socket_path).with_suffix(".lock"))
 
 
 def child_env(
@@ -34,6 +45,7 @@ def child_env(
     stub_time_scale: float,
     stub_objects: Mapping[str, Mapping[str, float]],
     parent_pid: int,
+    log_dir: str | Path,
     fault: str | None = None,
 ) -> dict[str, str]:
     """``base`` plus the contract variables; ``GO2_STUB_FAULT`` is set only from ``fault``, never inherited."""
@@ -49,6 +61,7 @@ def child_env(
             STUB_OBJECTS: json.dumps({k: dict(v) for k, v in stub_objects.items()}),
             PARENT_PID: str(parent_pid),
             VISION_SOCKET: vision_socket_path(parent_pid),
+            ROBOT_SOCKET: robot_socket_path(log_dir),
         }
     )
     if fault:

@@ -33,6 +33,14 @@ class RegistryError(StartupError):
     """Invalid skill set; the message names the offending file."""
 
 
+class RobotServiceError(StartupError):
+    """The robot service did not start; the text says why and where its log is (docs/running.md)."""
+
+
+class StateReadError(Exception):
+    """A state read through the robot service failed; the text says why, without a traceback."""
+
+
 class BusyError(Exception):
     """run_task called while a task is running."""
 
@@ -207,3 +215,11 @@ class TaskSummary(_Model):
     outcome: TaskOutcomeCode
     message: str
     last_step: StepResult | None  # last dispatched step, if any
+
+
+class StartState(_Model):
+    """Where a task's first plan got its robot state (dispatcher/docs/loop-and-context.md)."""
+
+    source: Literal["fresh", "carried_over"]
+    age_ms: float | None  # age of the state message at task start; None when there is no state
+    error: str | None = None  # why the fresh read failed (carried_over only)

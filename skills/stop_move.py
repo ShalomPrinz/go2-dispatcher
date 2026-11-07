@@ -43,7 +43,7 @@ def body(states: StateSampler) -> SkillOutcome:
 
 
 def main() -> None:
-    runner.run_main(POLICY.name, body, watchdog=False)
+    runner.run_main(POLICY.name, body, watchdog=False, state_source="process")
 
 
 if __name__ == "__main__":

@@ -479,6 +479,48 @@ def test_robot_state(tmp_path, registry):
     assert r.d.posture == "unknown"
 
 
+def test_first_plan_sees_fresh_state(tmp_path, registry):
+    """The fresh read replaces the carried-over state; the task_start record says so; the stream is closed."""
+    executor = FakeExecutor([exec_result(skill="sit", posture="sitting")], fresh=state("sitting"))
+    r = Rig(tmp_path, registry, [plan(PlanStep(skill="sit", params={})), done()], executor=executor)
+    o = r.run()
+    assert "Posture: sitting" in r.user(0)  # Rig starts the dispatcher standing
+    assert executor.fresh_reads == 1  # the replan after the step uses its state_after
+    start = records(o, "task_start")[0]
+    assert (start["robot_io"], start["state_source"], start["state_error"]) == ("service", "fresh", None)
+    [stream] = executor.streams
+    assert stream.closed and stream.path == Path(o.log_path).with_name(Path(o.log_path).stem + ".state_stream.jsonl")
+    index = json.loads((Path(o.log_path).parent / "index.jsonl").read_text(encoding="utf-8"))
+    assert index["robot_io"] == "service"
+
+
+def test_failed_fresh_read_falls_back_to_carried_over_state(tmp_path, registry):
+    r = Rig(tmp_path, registry, [done()], posture="sitting")  # FakeExecutor without fresh: the service is down
+    o = r.run()
+    assert "Posture: sitting" in r.user(0)
+    start = records(o, "task_start")[0]
+    assert (start["state_source"], start["posture"]) == ("carried_over", "sitting")
+    assert start["state_error"] == "ServiceUnavailable: no robot service"
+    assert start["state_age_ms"] is not None and start["state_age_ms"] >= 0.0
+
+
+def test_stop_during_fresh_read_ends_task_without_planning(tmp_path, registry):
+    replies = []
+
+    class StopDuringRead(FakeExecutor):
+        def fresh_state(self):
+            replies.append(r.d.request_stop("telegram"))  # the read is slow; the operator stops meanwhile
+            return state("standing")
+
+    r = Rig(tmp_path, registry, [done()], executor=StopDuringRead())
+    o = r.run()
+    assert (replies, o.outcome, o.llm_calls, r.planner.calls) == (["stopping"], "STOPPED", 0, [])
+    assert r.executor.stop_moves == [StopCause.OPERATOR]
+    types = [rec["type"] for rec in records(o)]
+    assert types[:2] == ["task_start", "stop_requested"]
+    assert records(o, "stop_requested")[0]["during"] == "starting"
+
+
 def test_stop_move_failure_warns(tmp_path, registry):
     def step1(call):
         call["stop_event"].set()

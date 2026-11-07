@@ -72,7 +72,7 @@ Every step of a plan is checked against its `SKILL.md` declaration before anythi
 
 ## If the dispatcher dies
 
-Each skill process watches its parent (`GO2_PARENT_PID`) every 0.2 s. If the dispatcher disappears, the `ORPHANED` flag is set; motion loops check it on every iteration, break, and send `StopMove()` themselves (the step reports `orphaned: true`). Any skill still alive 2 s later exits with code 137. The watchdog does nothing when `GO2_PARENT_PID` is unset (manual runs). `stop_move` and `read_state` do not watch their parent, so a `StopMove` always finishes. The [vision service](../skills/docs/skills.md#vision-service) runs the same watchdog and exits with code 137 too; it never commands motion. Every normal exit of the transports calls `Dispatcher.shutdown()`.
+Each skill process watches its parent (`GO2_PARENT_PID`) every 0.2 s. If the dispatcher disappears, the `ORPHANED` flag is set; motion loops check it on every iteration, break, and send `StopMove()` themselves (the step reports `orphaned: true`). Any skill still alive 2 s later exits with code 137. The watchdog does nothing when `GO2_PARENT_PID` is unset (manual runs). `stop_move` and `read_state` do not watch their parent, so a `StopMove` always finishes. The [vision service](../skills/docs/skills.md#vision-service) and the [robot service](../skills/docs/skills.md#robot-service) run the same watchdog and exit with code 137 too; neither commands motion. Every normal exit of the transports calls `Dispatcher.shutdown()`.
 
 If the dispatcher host loses power or the network drops, none of this helps, and the operator can no longer send `stop`. Use the physical stop, which is why it must be within reach at all times ([above](#supervised-operation-rules)).
 

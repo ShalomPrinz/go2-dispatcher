@@ -1,10 +1,9 @@
 """The vision service protocol and its client (skills/docs/skills.md): one JSON request and one JSON reply
-per connection, as bytes over multiprocessing.connection on a Unix socket (no pickle). Standard library
-and skills only; imported by detect_object and by the service."""
+per connection, encoded as skills/ipc.py does. Standard library and skills only; imported by detect_object
+and by the service."""
 
 from __future__ import annotations
 
-import json
 import os
 from dataclasses import asdict
 from multiprocessing.connection import Client
@@ -13,12 +12,12 @@ from typing import TYPE_CHECKING
 from skills import runner
 from skills.backend import BackendNotConfigured, DetectorError, DetectResult, VisionUnavailable
 from skills.env import VISION_SOCKET
+from skills.ipc import FAMILY, decode, encode
 from skills.schema import ErrorCode
 
-if TYPE_CHECKING:  # what Client() and Listener.accept() return: Connection, or PipeConnection on Windows
-    from multiprocessing.connection import _ConnectionBase as Conn
+if TYPE_CHECKING:
+    from skills.ipc import Conn
 
-FAMILY = "AF_UNIX"
 MAX_MESSAGE_BYTES = 4096
 
 
@@ -33,18 +32,6 @@ class ServiceError(DetectorError):
 def error_message(e: DetectorError) -> str:
     """The skill's error message for a detector failure: ``<ExceptionType>: <message>``."""
     return str(e) if isinstance(e, ServiceError) else f"{type(e).__name__}: {e}"
-
-
-def encode(message: dict) -> bytes:
-    return json.dumps(message, separators=(",", ":"), allow_nan=False).encode("utf-8")
-
-
-def decode(data: bytes) -> dict:
-    """A JSON object; raises ValueError for anything else."""
-    message = json.loads(data.decode("utf-8"))
-    if not isinstance(message, dict):
-        raise ValueError("message is not a JSON object")
-    return message
 
 
 # --- service side ---------------------------------------------------------------

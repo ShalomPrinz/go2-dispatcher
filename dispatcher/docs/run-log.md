@@ -9,8 +9,11 @@ What counts as a failure, an LLM call or a rejection is defined in [loop-and-con
 `log.dir` (default `logs`) is the root. Each task is written to the folder `{log.dir}/{llm.provider}/{robot.backend}/`, using the config values verbatim, so there are four folders: `anthropic/stub`, `anthropic/real`, `openrouter/stub`, `openrouter/real`. The folder is derived from the config (`Config.run_log_dir`) and cannot be set by hand.
 
 - One file per task: `{folder}/{YYYYMMDDTHHMMSS}_{run_id[:8]}.jsonl`, using the local time at task start. Example: `logs/anthropic/stub/20261001T113603_b6bb52fe.jsonl`.
+- `{folder}/{YYYYMMDDTHHMMSS}_{run_id[:8]}.state_stream.jsonl`: the task's robot state stream ([below](#state_streamjsonl)), beside its log file. It is not a task log: select task logs through `index.jsonl`, not by globbing `*.jsonl`.
 - `{folder}/index.jsonl`: one line per finished task in that folder, including the experimental `condition`, `provider`, `model` and `thinking`.
 - `{log.dir}/.dispatcher.lock`: the single-instance lock, at the root so it covers every folder (not a log).
+- `{log.dir}/robot.sock` and `{log.dir}/robot.lock`: the robot service's socket and lock ([running.md](../../docs/running.md#robot-service); not logs).
+- `{log.dir}/robot_service.log`: the robot service's stderr and the dispatcher's notes on starting, restarting and stopping it, for diagnosis only, like the vision service log.
 - `{log.dir}/vision_service.log`: the vision service's stderr and the dispatcher's notes on starting, restarting and stopping it, for diagnosis only (not study data, no records; [running.md](../../docs/running.md#vision-service)).
 
 **Research data is `logs/anthropic/real/` only.** Analysis reads one folder and its `index.jsonl`; it never globs across folders, so stub runs and OpenRouter runs cannot leak into the dataset. The other folders are for development and testing.
@@ -42,7 +45,12 @@ The payload fields follow.
 
 ### `task_start`
 
-`task`, `source` (`cli` / `telegram` / `test`), `sender_id` (Telegram user id or null), `condition`, `config` (full config dump; it holds no secrets), `registry_hash`, `system_text`, `catalog_text`, `tool_schema`, `skills` (names), `previous_task` (`TaskSummary` or null), `posture`, `versions` (`python`, `anthropic`, `httpx`, `pydantic`, `go2-dispatcher`), `git_commit` (`git rev-parse HEAD` in the base dir, or null). `versions` and `git_commit` are read once per process at startup.
+`task`, `source` (`cli` / `telegram` / `test`), `sender_id` (Telegram user id or null), `condition`, `config` (full config dump; it holds no secrets), `registry_hash`, `system_text`, `catalog_text`, `tool_schema`, `skills` (names), `previous_task` (`TaskSummary` or null), `posture`, `robot_io`, `state_source`, `state_age_ms`, `state_error`, `versions` (`python`, `anthropic`, `httpx`, `pydantic`, `go2-dispatcher`), `git_commit` (`git rev-parse HEAD` in the base dir, or null). `versions` and `git_commit` are read once per process at startup.
+
+- `robot_io`: how robot state reaches the dispatcher and the skills, `"service"` (through the robot service, [running.md](../../docs/running.md#robot-service)). Set by the code, not by config. A record without `robot_io` ran with per-process DDS: each skill process created its own DDS participant to sample state, so its `timing.state_ms` includes DDS init, subscription and the first message (about 170–190 ms on the robot), and its task started from the carried-over state with no fresh read. Never mix `robot_io` values within one experiment.
+- `state_source`: where the state behind `posture` and the first plan's Robot section came from: `fresh` (read through the robot service at task start) or `carried_over` (that read failed; the last known state from the previous task or the startup read).
+- `state_age_ms`: the age of that state's message at task start: for `fresh` the service's `age_ms`, for `carried_over` the time since the message arrived; null when there is no state.
+- `state_error`: why the fresh read failed (one line, for example `ServiceUnavailable: no robot service at ...` or `link down; ...`); null for `fresh`.
 
 ### `llm_request`
 
@@ -81,7 +89,7 @@ All `StepResult` fields at the top level, with the step's identity nested under 
 
 ### `stop_requested`
 
-`source` (`cli` / `telegram` / `shutdown`), `during` (`llm_call` / `step` / `between`).
+`source` (`cli` / `telegram` / `shutdown`), `during` (`starting` / `llm_call` / `step` / `between`). `starting` is a stop that arrived during the task-start state read, before the log opened; it is written right after `task_start`.
 
 ### `stop_move`
 
@@ -99,15 +107,30 @@ All `StopMoveResult` fields: `ok`, `reason` (`operator` / `task_time_limit` / `s
 
 `Dispatcher` takes an optional `observer` (a `TaskObserver`: one method per record type, with the same arguments as `RunLog`). When it is set, each task's log is wrapped in a `TeeLog` that writes every record to the log first and then hands it to the observer. An exception in the observer is swallowed, so an observer can never break a task or the log. The log file content is the same with or without an observer. The `NullLog` a task starts with is wrapped too, so if the file cannot be opened the observer still gets `exception` and `task_end` (but no `task_start`). The CLI sets `ConsoleTrace`, its live trace ([running.md](../../docs/running.md#output)); the bot sets `TelegramProgress`, its progress message ([running.md](../../docs/running.md#progress-message)); the tests set none unless they test an observer.
 
+## `state_stream.jsonl`
+
+While a task runs, the dispatcher subscribes to the robot service and writes its state stream to the task's `.state_stream.jsonl` file, one JSON object per line, flushed per line. It starts after `task_start` and ends after `task_end` (the dispatcher waits at most `STREAM_JOIN_S`, 1 s, for it). Samples are downsampled to at most one per `STREAM_PERIOD_S` (0.1 s, 10 Hz, *tunable*): fast enough to show a walk's velocity and obstacle distances changing through a 1–2 s step and a link gap to within 0.1 s, and about 36 000 lines for an hour of tasks instead of five times that at the full assumed 50 Hz. The skills' own `state_before` / `state_after` are unaffected.
+
+`t_mono_ms` is milliseconds since task start on the same monotonic clock as the task log's `t_mono_ms` (for samples and link events: the arrival of the message in the service), so stream lines line up with the task's records.
+
+| `type` | Fields |
+|---|---|
+| `stream_start` | `t_mono_ms`, `period_ms`, `link` (`up` / `down`) at subscription |
+| `sample` | `t_mono_ms`, `link`, `state` (a full `RobotState`, with `seq` and `age_ms`) |
+| `link` | `t_mono_ms` (null if no message ever arrived), `link`: a change; for `down` the time of the last message before the gap, for `up` of the first one after it |
+| `stream_error` | `t_mono_ms`, `detail` (`ExceptionType: message`); the stream ends |
+
+A gap shows as a `link` `down` line, no samples, then a `link` `up` line ([skills.md](../../skills/docs/skills.md#robot-service)). The stream is off every critical path: it runs on its own thread and connection, and any failure (service down, connection lost, file error) ends only the stream, never the task. A service that is down at task start gives a file with one `stream_error` line. The stream does not resume after a service restart within the task.
+
 ## `index.jsonl`
 
 One line per finished task, without the envelope:
 
 ```json
-{"run_id":"b6bb52fe55bb41589a5a1fc51c463f72","file":"20261001T113603_b6bb52fe.jsonl","ts_start":"2026-10-01T11:36:03.636693+03:00","task":"turn left 90 degrees, then tell me if you see a chair","source":"cli","outcome":"DONE","condition":"","provider":"anthropic","backend":"stub","model":"claude-sonnet-5-5","thinking":"between_tools","planning_horizon":5,"max_llm_calls":20,"registry_hash":"bf06b5af6abd480b","llm_calls":2,"failures":0,"steps_dispatched":2,"input_tokens":200,"output_tokens":40,"duration_ms":156.1}
+{"run_id":"b6bb52fe55bb41589a5a1fc51c463f72","file":"20261001T113603_b6bb52fe.jsonl","ts_start":"2026-10-01T11:36:03.636693+03:00","task":"turn left 90 degrees, then tell me if you see a chair","source":"cli","outcome":"DONE","condition":"","provider":"anthropic","backend":"stub","robot_io":"service","model":"claude-sonnet-5-5","thinking":"between_tools","planning_horizon":5,"max_llm_calls":20,"registry_hash":"bf06b5af6abd480b","llm_calls":2,"failures":0,"steps_dispatched":2,"input_tokens":200,"output_tokens":40,"duration_ms":156.1}
 ```
 
-`file` is relative to the index's folder. A task whose log could not be opened has no index line. `provider`, `backend` and `model` are the config values; `thinking` is `llm.thinking` for `anthropic` and null for `openrouter`, which ignores it. `input_tokens` and `output_tokens` are the sums of those two `usage` fields only (for `openrouter`: of `prompt_tokens` and `completion_tokens`); any other numeric `usage` fields (for example cache counters) are summed in `task_end.usage_totals`. Use the index to select tasks by condition, then read their files for per-call detail.
+`file` is relative to the index's folder. A task whose log could not be opened has no index line. `provider`, `backend` and `model` are the config values; `robot_io` is as in `task_start` (absent in rows written without it); `thinking` is `llm.thinking` for `anthropic` and null for `openrouter`, which ignores it. `input_tokens` and `output_tokens` are the sums of those two `usage` fields only (for `openrouter`: of `prompt_tokens` and `completion_tokens`); any other numeric `usage` fields (for example cache counters) are summed in `task_end.usage_totals`. Use the index to select tasks by condition, then read their files for per-call detail.
 
 ## Computing the study metrics
 
@@ -131,7 +154,9 @@ Pick the folder first (`logs/anthropic/real/` for the study), then group its tas
 | Motion commanded | `step_start.dispatch.motion_cost`, `task_end.budget_used` |
 | Robot state | `step_result.response.state_before` / `state_after`; `stop_move.response.state_after` ([robot.md](../../skills/docs/robot.md#state-sampling)) |
 | Exact prompts | `task_start.system_text` / `catalog_text` / `tool_schema` + `llm_request.user_text` |
-| Session continuity | `session_id` links tasks of one process; `task_start.previous_task` and `posture` show what carried over |
+| Session continuity | `session_id` links tasks of one process; `task_start.previous_task` shows what carried over |
+| State at task start | `task_start.state_source` (`fresh` / `carried_over`), `state_age_ms`, `state_error` |
+| Robot state over time | the task's `state_stream.jsonl`: samples at 10 Hz and link gaps |
 
 ## Design decisions
 
@@ -151,4 +176,6 @@ Pick the folder first (`logs/anthropic/real/` for the study), then group its tas
 - **Horizon rejections are a `plan_invalid` kind** (`rejection_kind == "horizon"`, with `steps_in_plan` and `horizon`), not a record of their own: one record per invalid reply, and the rate is still a simple filter per condition ([llm.md](llm.md#horizon-rejection)). The two fields are always present (null for other kinds) so every `plan_invalid` has the same keys.
 - **One place per StopMove result**: the `stop_move` record. A killed step's `step_result` does not repeat it; the `stop_move` record follows it directly.
 - **Infrastructure retries are logged separately and never counted as LLM calls or replans**, so provider trouble does not contaminate the replanning metric.
+- **`robot_io` is a field set by the code, not a config key.** The robot service is the only state path, so there is nothing to configure; the field marks the records for analysis, which must not mix them with records written with per-process DDS. Existing logs are not rewritten: a missing field identifies them.
+- **The state stream is a separate file per task, not records in the task log.** At 10 Hz it would outnumber every other record many times over and interleave with them from a second thread; a sibling file keeps the task log's record contract and `seq` unchanged and can be skipped by analysis that does not need it. Rejected: one stream file per session (harder to cut per task); the full message rate (five times the lines for no study metric that needs it).
 - **Full robot state is logged, not just posture**, as the data for setting v2 verification thresholds ([roadmap.md](../../docs/roadmap.md#v2-plan)).

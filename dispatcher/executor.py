@@ -1,4 +1,5 @@
-"""Executor: one subprocess per skill call, timeouts, kill, StopMove (docs/safety.md)."""
+"""Executor: one subprocess per skill call, timeouts, kill, StopMove (docs/safety.md); owns the vision and robot
+services (docs/running.md)."""
 
 from __future__ import annotations
 
@@ -18,14 +19,17 @@ from pydantic import BaseModel, TypeAdapter, ValidationError
 from skills import detect_object as vision_client
 from skills import read_state as read_state_utility
 from skills import stop_move as stop_move_utility
-from skills.env import child_env
+from skills.env import child_env, robot_socket_path
 from skills.policy import SkillPolicy
 
 from . import prompts
 from .config import SECRET_ENV, Config
 from .models import RobotState, SkillResponse, StopCause, StopMoveResult
 from .registry import SkillDescriptor
-from .vision import VisionService, log_path
+from .robot import RobotService, StateStream
+from .robot import log_path as robot_log_path
+from .vision import VisionService
+from .vision import log_path as vision_log_path
 
 POLL_INTERVAL_S = 0.05  # wait-loop poll period (docs/safety.md)
 READER_JOIN_TIMEOUT_S = 2.0  # join timeout per reader thread (docs/safety.md)
@@ -68,8 +72,18 @@ class SkillExecutor(Protocol):
 
     def stop_move(self, reason: StopCause) -> StopMoveResult: ...
 
-    def read_state(self) -> RobotState | None: ...
+    def fresh_state(self) -> RobotState:
+        """The latest state through the robot service; raises ``robot.StateReadError``."""
+        ...
 
+    def state_stream(self, path: Path, t_start: float) -> StreamHandle:
+        """Start writing the robot service's state stream to ``path`` until the handle is closed."""
+        ...
+
+    def close(self) -> None: ...
+
+
+class StreamHandle(Protocol):
     def close(self) -> None: ...
 
 
@@ -153,7 +167,10 @@ class Executor:
         self._lock = threading.Lock()
         self._current: subprocess.Popen | None = None
         self._kill_cause: StopCause | None = None
-        self.vision = VisionService(self.base_dir, log_path(cfg.log.dir), lambda: self._env(None))
+        self.vision = VisionService(self.base_dir, vision_log_path(cfg.log.dir), lambda: self._env(None))
+        self.robot = RobotService(
+            self.base_dir, robot_log_path(cfg.log.dir), robot_socket_path(cfg.log.dir), lambda: self._env(None)
+        )
 
     # --- environment and process start (skills/docs/skills.md) ----------------------------------
 
@@ -167,6 +184,7 @@ class Executor:
             stub_time_scale=self.cfg.stub.time_scale,
             stub_objects=self.cfg.stub.objects,
             parent_pid=os.getpid(),
+            log_dir=self.cfg.log.dir,
             fault=fault,
         )
 
@@ -314,9 +332,19 @@ class Executor:
         )
 
     def read_state(self) -> RobotState | None:
+        """The ``read_state`` utility's state, read with its own DDS, not through the robot service (diagnosis)."""
         _, response, _, _ = self._run_utility(read_state_utility)
         return response.state_after if response is not None else None
 
+    # --- robot service (docs/running.md) ----------------------------------------------------------
+
+    def fresh_state(self) -> RobotState:
+        return self.robot.read_state()
+
+    def state_stream(self, path: Path, t_start: float) -> StateStream:
+        return StateStream(self.robot.socket_path, path, t_start)
+
     def close(self) -> None:
-        """Stop the vision service (docs/running.md); idempotent."""
+        """Stop the vision and robot services (docs/running.md); idempotent."""
         self.vision.stop()
+        self.robot.stop()

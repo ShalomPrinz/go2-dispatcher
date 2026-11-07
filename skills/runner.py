@@ -12,7 +12,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from typing import Literal, NoReturn
 
-from skills import backend, process
+from skills import backend, process, robot_ipc
 from skills.policy import SkillPolicy
 from skills.schema import SCHEMA_VERSION, ErrorCode, RobotState, SkillError, SkillResponse, Status
 
@@ -48,26 +48,43 @@ class SkillOutcome:
         return cls.error(code, message, observations={}, timing={})
 
 
+StateSource = Literal["service", "process"]
+
+
 @dataclass
 class StateSampler:
     """The state samples of one skill process, filled by take() and read by build_response;
-    run_main owns it, so samples taken before an exception survive (skills/docs/skills.md)."""
+    run_main owns it, so samples taken before an exception survive (skills/docs/skills.md).
+    source "service": read through the robot service (skills); "process": the backend in this
+    process, with its own DDS on the real backend (the utilities)."""
 
     before: RobotState | None = None
     after: RobotState | None = None
     errors: list[str] = field(default_factory=list)
     seconds: float = 0.0
     used: bool = False  # a sample was attempted: timing gets state_ms
+    source: StateSource = "service"
+    _service: robot_ipc.ServiceStateReader | None = field(default=None, repr=False, compare=False)
+
+    def _read(self) -> RobotState:
+        if self.source == "process":
+            return backend.sample_state()
+        if self._service is None:
+            self._service = robot_ipc.ServiceStateReader()
+        return self._service()
 
     def take(self, label: Literal["before", "after"], *, strict: bool = False) -> RobotState | None:
         """Sample state into ``label``; on failure record "<label>: <Type>: <msg>" and return None.
         strict re-raises instead and records nothing. BackendNotConfigured always propagates."""
         self.used = True
         try:
-            backend.init_dds()  # reported as dds_init_ms, not in state_ms
+            if self.source == "process":
+                backend.init_dds()  # reported as dds_init_ms, not in state_ms
+            else:
+                backend.backend_name()  # a misconfigured backend fails the call, not just its samples
             t = time.monotonic()
             try:
-                state = backend.sample_state()
+                state = self._read()
             finally:
                 self.seconds += time.monotonic() - t
         except backend.BackendNotConfigured:
@@ -110,7 +127,7 @@ def build_response(
     *,
     dds_init_ms: float | None = None,
 ) -> SkillResponse:
-    """The SkillResponse (schema_version=1), built from the sources of its fields; dds_init_ms is None
+    """The SkillResponse (schema_version=2), built from the sources of its fields; dds_init_ms is None
     when the process did not init DDS. Only the error-iff-status rule is checked here, the dispatcher
     validates the rest (skills/docs/skills.md). error_message: collapsed to one line, not length-limited."""
     error = None
@@ -186,15 +203,21 @@ def ms_since(t0: float) -> float:
     return round((time.monotonic() - t0) * 1000.0, 3)
 
 
-def run_main(skill: str, body: Callable[[StateSampler], SkillOutcome], *, watchdog: bool = True) -> NoReturn:
+def run_main(
+    skill: str,
+    body: Callable[[StateSampler], SkillOutcome],
+    *,
+    watchdog: bool = True,
+    state_source: StateSource = "service",
+) -> NoReturn:
     """Shared main() of skills and utilities: capture_stdout(), optional orphan watchdog, then
-    outcome = body(states). An exception becomes SkillOutcome.from_exception(e); states sampled
-    before it are kept. Then emit() with total_ms since start."""
+    outcome = body(states) with a StateSampler reading from ``state_source``. An exception becomes
+    SkillOutcome.from_exception(e); states sampled before it are kept. Then emit() with total_ms since start."""
     process.capture_stdout()
     if watchdog:
         process.start_orphan_watchdog()
     t0 = time.monotonic()
-    states = StateSampler()
+    states = StateSampler(source=state_source)
     try:
         outcome = body(states)
     except Exception as e:
@@ -207,7 +230,7 @@ def run_main(skill: str, body: Callable[[StateSampler], SkillOutcome], *, watchd
 def run_skill(policy: SkillPolicy, body: Body, *, sample_state: bool = True) -> NoReturn:
     """Standard main() of a skill, via run_main:
     1. params = json.loads(argv[1]); must be a dict -> else error invalid_params
-    2. if sample_state: sample state_before (exception -> state_error, continue)
+    2. if sample_state: sample state_before through the robot service (exception -> state_error, continue)
     3. outcome = body(params), a SkillOutcome
     4. if sample_state: sample state_after (exception -> appended to state_error)
     timing gets dds_init_ms (if DDS was initialised), state_ms (time in the samples, if any was

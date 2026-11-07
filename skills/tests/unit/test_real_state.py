@@ -49,7 +49,7 @@ class Value:
 
 
 def test_full_message_maps():
-    state = real._state_from_msg(msg())
+    state = real.state_from_msg(msg())
     assert (state.backend, state.posture) == ("real", "standing")
     assert state.position == [1.0, 2.0, 0.3]
     assert state.imu_rpy == [0.0, 0.0, 0.1]
@@ -60,15 +60,15 @@ def test_full_message_maps():
 
 
 def test_range_obstacle_unknowns_are_none_and_raw_is_kept():
-    state = real._state_from_msg(msg(range_obstacle=[0.0, -1.0, math.nan, Item(RANGE_OBSTACLE_MAX_M + 1)]))
+    state = real.state_from_msg(msg(range_obstacle=[0.0, -1.0, math.nan, Item(RANGE_OBSTACLE_MAX_M + 1)]))
     assert state.obstacle_m == ObstacleDistances()
     assert state.range_obstacle_raw == [0.0, -1.0, None, RANGE_OBSTACLE_MAX_M + 1]  # NaN has no JSON form
-    short = real._state_from_msg(msg(range_obstacle=[1.0, 2.0]))
+    short = real.state_from_msg(msg(range_obstacle=[1.0, 2.0]))
     assert (short.obstacle_m, short.range_obstacle_raw) == (None, None)
 
 
 def test_missing_attributes_are_none():
-    state = real._state_from_msg(SimpleNamespace())
+    state = real.state_from_msg(SimpleNamespace())
     assert state.posture == "unknown"
     assert all(v is None for k, v in asdict(state).items() if k not in ("t", "backend", "posture"))
 
@@ -87,11 +87,11 @@ def test_missing_attributes_are_none():
     ids=["nan_height", "nan_in_list", "short_list", "none_list", "inf_int", "bool_int", "text_float"],
 )
 def test_bad_values_become_none(field, value):
-    assert getattr(real._state_from_msg(msg(**{field: value})), field) is None
+    assert getattr(real.state_from_msg(msg(**{field: value})), field) is None
 
 
 def test_numpy_and_ctypes_scalars():
-    state = real._state_from_msg(
+    state = real.state_from_msg(
         msg(body_height=Item(POSTURE_STANDING_MIN_M), mode=Value(2), position=[Item(1.0), Value(2.0), 3])
     )
     assert state.body_height == POSTURE_STANDING_MIN_M

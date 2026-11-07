@@ -17,7 +17,17 @@ if TYPE_CHECKING:
     from ..budget import MotionBudget
     from ..context import RequestReason, ReturnReason
     from ..llm import LLMResult, PlanCheck
-    from ..models import Plan, Posture, StepDispatch, StepRef, StepResult, StopMoveResult, TaskOutcome, TaskSummary
+    from ..models import (
+        Plan,
+        Posture,
+        StartState,
+        StepDispatch,
+        StepRef,
+        StepResult,
+        StopMoveResult,
+        TaskOutcome,
+        TaskSummary,
+    )
     from ..registry import Registry
 
 __all__ = ["TelegramProgress", "Edit", "EDIT_INTERVAL_S", "PROGRESS_MAX_CHARS", "EDIT_FAILED_WARNING"]
@@ -129,7 +139,13 @@ class TelegramProgress:
             pass
 
     def task_start(
-        self, task: str, source: str, sender_id: str | None, previous: TaskSummary | None, posture: Posture
+        self,
+        task: str,
+        source: str,
+        sender_id: str | None,
+        previous: TaskSummary | None,
+        posture: Posture,
+        start_state: StartState,
     ) -> None:
         pass
 

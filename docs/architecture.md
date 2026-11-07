@@ -27,8 +27,10 @@ An operator sends a natural-language task over Telegram or the CLI. The LLM retu
             │   one JSON line (skill response)         ▼
             └────────────────────────────── Backend: real SDK | stub
             │
-            └── starts, restarts, stops ──► python -m skills.vision_service
-                                            (detect_object asks it over a Unix socket)
+            ├── starts, restarts, stops ──► python -m skills.vision_service
+            │                               (detect_object asks it over a Unix socket)
+            └── starts, reads, stops ─────► python -m skills.robot_service
+                                            (owns robot state; skills sample through it)
 ```
 
 | Component | Code | Owner doc |
@@ -41,6 +43,7 @@ An operator sends a natural-language task over Telegram or the CLI. The LLM retu
 | Skill registry and generated catalog; `SKILL.md` schema and parser | `registry.py`, `skills/manifest.py`, `skills/catalog/*/SKILL.md` | [skills.md](../skills/docs/skills.md) |
 | Executor: subprocesses, timeouts, kill, `StopMove`, state reads | `executor.py` | [safety.md](safety.md) |
 | Vision service lifecycle (start, restart before `detect_object`, stop) | `vision.py`, `skills/vision_service.py` | [running.md](running.md), [skills.md](../skills/docs/skills.md) |
+| Robot service lifecycle and state reads (start, task-start read, state stream, stop) | `robot.py`, `executor.py`, `skills/robot_service.py` | [running.md](running.md), [skills.md](../skills/docs/skills.md#robot-service) |
 | Skill runtime, skills and utilities, real and stub backends, posture rule | `skills/` | [skills.md](../skills/docs/skills.md), [robot.md](../skills/docs/robot.md) |
 | Run log and index | `runlog.py` | [run-log.md](../dispatcher/docs/run-log.md) |
 | Configuration and `.env` | `config.py` | [configuration.md](configuration.md) |
@@ -54,6 +57,7 @@ One task, in outline: build the context from fixed slots → call the LLM → va
 - Inside it, the transport thread receives messages and one task runs at a time. While a task runs, other messages get a busy reply (no queue); only the stop word gets through. The Telegram bot handles updates concurrently so that `stop` can arrive during a task.
 - **One subprocess per skill call** (`python -m skills.<skill> '<json params>'`), in its own process group, never reused. It prints exactly one JSON response line and exits. Two utilities, `stop_move` and `read_state`, run the same way but are not skills.
 - **One long-running vision service** (`python -m skills.vision_service`), started by the dispatcher and restarted before a `detect_object` step if it has died. It loads the detector once and keeps the camera client open; `detect_object` stays a one-shot skill process that asks it over a Unix socket. It never commands motion, so it is outside the stop path ([running.md](running.md), [skills.md](../skills/docs/skills.md)).
+- **One long-running robot service** (`python -m skills.robot_service`), started by the dispatcher and the only long-lived owner of robot state. It keeps the latest `rt/sportmodestate` message (or the stub's state) and answers state reads over a Unix socket at a fixed path in `log.dir`, guarded by a lock file. Skills sample `state_before` and `state_after` through it; the dispatcher reads fresh state through it before each task's first plan. It never commands motion, so it is outside the stop path; `stop_move` and `read_state` keep their own DDS read ([skills.md](../skills/docs/skills.md#robot-service)).
 - The robot is stationary while the LLM is called; motion happens only inside skill processes.
 - The **dispatcher never imports the SDK or touches DDS**. It imports skill modules only to read their policy objects (timeout formula, motion cost, observations shown to the model), and importing a skill module never imports the SDK.
 - Skill processes watch their parent and stop the robot if the dispatcher dies ([safety.md](safety.md)).
@@ -88,6 +92,7 @@ Cross-cutting decisions. Decisions that belong to one topic are in that topic's 
 - **Measurement validity comes first.** Anything that would make tokens, latency or replanning depend on something other than the task and the experimental condition is avoided: no conversation history, no compaction, no prompt caching, thinking at its lowest setting, fixed notice texts identical across conditions. The individual decisions are in [loop-and-context.md](../dispatcher/docs/loop-and-context.md) and [llm.md](../dispatcher/docs/llm.md).
 - **The plan is a first-class object, returned through one tool (`submit_plan`).** It can be validated, logged, counted and inspected, and every LLM call has one output contract. Rejected: a generic multi-tool loop, where the plan exists only implicitly.
 - **Context is rebuilt from fixed slots on every call, not carried as a conversation.** Context size depends only on the current task, which keeps measurements comparable across conditions. Static content (tools, system text, catalog) comes first so prompt caching could be added later without reordering. Layout in [loop-and-context.md](../dispatcher/docs/loop-and-context.md).
+- **Robot state comes from one long-lived service, not from each skill process.** DDS init, discovery and the first message cost about 0.2 s in every skill's state sample, and a fresh process on an unstable link can fail to create a DDS domain at all; a participant that stays up avoids both and keeps state available between steps. The socket path is fixed so one robot owner exists per machine and other readers can attach. Rejected: a per-PID socket as vision uses (nothing can attach, and two dispatchers could each start one); separate state and motion services (two lifecycles and participants with no measured need); shared memory, ZeroMQ or HTTP for the IPC (dependencies or complexity for a sub-millisecond gain).
 - **One subprocess per skill call.** The Unitree SDK initialises DDS through a process-wide singleton, so a fresh process guarantees a clean channel. It also lets a hung call be killed, and isolates crashes in the native bindings.
 - **Vision is the one exception: a long-running service, not loaded per call.** Loading torch, YOLO and the camera client cost about 5 s in every `detect_object` process on the robot, while a warm predict takes 0.04 s. The service only reads the camera, so a fresh DDS channel per call buys no safety there. Rejected: an ONNX export without torch, which keeps per-call processes but saves only about 2 s and leaves the camera client setup.
 - **One stop path** (kill the skill's process group, then send `StopMove` from a fresh process) for operator stop, step timeouts, the task time limit, shutdown and internal errors: one tested mechanism, and a killed process cannot clean up after itself ([safety.md](safety.md)).

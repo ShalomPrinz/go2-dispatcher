@@ -107,7 +107,7 @@ The 80 class names are in `skills/coco.py` (`COCO_CLASSES`).
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `dir` | path | `"logs"` | Root of the run logs. Each task goes to `{dir}/{llm.provider}/{robot.backend}/` with that folder's own `index.jsonl`; the folder is derived, not configurable ([run-log.md](../dispatcher/docs/run-log.md#files)). The single-instance lock file `.dispatcher.lock` is at the root. |
+| `dir` | path | `"logs"` | Root of the run logs. Each task goes to `{dir}/{llm.provider}/{robot.backend}/` with that folder's own `index.jsonl`; the folder is derived, not configurable ([run-log.md](../dispatcher/docs/run-log.md#files)). The single-instance lock file `.dispatcher.lock` is at the root, and so are the [robot service](../skills/docs/skills.md#robot-service)'s socket `robot.sock` and its lock file `robot.lock`; a Unix socket path is limited to about 107 bytes. |
 
 ### `[telegram]`
 

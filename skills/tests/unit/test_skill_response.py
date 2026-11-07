@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 
 from skills.runner import SkillOutcome, StateSampler, build_response
-from skills.schema import ErrorCode, SkillError, SkillResponse
+from skills.schema import SCHEMA_VERSION, ErrorCode, SkillError, SkillResponse
 
 
 def test_message_collapsed_not_cut():
@@ -23,6 +23,6 @@ def test_message_collapsed_not_cut():
 
 def test_error_iff_status_error():
     with pytest.raises(ValueError):
-        SkillResponse(schema_version=1, skill="walk", status="ok", error=SkillError("x", "y"))
+        SkillResponse(schema_version=SCHEMA_VERSION, skill="walk", status="ok", error=SkillError("x", "y"))
     with pytest.raises(ValueError):
-        SkillResponse(schema_version=1, skill="walk", status="error")
+        SkillResponse(schema_version=SCHEMA_VERSION, skill="walk", status="error")

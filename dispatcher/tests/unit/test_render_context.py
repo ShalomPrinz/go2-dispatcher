@@ -32,6 +32,7 @@ from dispatcher.models import (
 )
 from dispatcher.registry import Registry
 from skills.policy import MotionCost
+from skills.schema import SCHEMA_VERSION
 from tests.helpers import REPO_ROOT
 
 GOLDEN = REPO_ROOT / "dispatcher" / "tests" / "golden"
@@ -62,7 +63,7 @@ def check_golden(name: str, text: str, update: bool) -> None:
 def response(skill: str, *, observations=None, error=None, posture=None) -> SkillResponse:
     state = RobotState(t=0.0, backend="stub", posture=posture) if posture else None
     return SkillResponse(
-        schema_version=1,
+        schema_version=SCHEMA_VERSION,
         skill=skill,
         status="error" if error else "ok",
         observations=observations or {},

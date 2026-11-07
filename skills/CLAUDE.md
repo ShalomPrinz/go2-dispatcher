@@ -17,7 +17,7 @@ uv run go2 --fault 1:hang run "…"              # stub fault injection: error, 
 
 | Doc | Covers |
 |---|---|
-| [skills.md](docs/skills.md) | `SKILL.md` frontmatter, catalog and registry hash, invocation, response schema, error codes, timeout and motion-cost policies, stub and fault injection, adding a skill, running one by hand |
+| [skills.md](docs/skills.md) | `SKILL.md` frontmatter, catalog and registry hash, invocation, response schema, error codes, timeout and motion-cost policies, stub and fault injection, robot and vision services, adding a skill, running one by hand |
 | [robot.md](docs/robot.md) | Robot facts, SDK and DDS usage, state sampling, posture rule, settle waits, real backend, supervised robot checklist |
 | [safety.md](../docs/safety.md) | Stop path, motion budget, bounds, supervised-operation rules |
 | [configuration.md](../docs/configuration.md) | `robot.*` and `stub.*` config keys, `.env` |

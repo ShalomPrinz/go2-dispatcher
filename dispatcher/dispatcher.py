@@ -27,6 +27,8 @@ from .models import (
     Plan,
     Posture,
     RobotState,
+    StartState,
+    StateReadError,
     StepDispatch,
     StepRef,
     StepResult,
@@ -37,17 +39,24 @@ from .models import (
     TaskSummary,
 )
 from .registry import Registry
-from .runlog import NullLog, RunLogFactory, SessionInfo, TaskLog, TaskObserver, TeeLog, notify
+from .runlog import NullLog, RunLogFactory, SessionInfo, TaskLog, TaskObserver, TeeLog, notify, stream_path
 
 __all__ = ["Dispatcher"]
 
 EXCEPTION_WHERE = "run_task"
 
-Phase = Literal["idle", "llm_call", "step", "between", "ending"]
+Phase = Literal["idle", "starting", "llm_call", "step", "between", "ending"]
 
 
 def _numeric_usage(usage: dict) -> dict[str, float]:
     return {k: v for k, v in usage.items() if isinstance(v, (int, float)) and not isinstance(v, bool)}
+
+
+def _age_ms(state: RobotState | None) -> float | None:
+    """Time since ``state``'s message arrived, from its read time ``t`` (unix) and its age at that read."""
+    if state is None:
+        return None
+    return (time.time() - state.t) * 1000.0 + (state.age_ms or 0.0)
 
 
 # --- per-task state (dispatcher/docs/loop-and-context.md) -----------------------------------------------------------
@@ -126,6 +135,7 @@ class Dispatcher:
         self._phase: Phase = "idle"
         self._stop_event = threading.Event()
         self._log: TaskLog | None = None  # the plain log, without the observer (dispatcher/docs/run-log.md)
+        self._pending_stop: tuple[str, Phase] | None = None  # a stop before the log opened, logged once it has
 
     # --- public interface (dispatcher/docs/loop-and-context.md) ------------------------------------------------------
 
@@ -141,13 +151,15 @@ class Dispatcher:
             logged = self._log is not None
             if self._log is not None:
                 self._log.stop_requested(source, during)
+            elif self._pending_stop is None:
+                self._pending_stop = (source, during)
         self.executor.kill_current(StopCause.OPERATOR)
         if logged:  # the observer runs after the kill and outside the lock (dispatcher/docs/run-log.md)
             notify(self.observer, lambda o: o.stop_requested(source, during))
         return "stopping"
 
     def shutdown(self, wait_s: float) -> None:
-        """End a running task, then close the executor (the vision service); safe to call twice."""
+        """End a running task, then close the executor (the vision and robot services); safe to call twice."""
         try:
             self._end_running_task(wait_s)
         finally:
@@ -176,9 +188,13 @@ class Dispatcher:
         if not self._task_lock.acquire(blocking=False):
             raise BusyError("a task is running")
         try:
+            self._set_phase("starting")  # a stop from here on is honoured (dispatcher/docs/loop-and-context.md)
             t = self._new_task(task, source, sender_id)
+            stream = None
             try:
-                self._open_log(t)
+                self._open_log(t, self._refresh_state())
+                if t.log.path is not None:
+                    stream = self.executor.state_stream(stream_path(t.log.path), t.t_start)
                 try:
                     self._loop(t)
                 except _TaskEnded as ended:  # the one place a task ends (dispatcher/docs/loop-and-context.md)
@@ -193,10 +209,14 @@ class Dispatcher:
                     )
             except Exception as e:  # noqa: BLE001 - every unhandled error ends the task (dispatcher/docs/loop-and-context.md)
                 return self._internal_error(t, e)
+            finally:
+                if stream is not None:
+                    stream.close()
         finally:
             with self._state_lock:
                 self._phase = "idle"
                 self._stop_event.clear()
+                self._pending_stop = None
                 log, self._log = self._log, None
             if log is not None:
                 log.close()
@@ -222,14 +242,26 @@ class Dispatcher:
     def _observed(self, log: TaskLog) -> TaskLog:
         return log if self.observer is None else TeeLog(log, self.observer)
 
-    def _open_log(self, t: _Task) -> None:
+    def _refresh_state(self) -> StartState:
+        """Read a fresh state for the task's first plan; on failure keep the carried-over one
+        (dispatcher/docs/loop-and-context.md)."""
+        try:
+            self.state = self.executor.fresh_state()
+            return StartState(source="fresh", age_ms=self.state.age_ms)
+        except StateReadError as e:
+            return StartState(source="carried_over", age_ms=_age_ms(self.state), error=str(e))
+
+    def _open_log(self, t: _Task, start_state: StartState) -> None:
         plain = self.runlog_factory.open(t.run_id, t.t_start, clock=self.clock)
         log = self._observed(plain)
-        with self._state_lock:
-            t.log = log
+        t.log = log
+        log.task_start(t.task, t.source, t.sender_id, self.previous, self.posture, start_state)
+        with self._state_lock:  # task_start stays the first record, even with a stop during the start
             self._log = plain
             self._phase = "between"
-        log.task_start(t.task, t.source, t.sender_id, self.previous, self.posture)
+            pending, self._pending_stop = self._pending_stop, None
+        if pending is not None:
+            log.stop_requested(*pending)
 
     # --- helpers ------------------------------------------------------------------------------
 

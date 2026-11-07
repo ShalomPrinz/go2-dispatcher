@@ -15,17 +15,17 @@ The Go2 EDU side of the system: what the code assumes about the robot, how it ta
 
 ## SDK and DDS usage
 
-All SDK use is in `skills/real.py` and, for the camera, `skills/real_detector.py` (run only by the [vision service](skills.md#vision-service)), selected in the skill process by `GO2_BACKEND=real` (`backend.py`). The dispatcher itself never imports the SDK ([architecture.md](../../docs/architecture.md#process-model)); every SDK import is inside a function, so importing any `skills` module needs only the standard library ([skills.md](skills.md#no-side-effects-on-import)).
+All SDK use is in `skills/real.py` and, for the camera, `skills/real_detector.py` (run only by the [vision service](skills.md#vision-service)), selected by `GO2_BACKEND=real` (`backend.py`) in the skill, utility or service process that uses it. The dispatcher itself never imports the SDK ([architecture.md](../../docs/architecture.md#process-model)); every SDK import is inside a function, so importing any `skills` module needs only the standard library ([skills.md](skills.md#no-side-effects-on-import)).
 
 | What | How |
 |---|---|
-| DDS init | `ChannelFactoryInitialize(0, $GO2_IFACE)`, once per process, before anything touches DDS: `real.init_dds()`, called by the state sampler before the first sample and by `motion.sport_client()` before the sport client. Its time, including the import of the SDK channel module and failed attempts, is reported as `timing.dds_init_ms` ([skills.md](skills.md#response-schema)). An empty `GO2_IFACE` gives `backend_not_configured`. |
+| DDS init | `ChannelFactoryInitialize(0, $GO2_IFACE)`, once per process, before anything touches DDS: `real.init_dds()`, called by `real.subscribe_state()` (in the [robot service](skills.md#robot-service) at its start, and in a utility before its own first sample) and by `motion.sport_client()` before the sport client. Its time, including the import of the SDK channel module and failed attempts, is reported as `timing.dds_init_ms` ([skills.md](skills.md#response-schema)). An empty `GO2_IFACE` gives `backend_not_configured`. |
 | Sport client | `SportClient()`, `SetTimeout(SPORT_CLIENT_TIMEOUT_S)` (5.0 s, tunable), `Init()`. One per skill process; its creation is reported as `timing.client_init_ms`. A call that waits for a reply (`StopMove`, `StandDown`, `Stretch`) returns a non-zero code after this long without one; it must fit inside the skill's timeout ([skills.md](skills.md#policies)). |
 | Calls used | `Move(vx, vy, vyaw)`, `StopMove()`, `StandDown()`, `Stretch()`. Each returns an int; 0 is success, anything else is an `sdk_error` with the code in `observations.sdk_ret`. |
 | Camera | `VideoClient`, `SetTimeout(CAMERA_TIMEOUT_S)`, `Init()` once in the vision service, then `GetImageSample()` → JPEG bytes per request, decoded with OpenCV. Error 3104 and any other non-zero code is `camera_unavailable`, never retried. |
-| State | `ChannelSubscriber("rt/sportmodestate", SportModeState_)`, queue length `SUBSCRIBER_QUEUE_LEN` ([state sampling](#state-sampling)). |
+| State | `ChannelSubscriber("rt/sportmodestate", SportModeState_)`, queue length `SUBSCRIBER_QUEUE_LEN`, created by `real.subscribe_state(callback)`: once in the robot service, and in each `read_state` or `stop_move` process ([state sampling](#state-sampling)). |
 
-Constants are module-level in `skills/real.py`, except the detector ones ([object detection](#object-detection)). Each skill call and utility is a fresh process, so DDS is initialised once per call ([skills.md](skills.md#design-decisions)); the vision service initialises it once per dispatcher run.
+Constants are module-level in `skills/real.py`, except the detector ones ([object detection](#object-detection)). Each skill call and utility is a fresh process, so a process that creates a sport client initialises DDS once per call ([skills.md](skills.md#design-decisions)); the robot and vision services initialise it once per service run.
 
 ### Motion
 
@@ -51,17 +51,17 @@ The box classification and its thresholds live in `skills/vision.py` (`classify_
 
 Robot state is sampled:
 
-- at the start and end of every skill call (`state_before`, `state_after`);
-- by the `stop_move` utility after `StopMove()` and its [settle wait](#settle-waits) (`state_after`);
-- by the `read_state` utility: `go2 state`, and at startup on either backend to set the dispatcher's initial state, posture and obstacle distances included (no state, posture `unknown`, if it fails).
+- at the start and end of every skill call (`state_before`, `state_after`), through the [robot service](skills.md#robot-service);
+- by the `stop_move` utility after `StopMove()` and its [settle wait](#settle-waits) (`state_after`), with its own DDS;
+- by the `read_state` utility, with its own DDS: `go2 state`, and at startup on either backend to set the dispatcher's initial state, posture and obstacle distances included (no state, posture `unknown`, if it fails).
 
-**How.** On the first sample in a process, the backend subscribes to `rt/sportmodestate`. A sample waits up to `STATE_WAIT_S` for a message that arrived *after* the sample was requested; if none arrives, it uses the latest earlier message; if there is none at all, the sample fails. A failed sample does not fail the step: it is reported in `state_error` and the state is `null` ([skills.md](skills.md#response-schema)).
+**How.** One `state_store.StateStore` per subscriber holds the latest `rt/sportmodestate` message. The subscriber callback (`StateStore.put`) only stores the message, numbers it `seq` from 1 and stamps its arrival time; the message is mapped to a `RobotState` when it is read. In the robot service the subscription lives for the whole service run; in a utility it is made at the first sample. A sample waits up to `STATE_WAIT_S` (1.0 s) for a message that arrived *after* the sample was requested (`min_seq` = latest `seq` + 1); if none arrives, it uses the latest earlier message; if there is none at all, the sample fails. A failed sample does not fail the step: it is reported in `state_error` and the state is `null` ([skills.md](skills.md#response-schema)). The robot service also reports the link: `up` while the latest message is at most `LINK_GAP_S` (0.5 s, *tunable*) old, else `down`.
 
 **Fields.** Each sample is a `RobotState` (`skills/schema.py`), which rejects unknown keys, so a new field is added there first ([skills.md](skills.md#response-schema)):
 
 | Field | Source in `SportModeState` |
 |---|---|
-| `t` | local `time.time()` when the sample was mapped |
+| `t` | local `time.time()` when the sample was read |
 | `backend` | `"real"` |
 | `posture` | derived ([posture rule](#posture-rule)) |
 | `mode`, `gait_type` | `mode`, `gait_type` |
@@ -72,6 +72,8 @@ Robot state is sampled:
 | `foot_force` | `foot_force` (4 values) |
 | `error_code` | `error_code` |
 | `range_obstacle_raw` | `range_obstacle` (4 values) as received, zeros included; only a non-finite or non-numeric element becomes `null` (JSON has no NaN), and the whole field is `null` if the length is not 4 |
+| `seq` | the message's number, counted from 1 by the subscriber that received it (the robot service, or the utility's own); not a field of the message |
+| `age_ms` | time from the message's arrival at the subscriber to the read |
 | `obstacle_m` | `{front, back, left, right}` in metres, derived from `range_obstacle_raw` by `derive_obstacles` in `skills/real.py`; a value of 0 or below, above `RANGE_OBSTACLE_MAX_M` (30 m, *tunable*) or `null` becomes `null` (unknown) |
 
 numpy and ctypes values are converted to plain numbers. A missing attribute or a non-finite value becomes `null`; a list field other than `range_obstacle_raw` becomes `null` as a whole if any element is bad or its length is wrong.
@@ -79,6 +81,14 @@ numpy and ctypes values are converted to plain numbers. A missing attribute or a
 **Obstacle distances are *unverified*.** Unitree documents neither the units, the index order nor when firmware fills `range_obstacle` (the SDK IDL and `unitree_ros2`'s `SportModeState.msg` declare only `float32[4] range_obstacle`, without a comment; no SDK example or community code found reads it). The code assumes metres and the index order `RANGE_OBSTACLE_ORDER` = front, back, left, right, a convention, not a sourced fact. The firmware may fill it only with the robot's own obstacle avoidance on, and may report 0 or a large value for "nothing seen". Checklist item 10 settles all of this; until then the model uses `obstacle_m` alone, on the assumption that the field works, and `range_obstacle_raw` stays log-only so a supervised run can verify it.
 
 State is **logged only** in v1. No step gets a verdict from it; the model sees only the derived posture and `obstacle_m` ([loop-and-context.md](../../dispatcher/docs/loop-and-context.md#user-message)). The samples are the data from which v2 verification thresholds will be set ([roadmap.md](../../docs/roadmap.md#v2-plan)).
+
+### Working assumptions
+
+The robot service rests on these assumptions, none yet checked on the robot (checklist item 11). If a supervised run contradicts one, the design consequence is revisited.
+
+- **Cable unplug and replug.** Assumed: a long-lived CycloneDDS participant recovers by itself once the interface is back with its address. Consequence: the service has no logic to re-create its participant or subscription. A link that does not recover shows as `link` `down` and growing `age_ms` in every read, and as failed SDK calls in the skills; the operator restarts the dispatcher.
+- **`rt/sportmodestate` rate.** Assumed: at least 50 Hz. Consequence: the latest message is always recent enough for a state read; the `min_seq` wait is short, and `age_ms` in every sample shows the real freshness. The sim source publishes at the same 50 Hz.
+- **Callback cost.** Assumed: storing the latest message holds the GIL for microseconds, so the DDS callback and the service's connection threads do not delay each other measurably. Consequence: one service process with plain threads, no separate process or thread priorities.
 
 ## Posture rule
 
@@ -130,6 +140,8 @@ Commands use `go2` with a real-backend config. Run a step as a one-step task, or
 9. Stand the robot up with the remote.
 10. Obstacle distances (needs the robot standing again). Place a wall or a large board at measured distances of 0.5, 1.0 and 2.0 m from the body centre, in turn in front, behind, left and right. At each placement run `go2 state` and record `range_obstacle_raw` and `obstacle_m`, once with the robot's own obstacle avoidance on and once off (remote or app). Decides whether firmware fills the field, its units, its index order (`RANGE_OBSTACLE_ORDER`), its "nothing seen" value and whether it is measured from the body centre or the body edge.
 
+11. Robot service (needs the robot standing). With the dispatcher running, read the state 20 times in a row through the service and record `seq` and `age_ms`: the `seq` increase per second is the message rate (assumed ≥ 50 Hz), and `age_ms` should stay below 20 ms. Then unplug the Ethernet cable for about 5 s and plug it back in, without restarting anything: record whether reads show `link` `down` during the gap and `up` with growing `seq` afterwards (assumed: the participant recovers by itself). See [working assumptions](#working-assumptions).
+
 ### Results
 
 Record each result here: date, measured value or observation, and what was changed because of it. Then move the resulting fact into the section of this page it belongs to (or the owning document), update the constant in code if a value changed, and remove the resolved item from [roadmap.md](../../docs/roadmap.md).
@@ -146,6 +158,7 @@ Record each result here: date, measured value or observation, and what was chang
 | 8 | | | |
 | 9 | | | |
 | 10 | | | |
+| 11 | | | |
 
 ### Known issues
 

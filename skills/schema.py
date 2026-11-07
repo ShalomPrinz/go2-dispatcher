@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Literal
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 Posture = Literal["standing", "sitting", "unknown"]
 Status = Literal["ok", "error"]
@@ -60,7 +60,7 @@ class ObstacleDistances:
 class RobotState:
     __pydantic_config__ = _FORBID_EXTRA
 
-    t: float  # unix time when sampled (local clock)
+    t: float  # unix time when read (local clock)
     backend: Literal["real", "stub"]
     posture: Posture
     mode: int | None = None
@@ -74,13 +74,15 @@ class RobotState:
     error_code: int | None = None
     obstacle_m: ObstacleDistances | None = None  # derived from range_obstacle_raw on the real backend
     range_obstacle_raw: list[float | None] | None = None  # SportModeState.range_obstacle as received, 4 values
+    seq: int | None = None  # number of the state message read, counted by its reader from 1
+    age_ms: float | None = None  # time from the message's arrival to the read
 
 
 @dataclass(frozen=True)
 class SkillResponse:
     __pydantic_config__ = _FORBID_EXTRA
 
-    schema_version: Literal[1]
+    schema_version: Literal[2]
     skill: str
     status: Status
     observations: dict[str, Any] = field(default_factory=dict)

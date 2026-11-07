@@ -1,4 +1,5 @@
-"""Utility: sample robot state once (skills/docs/robot.md). Not a skill.
+"""Utility: sample robot state once, with its own DDS on the real backend, not through the robot service
+(skills/docs/robot.md). Not a skill.
 
 ``python -m skills.read_state '{}'``. No faults, no watchdog.
 """
@@ -32,7 +33,7 @@ def body(states: StateSampler) -> SkillOutcome:
 
 
 def main() -> None:
-    runner.run_main(POLICY.name, body, watchdog=False)
+    runner.run_main(POLICY.name, body, watchdog=False, state_source="process")
 
 
 if __name__ == "__main__":

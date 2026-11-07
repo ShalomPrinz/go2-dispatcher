@@ -11,16 +11,18 @@ import math
 import os
 import threading
 import time
+from collections.abc import Callable
+from typing import Any
 
 from skills.backend import BackendNotConfigured, StateUnavailable
 from skills.env import IFACE
 from skills.schema import ObstacleDistances, Posture, RobotState
+from skills.state_store import STATE_WAIT_S, StateStore
 
 DDS_DOMAIN_ID = 0
 SPORT_CLIENT_TIMEOUT_S = 5.0  # per-call reply wait; must fit in the process timeouts (tunable, skills/docs/skills.md)
 SPORT_STATE_TOPIC = "rt/sportmodestate"
 SUBSCRIBER_QUEUE_LEN = 10
-STATE_WAIT_S = 1.0
 POSTURE_SITTING_MAX_M = 0.15  # (tunable, skills/docs/robot.md)
 POSTURE_STANDING_MIN_M = 0.22  # (tunable, skills/docs/robot.md)
 RANGE_OBSTACLE_ORDER = ("front", "back", "left", "right")  # assumed index order, unverified (skills/docs/robot.md)
@@ -72,28 +74,16 @@ def get_sport_client():
 
 # --- state ------------------------------------------------------------------------
 
-_state_cond = threading.Condition()
-_latest: tuple[float, object] | None = None  # (local arrival monotonic, msg)
-_subscriber = None
 
-
-def _on_state(msg) -> None:
-    global _latest
-    with _state_cond:
-        _latest = (time.monotonic(), msg)
-        _state_cond.notify_all()
-
-
-def _ensure_subscriber() -> None:
-    global _subscriber
-    if _subscriber is not None:
-        return
+def subscribe_state(on_message: Callable[[Any], None]) -> Any:
+    """Init DDS and subscribe ``on_message`` to rt/sportmodestate; keep the returned subscriber alive."""
+    init_dds()
     from unitree_sdk2py.core.channel import ChannelSubscriber
     from unitree_sdk2py.idl.unitree_go.msg.dds_ import SportModeState_
 
     sub = ChannelSubscriber(SPORT_STATE_TOPIC, SportModeState_)
-    sub.Init(_on_state, SUBSCRIBER_QUEUE_LEN)
-    _subscriber = sub
+    sub.Init(on_message, SUBSCRIBER_QUEUE_LEN)
+    return sub
 
 
 def _plain(v):
@@ -169,7 +159,7 @@ def derive_posture(body_height: float | None, mode: int | None) -> Posture:
     return "unknown"
 
 
-def _state_from_msg(msg) -> RobotState:
+def state_from_msg(msg) -> RobotState:
     imu = getattr(msg, "imu_state", None)
     body_height = _float(getattr(msg, "body_height", None))
     mode = _int(getattr(msg, "mode", None))
@@ -192,20 +182,18 @@ def _state_from_msg(msg) -> RobotState:
     )
 
 
+_store = StateStore(state_from_msg)  # this process's own subscription: the utilities only
+_subscriber = None
+
+
 def sample_state() -> RobotState:
-    """Wait up to STATE_WAIT_S for a message that arrived after this call; else use
-    the latest earlier one; else raise StateUnavailable."""
-    called = time.monotonic()
-    init_dds()
-    _ensure_subscriber()
-    deadline = called + STATE_WAIT_S
-    with _state_cond:
-        while _latest is None or _latest[0] <= called:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                break
-            _state_cond.wait(remaining)
-        latest = _latest
-    if latest is None:
+    """The utilities' own DDS read: wait up to STATE_WAIT_S for a message that arrived after this call; else
+    use the latest earlier one; else raise StateUnavailable. Skills read state through the robot service."""
+    global _subscriber
+    min_seq = _store.seq + 1
+    if _subscriber is None:
+        _subscriber = subscribe_state(_store.put)
+    reading = _store.read(min_seq, STATE_WAIT_S)
+    if reading is None:
         raise StateUnavailable(f"no {SPORT_STATE_TOPIC} message within {STATE_WAIT_S:g}s")
-    return _state_from_msg(latest[1])
+    return reading.state

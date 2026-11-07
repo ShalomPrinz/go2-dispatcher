@@ -6,7 +6,7 @@ from __future__ import annotations
 import pytest
 
 from dispatcher.context import PromptSurface
-from dispatcher.models import RobotState, StartupError
+from dispatcher.models import StartupError
 from dispatcher.registry import Registry
 from dispatcher.tests.helpers import FakeExecutor, make_config
 from dispatcher.tests.helpers.fakes import state
@@ -61,10 +61,6 @@ def test_failed_state_read_is_unknown_with_warning(capsys):
     assert "Warning" in capsys.readouterr().err
 
 
-def test_state_comes_from_state_read():
-    class SittingExecutor(FakeExecutor):
-        def read_state(self) -> RobotState | None:
-            return state("sitting")
-
-    s = initial_state(SittingExecutor())
+def test_state_comes_from_the_service_read():
+    s = initial_state(FakeExecutor(fresh=state("sitting")))
     assert s is not None and s.posture == "sitting"
