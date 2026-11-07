@@ -8,7 +8,8 @@ import math
 import pytest
 
 from skills import stub, vision
-from skills.env import STUB_FAULT, STUB_STATE_FILE, STUB_TIME_SCALE
+from skills.env import STUB_FAULT, STUB_OBJECTS, STUB_STATE_FILE, STUB_TIME_SCALE
+from skills.schema import ObstacleDistances
 
 
 @pytest.fixture
@@ -146,3 +147,20 @@ def test_parse_objects_defaults_and_errors():
     for bad in bad_objects:
         with pytest.raises(ValueError):
             stub.parse_objects(bad)
+
+
+def test_obstacle_ray_cast_follows_the_pose(state, monkeypatch):
+    monkeypatch.setenv(STUB_OBJECTS, json.dumps({"chair": {"x": 2.0, "y": 0.0}, "person": {"x": 0.0, "y": 9.0}}))
+    near = 2.0 - stub.OBSTACLE_RADIUS_M
+    ahead = stub.sample_state().obstacle_m
+    assert ahead is not None and ahead.front == pytest.approx(near)  # person beyond the max
+    assert ahead == ObstacleDistances(front=ahead.front)
+    stub.write_pose(stub.Pose(0.0, 0.0, math.pi / 2), state)  # after a left turn the chair is on the right
+    turned = stub.sample_state().obstacle_m
+    assert turned is not None and turned.right == pytest.approx(near)
+    assert turned == ObstacleDistances(right=turned.right)
+
+
+def test_obstacle_inside_a_disc_is_zero_in_every_direction(state, monkeypatch):
+    monkeypatch.setenv(STUB_OBJECTS, json.dumps({"chair": {"x": 0.1, "y": 0.0}}))  # centre behind the left/right axis
+    assert stub.sample_state().obstacle_m == ObstacleDistances(front=0.0, back=0.0, left=0.0, right=0.0)

@@ -71,8 +71,12 @@ Robot state is sampled:
 | `imu_rpy` | `imu_state.rpy` (roll, pitch, yaw) |
 | `foot_force` | `foot_force` (4 values) |
 | `error_code` | `error_code` |
+| `range_obstacle_raw` | `range_obstacle` (4 values) as received, zeros included; only a non-finite or non-numeric element becomes `null` (JSON has no NaN), and the whole field is `null` if the length is not 4 |
+| `obstacle_m` | `{front, back, left, right}` in metres, derived from `range_obstacle_raw` by `derive_obstacles` in `skills/real.py`; a value of 0 or below, above `RANGE_OBSTACLE_MAX_M` (30 m, *tunable*) or `null` becomes `null` (unknown) |
 
-numpy and ctypes values are converted to plain numbers. A missing attribute or a non-finite value becomes `null`; a list field becomes `null` as a whole if any element is bad or its length is wrong.
+numpy and ctypes values are converted to plain numbers. A missing attribute or a non-finite value becomes `null`; a list field other than `range_obstacle_raw` becomes `null` as a whole if any element is bad or its length is wrong.
+
+**Obstacle distances are *unverified*.** Unitree documents neither the units, the index order nor when firmware fills `range_obstacle` (the SDK IDL and `unitree_ros2`'s `SportModeState.msg` declare only `float32[4] range_obstacle`, without a comment; no SDK example or community code found reads it). The code assumes metres and the index order `RANGE_OBSTACLE_ORDER` = front, back, left, right, a convention, not a sourced fact. The firmware may fill it only with the robot's own obstacle avoidance on, and may report 0 or a large value for "nothing seen". Checklist item 10 settles all of this; until then `obstacle_m` must not be trusted without `range_obstacle_raw` beside it.
 
 State is **logged only** in v1. No step gets a verdict from it; the model sees only the derived posture. The samples are the data from which v2 verification thresholds will be set ([roadmap.md](../../docs/roadmap.md#v2-plan)).
 
@@ -106,6 +110,7 @@ The list of open questions with owners is in [roadmap.md](../../docs/roadmap.md#
 - **Fixed settle waits after `StandDown` and `Stretch`**, rather than waiting for the state to settle: simple and inspectable; the values are tuned from the checklist.
 - **The network interface is never hardcoded.** A blank `robot.network_interface` with `robot.backend = "real"` is a config error, so the backend never guesses an interface.
 - **A fixed lead time per motion skill compensates the start ramp.** In a supervised run, six `turn 90°` (1.6 s commanded) covered 72.6–81.0° by the robot's own `imu_rpy` yaw (mean ~78°, ~0.2 s short at 1 rad/s), and three `walk forward 1 m` (3.3 s commanded) covered 0.59–0.72 m by `position` (mean ~0.67 m, ~1.1 s short at 0.3 m/s); coasting after `StopMove` adds only 1–3° or 0.01 m. The cause is the acceleration ramp at the start of each `Move` sequence, so `LEAD_S` (walk 1.1 s, turn 0.2 s) is added to the commanded time. The budget's motion cost stays the commanded distance or angle; `duration_s` reports the longer time. A constant offset was chosen over a gain only as a single-parameter start: all data is at 90° and 1 m, so the two cannot be separated yet ([roadmap](../../docs/roadmap.md#open-questions)). Rejected for now: closed-loop control on yaw or position, pending the odometry accuracy check (checklist item 2).
+- **Obstacle distances come from `SportModeState.range_obstacle`, not from the LiDAR point cloud.** The field arrives on the topic every sample already reads, so it needs no extra subscription and adds no latency or point-cloud processing to a skill process. If firmware leaves it empty, distances per sector from `rt/utlidar/cloud` are the fallback. The raw 4 values are kept next to the derived `obstacle_m` because order, units and the "nothing seen" value are assumptions: the raw log lets a supervised run check them, and lets past runs be re-derived after a correction. Rejected: logging only the derived field (an assumption error would be unrecoverable); logging only the raw array (every consumer would repeat the mapping).
 - **Translation is not estimated from commanded velocity.** Dead reckoning restates the walk skill's own open-loop assumption, so it is not a measurement. The robot's own measurement-based estimator is acceptable, with a drift tolerance, if it turns out usable. The stub's pose does integrate commanded velocity, but only as a simulation of that estimator for offline runs ([skills.md](skills.md#stub-backend)).
 
 ## Supervised robot checklist
@@ -123,6 +128,7 @@ Commands use `go2` with a real-backend config. Run a step as a one-step task, or
 7. `sit`. Measure how long `StandDown` takes (tunes `SETTLE_S` in `sit.py`). Then `go2 state`: record `mode` and `body_height` while sitting, and the joint angles (motor `q`) from `rt/lowstate` (decides the [posture rule](#posture-rule)).
 8. `walk` while sitting. Record the SDK return code and what the robot does (answers `Move` while sitting).
 9. Stand the robot up with the remote.
+10. Obstacle distances (needs the robot standing again). Place a wall or a large board at measured distances of 0.5, 1.0 and 2.0 m from the body centre, in turn in front, behind, left and right. At each placement run `go2 state` and record `range_obstacle_raw` and `obstacle_m`, once with the robot's own obstacle avoidance on and once off (remote or app). Decides whether firmware fills the field, its units, its index order (`RANGE_OBSTACLE_ORDER`), its "nothing seen" value and whether it is measured from the body centre or the body edge.
 
 ### Results
 
@@ -139,6 +145,7 @@ Record each result here: date, measured value or observation, and what was chang
 | 7 | | | |
 | 8 | | | |
 | 9 | | | |
+| 10 | | | |
 
 ### Known issues
 

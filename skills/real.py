@@ -14,7 +14,7 @@ import time
 
 from skills.backend import BackendNotConfigured, StateUnavailable
 from skills.env import IFACE
-from skills.schema import Posture, RobotState
+from skills.schema import ObstacleDistances, Posture, RobotState
 
 DDS_DOMAIN_ID = 0
 SPORT_CLIENT_TIMEOUT_S = 5.0  # per-call reply wait; must fit in the process timeouts (tunable, skills/docs/skills.md)
@@ -23,6 +23,8 @@ SUBSCRIBER_QUEUE_LEN = 10
 STATE_WAIT_S = 1.0
 POSTURE_SITTING_MAX_M = 0.15  # (tunable, skills/docs/robot.md)
 POSTURE_STANDING_MIN_M = 0.22  # (tunable, skills/docs/robot.md)
+RANGE_OBSTACLE_ORDER = ("front", "back", "left", "right")  # assumed index order, unverified (skills/docs/robot.md)
+RANGE_OBSTACLE_MAX_M = 30.0  # larger values are taken as a "nothing seen" sentinel (tunable, skills/docs/robot.md)
 
 sleep = time.sleep
 
@@ -125,6 +127,25 @@ def _floats(v, n: int) -> list[float] | None:
     return floats if len(floats) == n else None
 
 
+def _raw_floats(v, n: int) -> list[float | None] | None:
+    """Exactly n values kept element by element (a non-finite or bad element becomes None), else None."""
+    if v is None:
+        return None
+    try:
+        items = list(v)
+    except TypeError:
+        return None
+    return [_float(x) for x in items] if len(items) == n else None
+
+
+def derive_obstacles(raw: list[float | None] | None) -> ObstacleDistances | None:
+    """`range_obstacle` -> per-direction metres; 0, negative, above RANGE_OBSTACLE_MAX_M or None -> None."""
+    if raw is None:
+        return None
+    known = [d if d is not None and 0 < d <= RANGE_OBSTACLE_MAX_M else None for d in raw]
+    return ObstacleDistances(**dict(zip(RANGE_OBSTACLE_ORDER, known, strict=True)))
+
+
 def derive_posture(body_height: float | None, mode: int | None) -> Posture:
     """The single posture rule (skills/docs/robot.md): body_height < SITTING_MAX -> "sitting";
     >= STANDING_MIN -> "standing"; otherwise or None -> "unknown". `mode` is unused in v1."""
@@ -142,6 +163,7 @@ def _state_from_msg(msg) -> RobotState:
     imu = getattr(msg, "imu_state", None)
     body_height = _float(getattr(msg, "body_height", None))
     mode = _int(getattr(msg, "mode", None))
+    range_obstacle = _raw_floats(getattr(msg, "range_obstacle", None), len(RANGE_OBSTACLE_ORDER))
     return RobotState(
         t=time.time(),
         backend="real",
@@ -155,6 +177,8 @@ def _state_from_msg(msg) -> RobotState:
         imu_rpy=_floats(getattr(imu, "rpy", None), 3),
         foot_force=_floats(getattr(msg, "foot_force", None), 4),
         error_code=_int(getattr(msg, "error_code", None)),
+        obstacle_m=derive_obstacles(range_obstacle),
+        range_obstacle_raw=range_obstacle,
     )
 
 

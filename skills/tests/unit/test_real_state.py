@@ -10,7 +10,8 @@ from types import SimpleNamespace
 import pytest
 
 from skills import real
-from skills.real import POSTURE_STANDING_MIN_M, derive_posture
+from skills.real import POSTURE_STANDING_MIN_M, RANGE_OBSTACLE_MAX_M, derive_posture
+from skills.schema import ObstacleDistances
 
 
 def msg(**overrides):
@@ -23,6 +24,7 @@ def msg(**overrides):
         yaw_speed=0.0,
         imu_state=SimpleNamespace(rpy=[0.0, 0.0, 0.1]),
         foot_force=[10, 11, 12, 13],
+        range_obstacle=[0.8, 1.5, 2.0, 3.0],
         error_code=0,
     )
     fields.update(overrides)
@@ -53,6 +55,16 @@ def test_full_message_maps():
     assert state.imu_rpy == [0.0, 0.0, 0.1]
     assert state.foot_force == [10.0, 11.0, 12.0, 13.0]
     assert (state.mode, state.error_code) == (1, 0)
+    assert state.obstacle_m == ObstacleDistances(front=0.8, back=1.5, left=2.0, right=3.0)
+    assert state.range_obstacle_raw == [0.8, 1.5, 2.0, 3.0]
+
+
+def test_range_obstacle_unknowns_are_none_and_raw_is_kept():
+    state = real._state_from_msg(msg(range_obstacle=[0.0, -1.0, math.nan, Item(RANGE_OBSTACLE_MAX_M + 1)]))
+    assert state.obstacle_m == ObstacleDistances()
+    assert state.range_obstacle_raw == [0.0, -1.0, None, RANGE_OBSTACLE_MAX_M + 1]  # NaN has no JSON form
+    short = real._state_from_msg(msg(range_obstacle=[1.0, 2.0]))
+    assert (short.obstacle_m, short.range_obstacle_raw) == (None, None)
 
 
 def test_missing_attributes_are_none():

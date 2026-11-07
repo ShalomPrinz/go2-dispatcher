@@ -45,6 +45,18 @@ class SkillError:
 
 
 @dataclass(frozen=True)
+class ObstacleDistances:
+    """Distance to the nearest obstacle per body direction, metres; None when unknown (skills/docs/robot.md)."""
+
+    __pydantic_config__ = _FORBID_EXTRA
+
+    front: float | None = None
+    back: float | None = None
+    left: float | None = None
+    right: float | None = None
+
+
+@dataclass(frozen=True)
 class RobotState:
     __pydantic_config__ = _FORBID_EXTRA
 
@@ -60,6 +72,8 @@ class RobotState:
     imu_rpy: list[float] | None = None  # [roll, pitch, yaw] radians
     foot_force: list[float] | None = None  # 4 values
     error_code: int | None = None
+    obstacle_m: ObstacleDistances | None = None  # derived from range_obstacle_raw on the real backend
+    range_obstacle_raw: list[float | None] | None = None  # SportModeState.range_obstacle as received, 4 values
 
 
 @dataclass(frozen=True)

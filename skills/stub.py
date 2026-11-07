@@ -18,7 +18,7 @@ from typing import Literal, get_args
 from skills import process, vision
 from skills.backend import CameraUnavailable, DetectResult
 from skills.env import STUB_FAULT, STUB_OBJECTS, STUB_STATE_FILE, STUB_TIME_SCALE
-from skills.schema import RobotState
+from skills.schema import ObstacleDistances, RobotState
 
 # Stub defaults: used when the env is unset (manual runs) and as the dispatcher's stub config defaults.
 DEFAULT_STATE_FILE = "logs/.stub_state.json"
@@ -53,6 +53,10 @@ CONFIDENCE_MIN = 0.6  # at box height 0 (tunable)
 CONFIDENCE_MAX = 0.95  # at box height 1 (tunable)
 # Object heights for GO2_STUB_OBJECTS entries without height_m.
 DEFAULT_HEIGHTS_M = {"bottle": 0.25, "cup": 0.10, "chair": 0.90, "person": 1.70}
+# Simulated range_obstacle (skills/docs/skills.md): each object is a disc, rays leave the body centre.
+OBSTACLE_RADIUS_M = 0.15  # (tunable)
+OBSTACLE_MAX_M = 5.0  # nothing hit within this range -> None (tunable)
+OBSTACLE_DIRECTIONS = {"front": 0.0, "back": math.pi, "left": math.pi / 2, "right": -math.pi / 2}  # body frame
 
 _command: tuple[float, float, float] | None = None  # last accepted Move(vx, vy, vyaw), until StopMove
 
@@ -168,6 +172,27 @@ def project(pose: Pose, obj: WorldObject) -> DetectResult:
         return DetectResult(found=False)
     cx_frac = 0.5 - CAMERA_FOCAL_PX * (left / depth) / CAMERA_WIDTH_PX  # positive bearing (left) -> small x
     return vision.classify_box(cx_frac, h_frac, CONFIDENCE_MIN + (CONFIDENCE_MAX - CONFIDENCE_MIN) * h_frac)
+
+
+def _ray_distance(pose: Pose, angle: float, world: Mapping[str, WorldObject]) -> float | None:
+    """Distance from the body centre along world ``angle`` to the nearest object disc, None beyond the max."""
+    best: float | None = None
+    for obj in world.values():
+        dx, dy = obj.x - pose.x, obj.y - pose.y
+        along = dx * math.cos(angle) + dy * math.sin(angle)
+        across = -dx * math.sin(angle) + dy * math.cos(angle)
+        if math.hypot(dx, dy) <= OBSTACLE_RADIUS_M:
+            hit = 0.0  # the ray starts inside the disc
+        elif along <= 0 or abs(across) > OBSTACLE_RADIUS_M:
+            continue
+        else:
+            hit = along - math.sqrt(OBSTACLE_RADIUS_M**2 - across**2)
+        best = hit if best is None else min(best, hit)
+    return best if best is not None and best <= OBSTACLE_MAX_M else None
+
+
+def obstacle_distances(pose: Pose, world: Mapping[str, WorldObject]) -> ObstacleDistances:
+    return ObstacleDistances(**{k: _ray_distance(pose, pose.yaw + a, world) for k, a in OBSTACLE_DIRECTIONS.items()})
 
 
 # --- state file -----------------------------------------------------------------
@@ -338,7 +363,8 @@ def get_sport_client() -> StubSportClient:
 
 
 def sample_state() -> RobotState:
-    """Posture and pose in the real fields; velocity is the running command in the world frame (zero at rest)."""
+    """Posture and pose in the real fields; velocity is the running command in the world frame (zero at rest);
+    obstacle distances are ray-cast against the stub objects."""
     state = read_state()
     pose = state.pose
     height = BODY_HEIGHT_STANDING_M if state.posture == "standing" else BODY_HEIGHT_SITTING_M
@@ -353,4 +379,5 @@ def sample_state() -> RobotState:
         velocity=[vx * cos - vy * sin, vx * sin + vy * cos, 0.0],
         yaw_speed=vyaw,
         imu_rpy=[0.0, 0.0, pose.yaw],
+        obstacle_m=obstacle_distances(pose, objects()),
     )
