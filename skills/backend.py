@@ -87,6 +87,16 @@ def _forward(name: str):
     return call
 
 
+def dds_init_ms() -> float | None:
+    """Time this process spent in DDS init, or None if none was attempted or no backend is configured."""
+    try:
+        impl = _impl()
+    except BackendNotConfigured:
+        return None
+    return impl.dds_init_ms()
+
+
+init_dds = _forward("init_dds")  # once per process; real: ChannelFactoryInitialize, stub: nothing
 get_sport_client = _forward("get_sport_client")  # object with Move, StopMove, StandDown, Stretch -> int
 sample_state = _forward("sample_state")  # -> skills.schema.RobotState
 sleep = _forward("sleep")  # real: time.sleep(seconds); stub: scaled by time_scale

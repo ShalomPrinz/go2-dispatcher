@@ -46,6 +46,7 @@ def sdk(monkeypatch):
     """Install a FakeClient (returned by ``sdk(client)``) and record backend sleeps."""
     sleeps: list[float] = []
     monkeypatch.setattr(backend, "sleep", sleeps.append)
+    monkeypatch.setattr(backend, "init_dds", lambda: None)
     monkeypatch.setattr(process, "ORPHANED", False)
 
     def install(client):
@@ -137,12 +138,13 @@ def run_stop_move(sdk, monkeypatch):
             return state or {"posture": "standing"}
 
         monkeypatch.setattr(backend, "sample_state", sample)
+        monkeypatch.setattr(backend, "dds_init_ms", lambda: 1.0)
         monkeypatch.setattr(process, "capture_stdout", lambda: None)
         monkeypatch.setattr(sys, "argv", ["stop_move", *argv])
         emitted = []
 
         def emit(skill, outcome, states, total_ms):
-            emitted.append(runner.build_response(skill, outcome, states, total_ms))
+            emitted.append(runner.build_response(skill, outcome, states, total_ms, dds_init_ms=backend.dds_init_ms()))
             raise Emitted
 
         monkeypatch.setattr(runner, "emit", emit)
@@ -158,7 +160,13 @@ def test_stop_move_invalid_params_still_stops(run_stop_move):
     out = run_stop_move(["not json"], client)
     assert client.calls == ["StopMove"]
     assert out.error is not None and out.error.code == "invalid_params"
-    assert out.observations == {"sdk_ret": 0} and list(out.timing) == ["stop_call_ms", "state_ms", "total_ms"]
+    assert out.observations == {"sdk_ret": 0} and list(out.timing) == [
+        "dds_init_ms",
+        "client_init_ms",
+        "stop_call_ms",
+        "state_ms",
+        "total_ms",
+    ]
 
 
 def test_stop_move_sdk_error(run_stop_move):

@@ -47,7 +47,7 @@ A SIGKILL runs no cleanup, so the killed skill cannot send `StopMove()` itself. 
 
 ### Measured latency
 
-`stop_move` records `timing.stop_call_ms` ([skills.md](../skills/docs/skills.md#response-schema)). Kill-to-stop latency = executor kill + process start + `stop_call_ms`. There is no required number. On the robot, successful stops measured `stop_call_ms` 891–900 ms and `total_ms` 1404–1428 ms (3 of 8 calls, [robot.md results](../skills/docs/robot.md#results), row 5); the other 5 failed from link loss ([known issues](../skills/docs/robot.md#known-issues)).
+`stop_move` records `timing.dds_init_ms`, `client_init_ms` and `stop_call_ms` ([skills.md](../skills/docs/skills.md#response-schema)). Kill-to-stop latency = executor kill + process start + `dds_init_ms` + `client_init_ms` + `stop_call_ms`. There is no required number. On the robot, successful stops measured `stop_call_ms` 891–900 ms from utility start, which includes DDS init and client creation ([reading records without `dds_init_ms`](../skills/docs/skills.md#response-schema)), and `total_ms` 1404–1428 ms (3 of 8 calls, [robot.md results](../skills/docs/robot.md#results), row 5); the other 5 failed from link loss ([known issues](../skills/docs/robot.md#known-issues)).
 
 ## Busy-reject
 

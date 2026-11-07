@@ -59,6 +59,7 @@ OBSTACLE_MAX_M = 5.0  # nothing hit within this range -> None (tunable)
 OBSTACLE_DIRECTIONS = {"front": 0.0, "back": math.pi, "left": math.pi / 2, "right": -math.pi / 2}  # body frame
 
 _command: tuple[float, float, float] | None = None  # last accepted Move(vx, vy, vyaw), until StopMove
+_dds_init_s: float | None = None  # set by init_dds; the stub has no DDS, so it is 0
 
 
 @dataclass(frozen=True)
@@ -356,6 +357,17 @@ def inject_detect_fault() -> None:
     """detect_object's action call for fault injection, in the skill process before it asks the vision service."""
     if _faults.apply_fault() == "error":
         raise CameraUnavailable("injected camera fault")
+
+
+def init_dds() -> None:
+    """Stands in for DDS init, which the stub does not need; recorded so dds_init_ms is reported as on the robot."""
+    global _dds_init_s
+    if _dds_init_s is None:
+        _dds_init_s = 0.0
+
+
+def dds_init_ms() -> float | None:
+    return None if _dds_init_s is None else round(_dds_init_s * 1000.0, 3)
 
 
 def get_sport_client() -> StubSportClient:

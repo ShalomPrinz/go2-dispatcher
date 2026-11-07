@@ -7,7 +7,7 @@ from __future__ import annotations
 import sys
 import time
 import traceback
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 from skills import backend, process, runner
 from skills.real import SPORT_CLIENT_TIMEOUT_S
@@ -35,6 +35,15 @@ def motion_timeout(motion_s: float) -> float:
 # --- actions --------------------------------------------------------------------
 
 
+def sport_client() -> tuple[Any, dict]:
+    """Init DDS, then create the sport client. Returns the client and timing with client_init_ms;
+    the DDS init time is reported by the runner as dds_init_ms."""
+    backend.init_dds()
+    t = time.monotonic()
+    client = backend.get_sport_client()
+    return client, {"client_init_ms": runner.ms_since(t)}
+
+
 def _safe_stop(client) -> int | None:
     """StopMove during cleanup after an exception; never raises."""
     try:
@@ -49,9 +58,7 @@ def move_loop(velocity: Velocity, duration_s: float, *, period_s: float = CMD_PE
 
     Returns a SkillOutcome whose observations hold ``duration_s`` (iterations commanded × period), ``sdk_ret`` and
     ``orphaned: true`` when the loop broke because the parent died."""
-    t = time.monotonic()
-    client = backend.get_sport_client()
-    timing = {"init_ms": runner.ms_since(t)}
+    client, timing = sport_client()
     t = time.monotonic()
     n = max(1, round(duration_s / period_s))
     obs: dict = {}
@@ -88,9 +95,7 @@ def move_loop(velocity: Velocity, duration_s: float, *, period_s: float = CMD_PE
 def single_action(call: str, settle_s: float) -> runner.SkillOutcome:
     """Call ``client.<call>()``; on success wait ``settle_s`` (via backend.sleep) so
     state_after is sampled after the motion ends. Returns a SkillOutcome."""
-    t = time.monotonic()
-    client = backend.get_sport_client()
-    timing = {"init_ms": runner.ms_since(t)}
+    client, timing = sport_client()
     t = time.monotonic()
     ret = getattr(client, call)()
     obs = {"sdk_ret": ret}

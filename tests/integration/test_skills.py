@@ -54,7 +54,8 @@ def test_contract_valid(tmp_path, name):
     assert resp.state_before is not None and resp.state_before.backend == "stub"
     assert resp.state_after is not None and resp.state_after.backend == "stub"
     assert resp.state_error is None
-    assert {"init_ms", "exec_ms", "state_ms", "total_ms"} <= set(resp.timing)
+    assert {"dds_init_ms", "exec_ms", "state_ms", "total_ms"} <= set(resp.timing)
+    assert ("connect_ms" if name == "detect_object" else "client_init_ms") in resp.timing
 
 
 def test_invalid_json(tmp_path):

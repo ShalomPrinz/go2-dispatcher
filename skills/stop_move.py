@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 
-from skills import backend, policy, runner, stub
+from skills import backend, motion, policy, runner, stub
 from skills.runner import SkillOutcome, StateSampler
 from skills.schema import ErrorCode
 
@@ -20,15 +20,16 @@ POLICY = policy.SkillPolicy(name="stop_move", timeout=TIMEOUT_S)  # utility: zer
 
 
 def body(states: StateSampler) -> SkillOutcome:
-    t0 = time.monotonic()
     stub.disable_faults()  # utilities ignore faults
     try:
         runner.parse_params()
         params_error = None
     except runner.InvalidParams as e:
         params_error = str(e)  # reported only after StopMove was sent
-    ret = backend.get_sport_client().StopMove()
-    timing = {"stop_call_ms": runner.ms_since(t0)}
+    client, timing = motion.sport_client()
+    t = time.monotonic()
+    ret = client.StopMove()
+    timing["stop_call_ms"] = runner.ms_since(t)
     observations = {"sdk_ret": ret}
     backend.sleep(SETTLE_S)
     states.take("after")

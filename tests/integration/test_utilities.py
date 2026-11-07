@@ -32,7 +32,7 @@ def test_contract_valid(tmp_path, name):
 def test_stop_move_details(tmp_path):
     resp = single_response(run_module("stop_move", {}, stub_env(tmp_path)))
     assert resp["observations"] == {"sdk_ret": 0}
-    assert {"stop_call_ms", "state_ms", "total_ms"} <= set(resp["timing"])
+    assert {"dds_init_ms", "client_init_ms", "stop_call_ms", "state_ms", "total_ms"} <= set(resp["timing"])
     assert resp["timing"]["stop_call_ms"] <= resp["timing"]["total_ms"]
 
 

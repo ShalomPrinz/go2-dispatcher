@@ -18,7 +18,7 @@ POLICY = policy.SkillPolicy(name=SKILL, timeout=10.0)
 
 def _body(params: dict) -> runner.SkillOutcome:
     return runner.SkillOutcome.ok(
-        observations={"env_keys": sorted(os.environ)}, timing={"init_ms": 0.0, "exec_ms": 0.0}
+        observations={"env_keys": sorted(os.environ)}, timing={"client_init_ms": 0.0, "exec_ms": 0.0}
     )
 
 

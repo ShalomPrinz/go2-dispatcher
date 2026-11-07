@@ -20,7 +20,7 @@ from skills.schema import SCHEMA_VERSION, ErrorCode, RobotState, SkillError, Ski
 @dataclass(frozen=True)
 class SkillOutcome:
     """What a skill body returns to run_skill; build it with ok(), error() or from_exception()
-    (skills/docs/skills.md). timing holds init_ms and exec_ms."""
+    (skills/docs/skills.md). timing holds the body's own keys, such as client_init_ms and exec_ms."""
 
     status: Status
     observations: dict
@@ -63,9 +63,13 @@ class StateSampler:
         """Sample state into ``label``; on failure record "<label>: <Type>: <msg>" and return None.
         strict re-raises instead and records nothing. BackendNotConfigured always propagates."""
         self.used = True
-        t = time.monotonic()
         try:
-            state = backend.sample_state()
+            backend.init_dds()  # reported as dds_init_ms, not in state_ms
+            t = time.monotonic()
+            try:
+                state = backend.sample_state()
+            finally:
+                self.seconds += time.monotonic() - t
         except backend.BackendNotConfigured:
             raise
         except Exception as e:
@@ -74,8 +78,6 @@ class StateSampler:
             traceback.print_exc(file=sys.stderr)
             self.errors.append(f"{label}: {describe_exception(e)}")
             state = None
-        finally:
-            self.seconds += time.monotonic() - t
         setattr(self, label, state)
         return state
 
@@ -100,16 +102,24 @@ def one_line(text: str) -> str:
     return " ".join(str(text).split())
 
 
-def build_response(skill: str, outcome: SkillOutcome, states: StateSampler, total_ms: float) -> SkillResponse:
-    """The SkillResponse (schema_version=1), built from the three sources of its fields; only the
-    error-iff-status rule is checked here, the dispatcher validates the rest (skills/docs/skills.md).
-    error_message: collapsed to one line, not length-limited."""
+def build_response(
+    skill: str,
+    outcome: SkillOutcome,
+    states: StateSampler,
+    total_ms: float,
+    *,
+    dds_init_ms: float | None = None,
+) -> SkillResponse:
+    """The SkillResponse (schema_version=1), built from the sources of its fields; dds_init_ms is None
+    when the process did not init DDS. Only the error-iff-status rule is checked here, the dispatcher
+    validates the rest (skills/docs/skills.md). error_message: collapsed to one line, not length-limited."""
     error = None
     if outcome.status == "error":
         if outcome.error_code is None or outcome.error_message is None:
             raise ValueError("an error response needs error_code and error_message")
         error = SkillError(code=str(outcome.error_code), message=one_line(outcome.error_message))
-    timing = dict(outcome.timing)
+    timing = {} if dds_init_ms is None else {"dds_init_ms": dds_init_ms}
+    timing.update(outcome.timing)
     if states.used:
         timing["state_ms"] = round(states.seconds * 1000.0, 3)
     timing["total_ms"] = total_ms
@@ -136,7 +146,7 @@ def emit(skill: str, outcome: SkillOutcome, states: StateSampler, total_ms: floa
     then os._exit(0 if ok else 1).
     os._exit is required: DDS/SDK threads can hang normal interpreter shutdown."""
     try:
-        line = to_json(build_response(skill, outcome, states, total_ms))
+        line = to_json(build_response(skill, outcome, states, total_ms, dds_init_ms=backend.dds_init_ms()))
     except Exception as e:  # a bug in the skill: still emit one valid line, without the body's data
         traceback.print_exc(file=sys.stderr)
         outcome = SkillOutcome.from_exception(e)
@@ -200,7 +210,8 @@ def run_skill(policy: SkillPolicy, body: Body, *, sample_state: bool = True) -> 
     2. if sample_state: sample state_before (exception -> state_error, continue)
     3. outcome = body(params), a SkillOutcome
     4. if sample_state: sample state_after (exception -> appended to state_error)
-    timing gets state_ms (time in the samples, if any was taken) and total_ms.
+    timing gets dds_init_ms (if DDS was initialised), state_ms (time in the samples, if any was
+    taken) and total_ms.
     Exceptions map as in SkillOutcome.from_exception; the traceback goes to stderr."""
 
     def main(states: StateSampler) -> SkillOutcome:

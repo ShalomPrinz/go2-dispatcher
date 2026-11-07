@@ -85,7 +85,7 @@ All `StepResult` fields at the top level, with the step's identity nested under 
 
 ### `stop_move`
 
-All `StopMoveResult` fields: `ok`, `reason` (`operator` / `task_time_limit` / `step_timeout` / `shutdown` / `internal_error`), `duration_ms`, `exit_code`, `response` (its `timing.stop_call_ms` and `state_after`), `stderr_tail`. It is the only record of a StopMove: written right after the `step_result` of a killed step, and for every StopMove the dispatcher sends itself. If the utility process could not even be started, `ok` is false, `exit_code` and `response` are null, and `stderr_tail` holds `"<ExceptionType>: <message>"` (StopMove never raises).
+All `StopMoveResult` fields: `ok`, `reason` (`operator` / `task_time_limit` / `step_timeout` / `shutdown` / `internal_error`), `duration_ms`, `exit_code`, `response` (its `timing` and `state_after`), `stderr_tail`. It is the only record of a StopMove: written right after the `step_result` of a killed step, and for every StopMove the dispatcher sends itself. If the utility process could not even be started, `ok` is false, `exit_code` and `response` are null, and `stderr_tail` holds `"<ExceptionType>: <message>"` (StopMove never raises).
 
 ### `exception`
 
@@ -127,7 +127,7 @@ Pick the folder first (`logs/anthropic/real/` for the study), then group its tas
 | Invalid replies | `plan_invalid` by `rejection_kind`; horizon rejection rate = `plan_invalid` with `rejection_kind == "horizon"` ÷ `llm_response` records (monitoring rule in [llm.md](llm.md#horizon-rejection)) |
 | Skill wall time | `step_result.duration_ms` (whole subprocess) |
 | Process overhead per step | `step_result.duration_ms − response.timing.total_ms` (interpreter start and teardown outside the skill's own timing) |
-| Stop latency | `stop_move.response.timing.stop_call_ms` (utility start to `StopMove()` return) and `stop_move.duration_ms` (whole utility process) |
+| Stop latency | `dds_init_ms` + `client_init_ms` + `stop_call_ms` (the `StopMove()` call only) from `stop_move.response.timing`, and `stop_move.duration_ms` (whole utility process). Records without `dds_init_ms` use other timing meanings ([skills.md](../../skills/docs/skills.md)) |
 | Motion commanded | `step_start.dispatch.motion_cost`, `task_end.budget_used` |
 | Robot state | `step_result.response.state_before` / `state_after`; `stop_move.response.state_after` ([robot.md](../../skills/docs/robot.md#state-sampling)) |
 | Exact prompts | `task_start.system_text` / `catalog_text` / `tool_schema` + `llm_request.user_text` |

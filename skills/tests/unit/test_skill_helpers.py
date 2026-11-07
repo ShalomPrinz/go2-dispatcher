@@ -7,6 +7,7 @@ from __future__ import annotations
 import math
 import os
 import sys
+import time
 
 import pytest
 
@@ -61,6 +62,7 @@ def test_error_code_serialises_as_plain_string():
 def test_run_skill_keeps_state_sampled_before_an_exception(monkeypatch):
     """The state taken before the body raised survives into the error response."""
     state = RobotState(t=1.0, backend="stub", posture="standing", body_height=0.32)
+    monkeypatch.setattr(backend, "init_dds", lambda: None)
     monkeypatch.setattr(backend, "sample_state", lambda: state)
     monkeypatch.setattr(process, "capture_stdout", lambda: None)
     monkeypatch.setattr(sys, "argv", ["walk", "{}"])
@@ -80,6 +82,15 @@ def test_run_skill_keeps_state_sampled_before_an_exception(monkeypatch):
     assert response.error is not None and response.error.message == "RuntimeError: boom"
     assert (response.state_before, response.state_after) == (state, None)
     assert list(response.timing) == ["state_ms", "total_ms"]
+
+
+def test_state_ms_excludes_dds_init(monkeypatch):
+    """DDS init before the first sample is reported as dds_init_ms by the backend, not in state_ms."""
+    monkeypatch.setattr(backend, "init_dds", lambda: time.sleep(0.05))
+    monkeypatch.setattr(backend, "sample_state", lambda: None)
+    states = StateSampler()
+    states.take("before")
+    assert states.used and states.seconds < 0.05
 
 
 def test_capture_stdout_keeps_junk_off_the_response_line(tmp_path, monkeypatch):

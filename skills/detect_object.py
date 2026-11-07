@@ -41,9 +41,9 @@ def body(params: dict) -> runner.SkillOutcome:
     try:
         conn = vision_ipc.connect(vision_ipc.socket_path())
     except backend.DetectorError as e:
-        timing = {"init_ms": runner.ms_since(t)}
+        timing = {"connect_ms": runner.ms_since(t)}
         return runner.SkillOutcome.error(e.code, vision_ipc.error_message(e), observations=obs, timing=timing)
-    timing = {"init_ms": runner.ms_since(t)}
+    timing = {"connect_ms": runner.ms_since(t)}
     t = time.monotonic()
     try:
         with conn:

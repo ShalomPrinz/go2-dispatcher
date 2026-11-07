@@ -19,8 +19,8 @@ All SDK use is in `skills/real.py` and, for the camera, `skills/real_detector.py
 
 | What | How |
 |---|---|
-| DDS init | `ChannelFactoryInitialize(0, $GO2_IFACE)`, once per process, before anything touches DDS. An empty `GO2_IFACE` gives `backend_not_configured`. |
-| Sport client | `SportClient()`, `SetTimeout(SPORT_CLIENT_TIMEOUT_S)` (5.0 s, tunable), `Init()`. One per skill process. A call that waits for a reply (`StopMove`, `StandDown`, `Stretch`) returns a non-zero code after this long without one; it must fit inside the skill's timeout ([skills.md](skills.md#policies)). |
+| DDS init | `ChannelFactoryInitialize(0, $GO2_IFACE)`, once per process, before anything touches DDS: `real.init_dds()`, called by the state sampler before the first sample and by `motion.sport_client()` before the sport client. Its time, including the import of the SDK channel module and failed attempts, is reported as `timing.dds_init_ms` ([skills.md](skills.md#response-schema)). An empty `GO2_IFACE` gives `backend_not_configured`. |
+| Sport client | `SportClient()`, `SetTimeout(SPORT_CLIENT_TIMEOUT_S)` (5.0 s, tunable), `Init()`. One per skill process; its creation is reported as `timing.client_init_ms`. A call that waits for a reply (`StopMove`, `StandDown`, `Stretch`) returns a non-zero code after this long without one; it must fit inside the skill's timeout ([skills.md](skills.md#policies)). |
 | Calls used | `Move(vx, vy, vyaw)`, `StopMove()`, `StandDown()`, `Stretch()`. Each returns an int; 0 is success, anything else is an `sdk_error` with the code in `observations.sdk_ret`. |
 | Camera | `VideoClient`, `SetTimeout(CAMERA_TIMEOUT_S)`, `Init()` once in the vision service, then `GetImageSample()` → JPEG bytes per request, decoded with OpenCV. Error 3104 and any other non-zero code is `camera_unavailable`, never retried. |
 | State | `ChannelSubscriber("rt/sportmodestate", SportModeState_)`, queue length `SUBSCRIBER_QUEUE_LEN` ([state sampling](#state-sampling)). |
@@ -123,7 +123,7 @@ Commands use `go2` with a real-backend config. Run a step as a one-step task, or
 2. `walk` forward a measured 1 m; `turn` left 90°. Measure the walked distance on the floor (ground truth) and check the angle visually. Record `position` and `imu_rpy` from `state_before` / `state_after` in the run log, and `rt/utlidar/robot_odom` and `rt/utlidar/robot_pose` before and after the walk. Compare each position delta with ground truth (decides the odometry source, accuracy and drift).
 3. `stretch` from standing. Measure how long the routine takes (tunes `SETTLE_S` in `stretch.py`).
 4. `detect_object` with target `person`, with a person in view. Check position and closeness against what you see.
-5. Operator `stop` during a 3 m walk. **Measure** kill-to-stop latency: `stop_move.response.timing.stop_call_ms` from the run log, plus the observed time. Record it; there is no pass threshold.
+5. Operator `stop` during a 3 m walk. **Measure** kill-to-stop latency: `dds_init_ms`, `client_init_ms` and `stop_call_ms` in `stop_move.response.timing` from the run log ([safety.md](../../docs/safety.md#measured-latency)), plus the observed time. Record it; there is no pass threshold.
 6. Step timeout during a walk: temporarily set the module constants `MOTION_BASE_S = 0` and `MOTION_FACTOR = 0.5` in `skills/motion.py` (they apply to `turn` too). The robot must stop and the step outcome must be `timeout`. Restore the values afterwards.
 7. `sit`. Measure how long `StandDown` takes (tunes `SETTLE_S` in `sit.py`). Then `go2 state`: record `mode` and `body_height` while sitting, and the joint angles (motor `q`) from `rt/lowstate` (decides the [posture rule](#posture-rule)).
 8. `walk` while sitting. Record the SDK return code and what the robot does (answers `Move` while sitting).
@@ -140,7 +140,7 @@ Record each result here: date, measured value or observation, and what was chang
 | 2 | | | |
 | 3 | | | |
 | 4 | | | |
-| 5 | 2026-10-29 | Successful `stop_move` (3 of 8 calls; 1 operator stop, 2 step timeouts): `stop_call_ms` 891–900 ms, `total_ms` 1404–1428 ms (includes the 0.5 s settle wait and the state sample). Observed time not recorded. | The other 5 calls failed from link loss ([known issues](#known-issues)). |
+| 5 | 2026-10-29 | Successful `stop_move` (3 of 8 calls; 1 operator stop, 2 step timeouts): `stop_call_ms` 891–900 ms, from utility start, so DDS init and client creation included ([reading records without `dds_init_ms`](skills.md#response-schema)), `total_ms` 1404–1428 ms (includes the 0.5 s settle wait and the state sample). Observed time not recorded. | The other 5 calls failed from link loss ([known issues](#known-issues)). |
 | 6 | | | |
 | 7 | | | |
 | 8 | | | |

@@ -16,9 +16,12 @@ STATE = RobotState(t=1.0, backend="stub", posture="standing", body_height=0.32)
 
 
 def test_ok_response_round_trips():
-    outcome = SkillOutcome.ok(observations={"sdk_ret": 0, "distance_m": 0.9}, timing={"init_ms": 1, "exec_ms": 2.5})
-    sent = build_response("walk", outcome, StateSampler(before=STATE, after=STATE, seconds=0.003, used=True), 7)
-    assert list(sent.timing) == ["init_ms", "exec_ms", "state_ms", "total_ms"]
+    outcome = SkillOutcome.ok(
+        observations={"sdk_ret": 0, "distance_m": 0.9}, timing={"client_init_ms": 1, "exec_ms": 2.5}
+    )
+    states = StateSampler(before=STATE, after=STATE, seconds=0.003, used=True)
+    sent = build_response("walk", outcome, states, 7, dds_init_ms=0.5)
+    assert list(sent.timing) == ["dds_init_ms", "client_init_ms", "exec_ms", "state_ms", "total_ms"]
     assert ADAPTER.validate_json(to_json(sent)) == sent
 
 

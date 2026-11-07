@@ -88,7 +88,7 @@ class SkillResponse:
     state_before: RobotState | None = None
     state_after: RobotState | None = None
     state_error: str | None = None  # messages joined with "; "
-    timing: dict[str, float] = field(default_factory=dict)  # init_ms, exec_ms, state_ms, total_ms (+ stop_call_ms)
+    timing: dict[str, float] = field(default_factory=dict)  # skills/docs/skills.md#response-schema
 
     def __post_init__(self):  # under pydantic, a ValueError here becomes a ValidationError
         if (self.status == "error") != (self.error is not None):
