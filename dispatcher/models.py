@@ -103,6 +103,7 @@ class StopCause(str, Enum):
     TASK_TIME_LIMIT = "task_time_limit"
     STEP_TIMEOUT = "step_timeout"
     INTERNAL_ERROR = "internal_error"
+    STATE_UNAVAILABLE = "state_unavailable"  # the task-start state read failed; StopMove only
 
     @property
     def task_outcome(self) -> TaskOutcomeCode:
@@ -111,7 +112,7 @@ class StopCause(str, Enum):
 
     @property
     def kill(self) -> StepKill:
-        """What a skill process killed for this cause reports (all but INTERNAL_ERROR)."""
+        """What a skill process killed for this cause reports (all but INTERNAL_ERROR and STATE_UNAVAILABLE)."""
         return _KILLS[self]
 
 
@@ -187,6 +188,7 @@ TaskOutcomeCode = Literal[
     "CALL_BUDGET_EXHAUSTED",
     "LLM_INVALID",
     "LLM_ERROR",
+    "STATE_UNAVAILABLE",
     "INTERNAL_ERROR",
 ]
 
@@ -218,8 +220,7 @@ class TaskSummary(_Model):
 
 
 class StartState(_Model):
-    """Where a task's first plan got its robot state (dispatcher/docs/loop-and-context.md)."""
+    """The task-start state read through the robot service (dispatcher/docs/loop-and-context.md)."""
 
-    source: Literal["fresh", "carried_over"]
-    age_ms: float | None  # age of the state message at task start; None when there is no state
-    error: str | None = None  # why the fresh read failed (carried_over only)
+    age_ms: float | None  # age of the state message at the read; None when the read failed
+    error: str | None = None  # why the read failed; the task then ends STATE_UNAVAILABLE

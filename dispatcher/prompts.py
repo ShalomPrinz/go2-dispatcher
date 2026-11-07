@@ -257,6 +257,7 @@ OPERATOR_MESSAGES: dict[str, str] = {
     "CALL_BUDGET_EXHAUSTED": ("Stopped: the task reached the limit of {n} planning calls without finishing."),
     "LLM_INVALID": "Stopped: the model returned an invalid plan twice.",
     "LLM_ERROR": "Stopped: the model could not be reached ({detail}).",
+    "STATE_UNAVAILABLE": "Stopped: the robot state could not be read ({detail}).",
     "INTERNAL_ERROR": "Stopped: internal error ({exception_type}). See run log {run_id}.",
 }
 DONE_DEFAULT_MESSAGE = "Task completed, LLM didn't provide more details."  # DONE without a message
@@ -273,7 +274,7 @@ class OutcomeFacts:
     failures: int
     last_failure: StepResult | None = None
     message: str | None = None  # DONE / ABORTED: the model's message
-    detail: str = ""  # LLM_ERROR
+    detail: str = ""  # LLM_ERROR, STATE_UNAVAILABLE
     exception_type: str = "Exception"  # INTERNAL_ERROR
 
 
@@ -293,7 +294,7 @@ def _operator_args(outcome: TaskOutcomeCode, facts: OutcomeFacts) -> dict[str, A
         }
     if outcome == "CALL_BUDGET_EXHAUSTED":
         return {"n": facts.max_llm_calls}
-    if outcome == "LLM_ERROR":
+    if outcome in ("LLM_ERROR", "STATE_UNAVAILABLE"):
         return {"detail": facts.detail}
     if outcome == "INTERNAL_ERROR":
         return {"exception_type": facts.exception_type, "run_id": facts.run_id}

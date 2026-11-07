@@ -24,7 +24,7 @@ Each line is written and flushed while a lock is held, so a crash leaves a usabl
 
 ## Record order
 
-A task's file starts with `task_start` and ends with `task_end`. In between, for each LLM call: `llm_request`, any `llm_retry`, then `llm_response` (followed by `plan` or `plan_invalid`) or `llm_error` / `llm_interrupted`. For each step of a valid plan: `step_start` and `step_result` for a dispatched step, only `step_result` for a step rejected by the pre-check, and a `stop_move` after the `step_result` of a killed step. `stop_requested` can appear anywhere (it is written from the transport thread). A stop or time limit that arrives while no step runs adds a `stop_move` just before `task_end`. An internal error adds `exception` and a `stop_move`.
+A task's file starts with `task_start` and ends with `task_end`. In between, for each LLM call: `llm_request`, any `llm_retry`, then `llm_response` (followed by `plan` or `plan_invalid`) or `llm_error` / `llm_interrupted`. For each step of a valid plan: `step_start` and `step_result` for a dispatched step, only `step_result` for a step rejected by the pre-check, and a `stop_move` after the `step_result` of a killed step. `stop_requested` can appear anywhere (it is written from the transport thread). A stop or time limit that arrives while no step runs adds a `stop_move` just before `task_end`. An internal error adds `exception` and a `stop_move`. A failed task-start state read adds only a `stop_move` before `task_end`.
 
 ## Envelope
 
@@ -45,12 +45,12 @@ The payload fields follow.
 
 ### `task_start`
 
-`task`, `source` (`cli` / `telegram` / `test`), `sender_id` (Telegram user id or null), `condition`, `config` (full config dump; it holds no secrets), `registry_hash`, `system_text`, `catalog_text`, `tool_schema`, `skills` (names), `previous_task` (`TaskSummary` or null), `posture`, `robot_io`, `state_source`, `state_age_ms`, `state_error`, `versions` (`python`, `anthropic`, `httpx`, `pydantic`, `go2-dispatcher`), `git_commit` (`git rev-parse HEAD` in the base dir, or null). `versions` and `git_commit` are read once per process at startup.
+`task`, `source` (`cli` / `telegram` / `test`), `sender_id` (Telegram user id or null), `condition`, `config` (full config dump; it holds no secrets), `registry_hash`, `system_text`, `catalog_text`, `tool_schema`, `skills` (names), `previous_task` (`TaskSummary` or null), `posture`, `robot_io`, `state_age_ms`, `state_error`, `versions` (`python`, `anthropic`, `httpx`, `pydantic`, `go2-dispatcher`), `git_commit` (`git rev-parse HEAD` in the base dir, or null). `versions` and `git_commit` are read once per process at startup.
 
-- `robot_io`: how robot state reaches the dispatcher and the skills, `"service"` (through the robot service, [running.md](../../docs/running.md#robot-service)). Set by the code, not by config. A record without `robot_io` ran with per-process DDS: each skill process created its own DDS participant to sample state, so its `timing.state_ms` includes DDS init, subscription and the first message (about 170–190 ms on the robot), and its task started from the carried-over state with no fresh read. Never mix `robot_io` values within one experiment.
-- `state_source`: where the state behind `posture` and the first plan's Robot section came from: `fresh` (read through the robot service at task start) or `carried_over` (that read failed; the last known state from the previous task or the startup read).
-- `state_age_ms`: the age of that state's message at task start: for `fresh` the service's `age_ms`, for `carried_over` the time since the message arrived; null when there is no state.
-- `state_error`: why the fresh read failed (one line, for example `ServiceUnavailable: no robot service at ...` or `link down; ...`); null for `fresh`.
+- `robot_io`: how robot state reaches the dispatcher and the skills, `"service"` (through the robot service, [running.md](../../docs/running.md#robot-service)). Set by the code, not by config. A record without `robot_io` ran with per-process DDS: each skill process created its own DDS participant to sample state, so its `timing.state_ms` includes DDS init, subscription and the first message (about 170–190 ms on the robot); its tasks started from the state carried over from the previous task, with no fresh read. Never mix `robot_io` values within one experiment.
+- `posture` is from the state read through the robot service at task start, the state the first plan sees; `unknown` when the read failed.
+- `state_age_ms`: the age of that state's message at the read (the service's `age_ms`); null when the read failed.
+- `state_error`: why the read failed (one line, for example `RobotServiceError: Robot service exited with code 1 before ready (see ...)` or `link down; ...`); null when it succeeded. A failed read ends the task `STATE_UNAVAILABLE` with no LLM call: a `stop_move` (reason `state_unavailable`) and `task_end` follow (after a `stop_requested`, if any), and no state stream is written.
 
 ### `llm_request`
 
@@ -93,7 +93,7 @@ All `StepResult` fields at the top level, with the step's identity nested under 
 
 ### `stop_move`
 
-All `StopMoveResult` fields: `ok`, `reason` (`operator` / `task_time_limit` / `step_timeout` / `shutdown` / `internal_error`), `duration_ms`, `exit_code`, `response` (its `timing` and `state_after`), `stderr_tail`. It is the only record of a StopMove: written right after the `step_result` of a killed step, and for every StopMove the dispatcher sends itself. If the utility process could not even be started, `ok` is false, `exit_code` and `response` are null, and `stderr_tail` holds `"<ExceptionType>: <message>"` (StopMove never raises).
+All `StopMoveResult` fields: `ok`, `reason` (`operator` / `task_time_limit` / `step_timeout` / `shutdown` / `internal_error` / `state_unavailable`), `duration_ms`, `exit_code`, `response` (its `timing` and `state_after`), `stderr_tail`. It is the only record of a StopMove: written right after the `step_result` of a killed step, and for every StopMove the dispatcher sends itself. If the utility process could not even be started, `ok` is false, `exit_code` and `response` are null, and `stderr_tail` holds `"<ExceptionType>: <message>"` (StopMove never raises).
 
 ### `exception`
 
@@ -120,7 +120,7 @@ While a task runs, the dispatcher subscribes to the robot service and writes its
 | `link` | `t_mono_ms` (null if no message ever arrived), `link`: a change; for `down` the time of the last message before the gap, for `up` of the first one after it |
 | `stream_error` | `t_mono_ms`, `detail` (`ExceptionType: message`); the stream ends |
 
-A gap shows as a `link` `down` line, no samples, then a `link` `up` line ([skills.md](../../skills/docs/skills.md#robot-service)). The stream is off every critical path: it runs on its own thread and connection, and any failure (service down, connection lost, file error) ends only the stream, never the task. A service that is down at task start gives a file with one `stream_error` line. The stream does not resume after a service restart within the task.
+A gap shows as a `link` `down` line, no samples, then a `link` `up` line ([skills.md](../../skills/docs/skills.md#robot-service)). The stream is off every critical path: it runs on its own thread and connection, and any failure (service down, connection lost, file error) ends only the stream, never the task. The stream does not resume after a service restart within the task.
 
 ## `index.jsonl`
 
@@ -155,7 +155,7 @@ Pick the folder first (`logs/anthropic/real/` for the study), then group its tas
 | Robot state | `step_result.response.state_before` / `state_after`; `stop_move.response.state_after` ([robot.md](../../skills/docs/robot.md#state-sampling)) |
 | Exact prompts | `task_start.system_text` / `catalog_text` / `tool_schema` + `llm_request.user_text` |
 | Session continuity | `session_id` links tasks of one process; `task_start.previous_task` shows what carried over |
-| State at task start | `task_start.state_source` (`fresh` / `carried_over`), `state_age_ms`, `state_error` |
+| State at task start | `task_start.posture`, `state_age_ms`; failed reads: `task_end.outcome == "STATE_UNAVAILABLE"` and `task_start.state_error` |
 | Robot state over time | the task's `state_stream.jsonl`: samples at 10 Hz and link gaps |
 
 ## Design decisions

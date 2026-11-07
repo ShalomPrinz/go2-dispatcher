@@ -125,8 +125,9 @@ class FakeExecutor:
     Records ``runs`` (kwargs dicts incl. ``skill`` and ``params``), ``kills`` (causes)
     and ``stop_moves`` (reasons). ``stop_move`` returns ok unless ``stop_move_ok=False``;
     its ``state_after`` posture is ``stop_move_posture`` (none if ``None``).
-    ``on_kill(cause)`` runs on every ``kill_current``. ``fresh_state`` returns ``fresh``, or raises
-    ``StateReadError`` when it is None (the robot service is down); ``streams`` records each task's stream.
+    ``on_kill(cause)`` runs on every ``kill_current``. ``fresh_state`` returns ``fresh`` (default: standing),
+    or raises ``StateReadError`` if ``fresh_fails`` (the robot service is down); ``streams`` records each
+    task's stream.
     """
 
     def __init__(
@@ -137,9 +138,11 @@ class FakeExecutor:
         stop_move_posture: Posture | None = None,
         on_kill: Callable[[StopCause], None] | None = None,
         fresh: RobotState | None = None,
+        fresh_fails: bool = False,
     ):
         self.results = list(results)
         self.fresh = fresh
+        self.fresh_fails = fresh_fails
         self.fresh_reads = 0
         self.streams: list[FakeStream] = []
         self.stop_move_ok = stop_move_ok
@@ -191,9 +194,9 @@ class FakeExecutor:
 
     def fresh_state(self) -> RobotState:
         self.fresh_reads += 1
-        if self.fresh is None:
+        if self.fresh_fails:
             raise StateReadError("ServiceUnavailable: no robot service")
-        return self.fresh
+        return self.fresh if self.fresh is not None else state("standing")
 
     def state_stream(self, path: Path, t_start: float) -> FakeStream:
         stream = FakeStream(path)

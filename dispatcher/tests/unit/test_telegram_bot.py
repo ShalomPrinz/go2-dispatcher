@@ -27,7 +27,6 @@ from dispatcher.tests.helpers import (
     make_config,
     replies,
 )
-from dispatcher.tests.helpers.fakes import state
 from dispatcher.transports import telegram_bot
 from dispatcher.transports.telegram_bot import (
     SHUTDOWN_EXTRA_S,
@@ -156,7 +155,6 @@ def test_normal_task(cfg, registry):
         planner,
         FakeExecutor([exec_result("ok", skill="turn")]),
         clock=FakeClock().now,
-        initial_state=state("standing"),
     )
     u = fake_update("  turn left  ", USER)
     call(on_text, u, fake_context(dispatcher=d, cfg=cfg))

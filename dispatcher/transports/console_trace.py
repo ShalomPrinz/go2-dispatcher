@@ -123,8 +123,7 @@ class ConsoleTrace:
         posture: Posture,
         start_state: StartState,
     ) -> None:
-        carried = " (state carried over: fresh read failed)" if start_state.source == "carried_over" else ""
-        self._line(self._style(f"Posture: {posture}{carried}", DIM))
+        self._line(self._style(f"Posture: {posture}", DIM))
 
     def llm_request(
         self, call_index: int, return_reason: RequestReason, retry_of: ReturnReason | None, user_text: str

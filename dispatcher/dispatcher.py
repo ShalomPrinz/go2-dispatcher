@@ -52,13 +52,6 @@ def _numeric_usage(usage: dict) -> dict[str, float]:
     return {k: v for k, v in usage.items() if isinstance(v, (int, float)) and not isinstance(v, bool)}
 
 
-def _age_ms(state: RobotState | None) -> float | None:
-    """Time since ``state``'s message arrived, from its read time ``t`` (unix) and its age at that read."""
-    if state is None:
-        return None
-    return (time.time() - state.t) * 1000.0 + (state.age_ms or 0.0)
-
-
 # --- per-task state (dispatcher/docs/loop-and-context.md) -----------------------------------------------------------
 
 
@@ -83,6 +76,11 @@ class _Task:
     last_failure: StepResult | None = None
     stop_move_failed: bool = False
     usage_totals: dict[str, float] = field(default_factory=dict)
+    state: RobotState | None = None  # last known state (dispatcher/docs/loop-and-context.md)
+
+    @property
+    def posture(self) -> Posture:
+        return self.state.posture if self.state is not None else "unknown"
 
 
 @dataclass(frozen=True)
@@ -113,7 +111,6 @@ class Dispatcher:
         executor: SkillExecutor,
         *,
         clock: Callable[[], float] = time.monotonic,
-        initial_state: RobotState | None = None,
         observer: TaskObserver | None = None,
     ):
         self.cfg = cfg
@@ -127,7 +124,6 @@ class Dispatcher:
         self.registry_hash = planner.surface.registry_hash
         self.clock = clock
         self.observer = observer  # sees every record, e.g. the CLI console trace (dispatcher/docs/run-log.md)
-        self.state: RobotState | None = initial_state  # last known state (dispatcher/docs/loop-and-context.md)
         self.previous: TaskSummary | None = None
 
         self._task_lock = threading.Lock()
@@ -192,10 +188,13 @@ class Dispatcher:
             t = self._new_task(task, source, sender_id)
             stream = None
             try:
-                self._open_log(t, self._refresh_state())
-                if t.log.path is not None:
-                    stream = self.executor.state_stream(stream_path(t.log.path), t.t_start)
+                start = self._read_start_state(t)
+                self._open_log(t, start)
                 try:
+                    if start.error is not None:  # no plan without a fresh state (dispatcher/docs/loop-and-context.md)
+                        self._state_unavailable(start.error)
+                    if t.log.path is not None:
+                        stream = self.executor.state_stream(stream_path(t.log.path), t.t_start)
                     self._loop(t)
                 except _TaskEnded as ended:  # the one place a task ends (dispatcher/docs/loop-and-context.md)
                     end = ended.ending
@@ -242,20 +241,19 @@ class Dispatcher:
     def _observed(self, log: TaskLog) -> TaskLog:
         return log if self.observer is None else TeeLog(log, self.observer)
 
-    def _refresh_state(self) -> StartState:
-        """Read a fresh state for the task's first plan; on failure keep the carried-over one
-        (dispatcher/docs/loop-and-context.md)."""
+    def _read_start_state(self, t: _Task) -> StartState:
+        """Read the state for the task's first plan through the robot service (dispatcher/docs/loop-and-context.md)."""
         try:
-            self.state = self.executor.fresh_state()
-            return StartState(source="fresh", age_ms=self.state.age_ms)
+            t.state = self.executor.fresh_state()
         except StateReadError as e:
-            return StartState(source="carried_over", age_ms=_age_ms(self.state), error=str(e))
+            return StartState(age_ms=None, error=str(e))
+        return StartState(age_ms=t.state.age_ms)
 
     def _open_log(self, t: _Task, start_state: StartState) -> None:
         plain = self.runlog_factory.open(t.run_id, t.t_start, clock=self.clock)
         log = self._observed(plain)
         t.log = log
-        log.task_start(t.task, t.source, t.sender_id, self.previous, self.posture, start_state)
+        log.task_start(t.task, t.source, t.sender_id, self.previous, t.posture, start_state)
         with self._state_lock:  # task_start stays the first record, even with a stop during the start
             self._log = plain
             self._phase = "between"
@@ -281,23 +279,19 @@ class Dispatcher:
             t.last_failure = sr
         if sr.dispatch is None:
             t.rejections += 1
-        t.log.step_result(sr, budget=t.budget, failures=t.failures, posture=self.posture)
+        t.log.step_result(sr, budget=t.budget, failures=t.failures, posture=t.posture)
         if stop is not None:
             t.log.stop_move(stop)
-
-    @property
-    def posture(self) -> Posture:
-        return self.state.posture if self.state is not None else "unknown"
 
     def _apply_state(self, t: _Task, sr: StepResult | None, stop: StopMoveResult | None) -> None:
         """Update the last known state and the StopMove flag (dispatcher/docs/loop-and-context.md)."""
         for resp in (sr.response if sr else None, stop.response if stop else None):
             if resp is not None and resp.state_after is not None:
-                self.state = resp.state_after  # the step's state_after wins over StopMove's
+                t.state = resp.state_after  # the step's state_after wins over StopMove's
                 break
         else:
             if sr is not None and sr.outcome in KILLED_OUTCOMES:
-                self.state = None
+                t.state = None
         if stop is not None and not stop.ok:
             t.stop_move_failed = True
 
@@ -306,7 +300,7 @@ class Dispatcher:
         return build_user_message(
             ContextInput(
                 task=t.task,
-                state=self.state,
+                state=t.state,
                 budget=t.budget,
                 failures=t.failures,
                 max_failures=loop.max_failures,
@@ -377,6 +371,12 @@ class Dispatcher:
         smr = self.executor.stop_move(cause)
         raise _TaskEnded(_Ending(cause.task_outcome, stop_move=smr)) from None
 
+    def _state_unavailable(self, error: str) -> NoReturn:
+        """End the task for a failed task-start read: the state is unknown, so send StopMove, then raise."""
+        self._set_phase("ending")
+        smr = self.executor.stop_move(StopCause.STATE_UNAVAILABLE)
+        raise _TaskEnded(_Ending("STATE_UNAVAILABLE", detail=error, stop_move=smr)) from None
+
     def _end(
         self,
         t: _Task,
@@ -415,7 +415,7 @@ class Dispatcher:
             failures=t.failures,
             stop_move_failed=t.stop_move_failed,
             duration_ms=duration_ms,
-            final_posture=self.posture,
+            final_posture=t.posture,
             log_path=str(t.log.path) if t.log.path is not None else "",
         )
         try:

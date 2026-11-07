@@ -79,16 +79,9 @@ class Rig:
         self.cfg = make_config(tmp_path, **cfg)
         surface = PromptSurface.build(registry, self.cfg.loop.planning_horizon)
         self.planner = ScriptedPlanner(items, surface, on_call=on_call)
-        self.executor = executor or FakeExecutor(results)
+        self.executor = executor or FakeExecutor(results, fresh=state(posture))
         self.clock = FakeClock()
-        self.d = Dispatcher(
-            self.cfg,
-            registry,
-            self.planner,
-            self.executor,
-            clock=self.clock.now,
-            initial_state=state(posture),
-        )
+        self.d = Dispatcher(self.cfg, registry, self.planner, self.executor, clock=self.clock.now)
 
     def run(self, task="do the thing"):
         return self.d.run_task(task, source="test")
@@ -473,35 +466,38 @@ def test_robot_state(tmp_path, registry):
     r.run("sit down")
     assert "Posture: standing\nObstacles (m): unavailable" in r.user(0)
     assert "Posture: sitting\nObstacles (m): front 0.4, back no reading" in r.user(1)  # the step's state_after
-    r.run("walk")
-    assert "Posture: sitting\nObstacles (m): front 0.4," in r.user(2)
+    o = r.run("walk")
+    assert "Posture: standing\nObstacles (m): unavailable" in r.user(2)  # the fresh read, not the last state
     assert "Posture: unknown\nObstacles (m): unavailable" in r.user(3)  # killed step without state_after
-    assert r.d.posture == "unknown"
+    assert o.final_posture == "unknown"
 
 
 def test_first_plan_sees_fresh_state(tmp_path, registry):
-    """The fresh read replaces the carried-over state; the task_start record says so; the stream is closed."""
+    """The first plan sees the fresh read; task_start records robot_io; the task's stream is closed."""
     executor = FakeExecutor([exec_result(skill="sit", posture="sitting")], fresh=state("sitting"))
     r = Rig(tmp_path, registry, [plan(PlanStep(skill="sit", params={})), done()], executor=executor)
     o = r.run()
     assert "Posture: sitting" in r.user(0)  # Rig starts the dispatcher standing
     assert executor.fresh_reads == 1  # the replan after the step uses its state_after
     start = records(o, "task_start")[0]
-    assert (start["robot_io"], start["state_source"], start["state_error"]) == ("service", "fresh", None)
+    assert (start["robot_io"], start["state_error"]) == ("service", None)
     [stream] = executor.streams
     assert stream.closed and stream.path == Path(o.log_path).with_name(Path(o.log_path).stem + ".state_stream.jsonl")
     index = json.loads((Path(o.log_path).parent / "index.jsonl").read_text(encoding="utf-8"))
     assert index["robot_io"] == "service"
 
 
-def test_failed_fresh_read_falls_back_to_carried_over_state(tmp_path, registry):
-    r = Rig(tmp_path, registry, [done()], posture="sitting")  # FakeExecutor without fresh: the service is down
+def test_failed_fresh_read_ends_task_before_planning(tmp_path, registry):
+    r = Rig(tmp_path, registry, [done()], executor=FakeExecutor(fresh_fails=True))
     o = r.run()
-    assert "Posture: sitting" in r.user(0)
+    assert (o.outcome, o.llm_calls, r.planner.calls, r.executor.streams) == ("STATE_UNAVAILABLE", 0, [], [])
+    assert o.message == "Stopped: the robot state could not be read (ServiceUnavailable: no robot service)."
     start = records(o, "task_start")[0]
-    assert (start["state_source"], start["posture"]) == ("carried_over", "sitting")
+    assert (start["posture"], start["state_age_ms"]) == ("unknown", None)
     assert start["state_error"] == "ServiceUnavailable: no robot service"
-    assert start["state_age_ms"] is not None and start["state_age_ms"] >= 0.0
+    assert r.executor.stop_moves == [StopCause.STATE_UNAVAILABLE]  # unknown state: always StopMove
+    assert [rec["type"] for rec in records(o)] == ["task_start", "stop_move", "task_end"]
+    assert records(o, "task_end")[0]["outcome"] == "STATE_UNAVAILABLE"
 
 
 def test_stop_during_fresh_read_ends_task_without_planning(tmp_path, registry):
@@ -615,7 +611,7 @@ def test_dispatcher_stop_move_updates_posture(tmp_path, registry):
     r = Rig(tmp_path, registry, [plan(walk(), turn())], executor=FakeExecutor([step1], stop_move_posture="sitting"))
     o = r.run()
     assert o.outcome == "STOPPED"
-    assert r.d.posture == o.final_posture == "sitting"
+    assert o.final_posture == "sitting"
 
 
 def test_llm_interrupted_time_limit(tmp_path, registry):

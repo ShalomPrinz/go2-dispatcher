@@ -184,7 +184,6 @@ class RunLog:
             previous_task=previous.model_dump(mode="json") if previous else None,
             posture=posture,
             robot_io=ROBOT_IO,
-            state_source=start_state.source,
             state_age_ms=start_state.age_ms,
             state_error=start_state.error,
             versions=s.versions,

@@ -1,5 +1,4 @@
-"""Transport start-up shared by the CLI and Telegram: planner choice and initial
-posture (docs/running.md)."""
+"""Transport start-up shared by the CLI and Telegram: planner choice and start-up errors (docs/running.md)."""
 
 from __future__ import annotations
 
@@ -8,14 +7,12 @@ import pytest
 from dispatcher.context import PromptSurface
 from dispatcher.models import StartupError
 from dispatcher.registry import Registry
-from dispatcher.tests.helpers import FakeExecutor, make_config
-from dispatcher.tests.helpers.fakes import state
+from dispatcher.tests.helpers import make_config
 from dispatcher.transports import (
     API_KEY_ENV,
     MISSING_API_KEY,
     TEST_PLANNER_ENV,
     cli,
-    initial_state,
     make_planner,
 )
 from tests.helpers import REPO_ROOT
@@ -54,13 +51,3 @@ def test_entry_point_prints_startup_error_and_returns_2(tmp_path, capsys, argv):
     missing = tmp_path / "nope.toml"
     assert cli.main([a.format(cfg=missing) for a in argv]) == 2
     assert capsys.readouterr().err.strip() == f"Config error: config file not found: {missing}"
-
-
-def test_failed_state_read_is_unknown_with_warning(capsys):
-    assert initial_state(FakeExecutor()) is None
-    assert "Warning" in capsys.readouterr().err
-
-
-def test_state_comes_from_the_service_read():
-    s = initial_state(FakeExecutor(fresh=state("sitting")))
-    assert s is not None and s.posture == "sitting"

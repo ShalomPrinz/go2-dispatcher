@@ -37,7 +37,7 @@ def build(tmp_path, registry, items, **cfg_over):
     surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
     planner = ScriptedPlanner(items, surface)
     executor = Executor(cfg, cfg.base_dir)
-    d = Dispatcher(cfg, registry, planner, executor, initial_state=executor.read_state())
+    d = Dispatcher(cfg, registry, planner, executor)  # the first fresh read starts the robot service
     return d, planner, cfg
 
 
@@ -88,7 +88,10 @@ def test_fault_at_step_two(tmp_path, registry):
         [Plan(status="PLAN", steps=[TURN, TURN]), Plan(status="DONE", message="done anyway")],
         stub={"faults": [{"step": 2, "kind": "error"}]},
     )
-    o = d.run_task("turn twice", source="test")
+    try:
+        o = d.run_task("turn twice", source="test")
+    finally:
+        d.shutdown(0)
     assert o.outcome == "DONE"
     assert [s.outcome for s in o.steps] == ["ok", "error"]
     assert o.steps[1].dispatch is not None
@@ -108,6 +111,7 @@ def test_stop_during_hang(tmp_path, registry):
         o = d.run_task("turn", source="test")
     finally:
         timer.cancel()
+        d.shutdown(0)
     assert time.monotonic() - t0 < STOP_WITHIN_S
     assert o.outcome == "STOPPED"
     sm = [r for r in read_jsonl(o.log_path) if r["type"] == "stop_move"]

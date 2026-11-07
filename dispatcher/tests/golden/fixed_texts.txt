@@ -46,6 +46,12 @@ Stopped: the model could not be reached (overloaded).
 === operator_message LLM_ERROR stop_move_failed ===
 Stopped: the model could not be reached (overloaded). WARNING: the stop command to the robot failed. Stop the robot manually.
 
+=== operator_message STATE_UNAVAILABLE ===
+Stopped: the robot state could not be read (overloaded).
+
+=== operator_message STATE_UNAVAILABLE stop_move_failed ===
+Stopped: the robot state could not be read (overloaded). WARNING: the stop command to the robot failed. Stop the robot manually.
+
 === operator_message INTERNAL_ERROR ===
 Stopped: internal error (KeyError). See run log abc123.
 

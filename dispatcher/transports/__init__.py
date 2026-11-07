@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import importlib
 import os
-import sys
 from collections.abc import Callable
 
 from skills import stub
@@ -13,9 +12,9 @@ from .. import process_lock, prompts
 from ..config import API_KEY_ENV, Config, load_config_and_env
 from ..context import PromptSurface, render_step
 from ..dispatcher import Dispatcher
-from ..executor import Executor, SkillExecutor, needs_vision
+from ..executor import Executor, needs_vision
 from ..llm import AnthropicPlanner, OpenRouterPlanner, PlannerClient
-from ..models import ConfigError, RegistryError, RobotState, StartupError, StateReadError, TaskOutcome
+from ..models import ConfigError, RegistryError, StartupError, TaskOutcome
 from ..registry import Registry
 from ..runlog import TaskObserver
 
@@ -25,7 +24,6 @@ __all__ = [
     "startup_error_text",
     "format_outcome",
     "make_planner",
-    "initial_state",
     "API_KEY_ENV",
     "TEST_PLANNER_ENV",
     "OUTCOME_MAX_CHARS",
@@ -64,15 +62,6 @@ def make_planner(cfg: Config, surface: PromptSurface) -> PlannerClient:
     return AnthropicPlanner(key, cfg.llm, surface)
 
 
-def initial_state(executor: SkillExecutor) -> RobotState | None:
-    """State at start-up, read through the robot service on either backend (docs/running.md)."""
-    try:
-        return executor.fresh_state()
-    except StateReadError as e:
-        print(f"Warning: robot state unavailable; posture unknown ({e}).", file=sys.stderr)
-        return None
-
-
 def build_dispatcher(
     cfg: Config, *, reset_stub: bool, observer: Callable[[Registry], TaskObserver] | None = None
 ) -> Dispatcher:
@@ -93,7 +82,6 @@ def build_dispatcher(
             registry,
             planner,
             executor,
-            initial_state=initial_state(executor),
             observer=observer(registry) if observer is not None else None,
         )
     except BaseException:
