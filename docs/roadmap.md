@@ -84,7 +84,6 @@ Not scheduled.
   - A robot reboot mid-session resets the odometry origin, so the start pose must be recorded again.
 - **Continuous monitoring during a skill**: a watchdog that can abort mid-motion rather than only between steps.
 - **Independent batch tasks.** `batch` carries the previous task and posture across lines; experiments may need a reset per task (for example an `--independent` flag).
-- **Send the optional `PLAN` message to the operator** as progress. Currently it is logged only.
 - **Claude Code guard hooks** for the real backend: a fail-closed PreToolUse `Bash` hook blocking `--backend real` / `--run-robot` (permission patterns miss `sh -c` and path prefixes) and an `Edit|Write` hook blocking `backend = "real"` in tracked config ([safety.md](safety.md#design-decisions)).
 - **Less thinking than `between_tools`**: if Claude at `between_tools` (already the lowest setting Sonnet 5.5 accepts) measures too slow, the options are a model that accepts thinking disabled, or a lower `max_tokens` cap. Either changes the request, so it needs an API check and a measurement-comparability check ([llm.md](../dispatcher/docs/llm.md)).
 - **Start moving before the full plan arrives**: for example, run the first step while the rest of the plan is still being generated, when it is clear from the start that the robot must walk. This would change the loop and the plan-validation contract ([loop-and-context.md](../dispatcher/docs/loop-and-context.md)).

@@ -12,7 +12,7 @@ import sys
 import traceback
 from collections.abc import Awaitable, Callable, Coroutine
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from telegram import Update
 from telegram.ext import (
@@ -31,6 +31,7 @@ from ..config import TOKEN_ENV, Config
 from ..dispatcher import Dispatcher
 from ..models import BusyError, StartupError
 from . import build_dispatcher, format_outcome, load_config_and_env, startup_error_text
+from .telegram_progress import TelegramProgress
 
 __all__ = [
     "build_application",
@@ -68,6 +69,10 @@ def _dispatcher(context: Any) -> Dispatcher:
 
 def _cfg(context: Any) -> Config:
     return context.application.bot_data["cfg"]
+
+
+def _progress(context: Any) -> TelegramProgress | None:
+    return context.application.bot_data.get("progress")
 
 
 def _guarded(fn: Callable[[Any, Any, Any], Awaitable[None]]) -> Handler:
@@ -120,12 +125,19 @@ async def on_text(user: Any, message: Any, context: Any) -> None:
     if dispatcher.is_busy():
         await message.reply_text(prompts.BUSY)
         return
-    await message.reply_text(prompts.WORKING)
+    working = await message.reply_text(prompts.WORKING)  # the progress message, edited in place (docs/running.md)
+    progress = _progress(context)
+    if progress is not None and not progress.open(working.edit_text):
+        await message.reply_text(prompts.BUSY)  # another handler started a task during the await
+        return
     try:
         outcome = await asyncio.to_thread(dispatcher.run_task, text, source=SOURCE, sender_id=str(user.id))
     except BusyError:
         await message.reply_text(prompts.BUSY)
         return
+    finally:
+        if progress is not None:
+            await progress.close()
     await message.reply_text(format_outcome(outcome, dispatcher.registry))
 
 
@@ -156,7 +168,10 @@ async def on_post_stop(app: Application) -> None:
     await asyncio.to_thread(dispatcher.shutdown, stop_move.POLICY.timeout_s({}) + SHUTDOWN_EXTRA_S)
 
 
-def build_application(dispatcher: Dispatcher, cfg: Config, token: str) -> Application:
+def build_application(
+    dispatcher: Dispatcher, cfg: Config, token: str, progress: TelegramProgress | None = None
+) -> Application:
+    """``progress`` must be ``dispatcher``'s observer; without it the bot shows no live progress."""
     app = (
         ApplicationBuilder()
         .token(token)
@@ -171,6 +186,7 @@ def build_application(dispatcher: Dispatcher, cfg: Config, token: str) -> Applic
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & msg, on_text))
     app.bot_data["dispatcher"] = dispatcher
     app.bot_data["cfg"] = cfg
+    app.bot_data["progress"] = progress
     return app
 
 
@@ -197,9 +213,9 @@ def _serve(config_path: Path | None) -> int:
         return 2
     if not cfg.telegram.allowed_user_ids:
         print(NO_ALLOWED_USERS_WARNING, file=sys.stderr)
-    dispatcher = build_dispatcher(cfg, reset_stub=True)
+    dispatcher = build_dispatcher(cfg, reset_stub=True, observer=TelegramProgress)
     atexit.register(dispatcher.shutdown, 0)
-    build_application(dispatcher, cfg, token).run_polling()
+    build_application(dispatcher, cfg, token, cast(TelegramProgress, dispatcher.observer)).run_polling()
     return 0
 
 

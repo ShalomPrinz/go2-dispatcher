@@ -70,6 +70,16 @@ TEXT_ARGS: dict[str, dict[str, object]] = {
     "STEPS_LINE": {"run": 3, "failed": 1},
     "OMITTED_LINES": {"n": 4},
     "ERROR_REPLY": {"exception_type": "KeyError"},
+    "PROGRESS_PLAN_MESSAGE": {"message": "Turning first."},
+    "PROGRESS_PLAN_STEP": {"i": 1, "call": "turn(direction=left, angle_deg=90)"},
+    "PROGRESS_PLAN_END": {"status": "DONE", "message": "Turned left."},
+    "PROGRESS_STEP_RUNNING": {"call": "turn(direction=left, angle_deg=90)"},
+    "PROGRESS_STEP_OK": {"step": "turn(direction=left, angle_deg=90) -> ok"},
+    "PROGRESS_STEP_FAILED": {"step": "walk(distance_m=1) -> error: Move returned 3104"},
+    "PROGRESS_DURATION": {"seconds": 0.3},
+    "PROGRESS_STOP_REQUESTED": {"source": "telegram"},
+    "PROGRESS_STOP_MOVE_SENT": {"seconds": 0.2},
+    "PROGRESS_STOP_MOVE_FAILED": {"seconds": 12.0},
 }
 
 

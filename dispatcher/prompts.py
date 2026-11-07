@@ -81,6 +81,18 @@ __all__ = [
     "STEPS_LINE",
     "OMITTED_LINES",
     "ERROR_REPLY",
+    "PROGRESS_THINKING",
+    "PROGRESS_PLAN",
+    "PROGRESS_PLAN_MESSAGE",
+    "PROGRESS_PLAN_STEP",
+    "PROGRESS_PLAN_END",
+    "PROGRESS_STEP_RUNNING",
+    "PROGRESS_STEP_OK",
+    "PROGRESS_STEP_FAILED",
+    "PROGRESS_DURATION",
+    "PROGRESS_STOP_REQUESTED",
+    "PROGRESS_STOP_MOVE_SENT",
+    "PROGRESS_STOP_MOVE_FAILED",
 ]
 
 # --- System (S1, S2), dispatcher/docs/loop-and-context.md ---------------------------------------------------
@@ -297,3 +309,19 @@ def help_text(backend: str) -> str:
 STEPS_LINE = "Steps: {run} run, {failed} failed"
 OMITTED_LINES = "({n} earlier lines omitted)"
 ERROR_REPLY = "Error: {exception_type}"
+
+
+# --- Telegram progress message (docs/running.md) ------------------------------------------------------------
+
+PROGRESS_THINKING = "Thinking..."
+PROGRESS_PLAN = "Plan:"
+PROGRESS_PLAN_MESSAGE = "Plan: {message}"  # PLAN with its optional message
+PROGRESS_PLAN_STEP = "{i}. {call}"
+PROGRESS_PLAN_END = "Plan: {status}: {message}"  # DONE / ABORT
+PROGRESS_STEP_RUNNING = "▶ {call}"
+PROGRESS_STEP_OK = "✓ {step}"
+PROGRESS_STEP_FAILED = "✗ {step}"
+PROGRESS_DURATION = " ({seconds:.1f}s)"
+PROGRESS_STOP_REQUESTED = "■ Stop requested ({source})"
+PROGRESS_STOP_MOVE_SENT = "■ StopMove sent ({seconds:.1f}s)"
+PROGRESS_STOP_MOVE_FAILED = "■ StopMove FAILED ({seconds:.1f}s)"

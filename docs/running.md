@@ -50,7 +50,7 @@ Plan: DONE: The robot has successfully turned left 90 degrees as requested.
 DONE · 2 LLM calls · 1 steps run, 0 failed · 3437 in / 276 out tokens · 6.9s
 ```
 
-On a terminal the trace is colored and the `Thinking...` and `▶` lines are replaced in place; when stderr is not a terminal, or `NO_COLOR` is set, it is plain text with one line per event. The trace is `dispatcher/transports/console_trace.py`, an observer of the run log records ([run-log.md](../dispatcher/docs/run-log.md#observers)); the Telegram bot has no trace. The machine-readable record of a task is its run log ([run-log.md](../dispatcher/docs/run-log.md)).
+On a terminal the trace is colored and the `Thinking...` and `▶` lines are replaced in place; when stderr is not a terminal, or `NO_COLOR` is set, it is plain text with one line per event. The trace is `dispatcher/transports/console_trace.py`, an observer of the run log records ([run-log.md](../dispatcher/docs/run-log.md#observers)); the Telegram bot shows a shorter version in one message ([below](#progress-message)). The machine-readable record of a task is its run log ([run-log.md](../dispatcher/docs/run-log.md)).
 
 `batch` prints `Task {i}: {task}` to stdout before each task, with a blank line between tasks. It prints no aggregate after the last task.
 
@@ -121,11 +121,36 @@ Messages from users who are not in `allowed_user_ids` get no reply (a warning li
 | `stop` or `/stop` while idle | `Nothing is running.` |
 | an empty message | `Send a task, for example: walk forward one metre.` |
 | a task while another task runs | `Busy: a task is running. Send "stop" to stop it.` |
-| a task | `Working on it.`, then the outcome text (below) |
+| a task | `Working on it.`, which then becomes the progress message ([below](#progress-message)), then the outcome text ([below](#outcome-text)) as a new message |
 
 If a handler raises an error, the bot replies `Error: {ExceptionType}` and prints the traceback to stderr.
 
 Only `stop` is recognised during a task. Other messages sent during a task are answered `Busy` and are not forwarded to the model (forwarding them is a future idea; see [roadmap.md](roadmap.md#future-ideas)).
+
+### Progress message
+
+The `Working on it.` reply is the task's progress message: while the task runs, the bot edits it in place to show the part of the CLI trace an operator needs ([Output](#output)). Each edit replaces the whole text:
+
+```
+Plan:
+1. turn(direction=left, angle_deg=90)
+✓ turn(direction=left, angle_deg=90) -> ok (0.3s)
+Plan: DONE: I turned left 90 degrees.
+```
+
+| Event | Line |
+|---|---|
+| model call running | `Thinking...` as the last line, removed when the reply arrives |
+| plan `PLAN` | `Plan:` (or `Plan: {message}` when the plan has a message), then `{i}. {skill(params)}` per step |
+| plan `DONE` / `ABORT` | `Plan: {status}: {message}` |
+| step running | `▶ {skill(params)}` as the last line, replaced by the result |
+| step result | `✓ {step}` or `✗ {step}`, the step rendered as in the LLM context, then ` ({seconds:.1f}s)` if it was dispatched |
+| stop request | `■ Stop requested ({source})` (`telegram` or `shutdown`) |
+| StopMove | `■ StopMove sent ({seconds:.1f}s)` or `■ StopMove FAILED ({seconds:.1f}s)` |
+
+Left out: token counts, `Thought for …` timing, infrastructure retries, rejected plans, internal errors and the posture line. They are in the run log. The texts are fixed (`PROGRESS_*` in `dispatcher/prompts.py`) and identical across conditions. They are not part of the prompt surface, so they do not change the registry hash. If the text grows past 4000 characters, the oldest lines are replaced by `({n} earlier lines omitted)`.
+
+The message is edited at most once per second (`EDIT_INTERVAL_S` in `dispatcher/transports/telegram_progress.py`, tunable); events in between are merged into the next edit. When the task ends, the last state is sent, then the outcome text follows as a new message. A failed edit prints `Warning: Telegram progress update failed: {ExceptionType}.` to stderr and is skipped; the next event tries again, and the task is not affected. The progress is `dispatcher/transports/telegram_progress.py`, the bot's run-log observer ([run-log.md](../dispatcher/docs/run-log.md#observers)). Its record methods only change the text and wake a sender on the bot's event loop. They never wait for Telegram, so sending does not slow the loop or the stop path and is not part of any measured LLM or step latency.
 
 ### Outcome text
 
@@ -193,7 +218,8 @@ and exit code 2. This stops two processes from driving one robot, overwriting th
 ## Design decisions
 
 - **Two thin transports over one dispatcher.** The CLI and the bot only parse input, report the task and handle signals; everything else is shared, so CLI runs and Telegram runs produce the same logs. The Telegram integration replaces OpenClaw's channels ([architecture.md](architecture.md#why-a-purpose-built-dispatcher)).
-- **The live trace is the CLI's only task output.** The trace already ends with the outcome, step counts, tokens and duration, and shows the operator message once (in the `DONE` or `ABORT` plan line, otherwise just before the summary), so printing the outcome text after it repeated the same task. Rejected: keeping the outcome text on stdout for scripting; the run log JSONL is the machine-readable record of every task ([run-log.md](../dispatcher/docs/run-log.md)). The bot keeps the outcome text, because it has no trace.
+- **The live trace is the CLI's only task output.** The trace already ends with the outcome, step counts, tokens and duration, and shows the operator message once (in the `DONE` or `ABORT` plan line, otherwise just before the summary), so printing the outcome text after it repeated the same task. Rejected: keeping the outcome text on stdout for scripting; the run log JSONL is the machine-readable record of every task ([run-log.md](../dispatcher/docs/run-log.md)). The bot keeps the outcome text, because its progress message leaves out the counts and the step list.
+- **The bot shows progress in one message, edited in place, and sends the outcome as a new message.** Without progress the operator saw nothing for the 15 to 60 s of a model call. One edited message gives one notification per task (the new outcome message gives a second one, at the end). Telegram limits a chat to about 1 message per second, so edits are merged to at most one per `EDIT_INTERVAL_S` (tunable). The record methods only update the text and the sending runs on the event loop, so Telegram never delays the loop, the stop path or the measured latencies. A failed edit is printed and skipped, so Telegram trouble never fails a task. The message carries only what the operator acts on: token counts, timings, retries, rejected plans and internal errors are diagnostics, noise on a phone, and already in the run log. Rejected: one message per step, which gives a notification per step and runs into the rate limit on short steps; a separate event bus, because the run-log observer already gives the typed records the CLI trace uses.
 - **`batch` carries the previous task and posture across lines**, because that is how the robot behaves between messages: it remembers. Experiments may need independent tasks later ([roadmap.md](roadmap.md#future-ideas)).
 - **The bot stops a running task on SIGINT/SIGTERM before the Telegram library shuts down.** In python-telegram-bot 22.x, shutdown waits for every in-flight handler, so without this a running task would continue until it ended by itself. The bot replaces the library's signal handlers with one that calls the stop path, keeping `Dispatcher.shutdown()` as the backstop.
 - **The dispatcher owns the vision service's lifecycle, through the `Executor`** (user decision), because the executor is what spawns `detect_object` and gives it the environment, so the service gets the same `child_env` and socket path by construction. `Dispatcher.shutdown()` closes the executor, so every exit path that already ends a task also stops the service. Rejected: a separate process supervisor or a transport-level hook beside `shutdown()`, which would be a second exit path to keep complete.

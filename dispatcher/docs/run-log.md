@@ -97,7 +97,7 @@ All `StopMoveResult` fields: `ok`, `reason` (`operator` / `task_time_limit` / `s
 
 ## Observers
 
-`Dispatcher` takes an optional `observer` (a `TaskObserver`: one method per record type, with the same arguments as `RunLog`). When it is set, each task's log is wrapped in a `TeeLog` that writes every record to the log first and then hands it to the observer. An exception in the observer is swallowed, so an observer can never break a task or the log. The log file content is the same with or without an observer. The `NullLog` a task starts with is wrapped too, so if the file cannot be opened the observer still gets `exception` and `task_end` (but no `task_start`). The CLI sets `ConsoleTrace`, its live trace ([running.md](../../docs/running.md#output)); the bot and the tests set none.
+`Dispatcher` takes an optional `observer` (a `TaskObserver`: one method per record type, with the same arguments as `RunLog`). When it is set, each task's log is wrapped in a `TeeLog` that writes every record to the log first and then hands it to the observer. An exception in the observer is swallowed, so an observer can never break a task or the log. The log file content is the same with or without an observer. The `NullLog` a task starts with is wrapped too, so if the file cannot be opened the observer still gets `exception` and `task_end` (but no `task_start`). The CLI sets `ConsoleTrace`, its live trace ([running.md](../../docs/running.md#output)); the bot sets `TelegramProgress`, its progress message ([running.md](../../docs/running.md#progress-message)); the tests set none unless they test an observer.
 
 ## `index.jsonl`
 
