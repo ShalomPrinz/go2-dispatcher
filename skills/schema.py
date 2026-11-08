@@ -27,6 +27,8 @@ class ErrorCode(str, Enum):
     WEIGHTS_MISSING = "weights_missing"
     VISION_UNAVAILABLE = "vision_unavailable"
     STATE_UNAVAILABLE = "state_unavailable"
+    ROBOT_UNAVAILABLE = "robot_unavailable"
+    MOTION_REJECTED = "motion_rejected"
 
     def __str__(self) -> str:  # Python 3.10 has no StrEnum; str() and f-strings give the value
         return self.value

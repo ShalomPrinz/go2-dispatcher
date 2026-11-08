@@ -8,7 +8,7 @@ import os
 import sys
 import time
 import traceback
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
 from typing import Literal, NoReturn
 
@@ -20,7 +20,7 @@ from skills.schema import SCHEMA_VERSION, ErrorCode, RobotState, SkillError, Ski
 @dataclass(frozen=True)
 class SkillOutcome:
     """What a skill body returns to run_skill; build it with ok(), error() or from_exception()
-    (skills/docs/skills.md). timing holds the body's own keys, such as client_init_ms and exec_ms."""
+    (skills/docs/skills.md). timing holds the body's own keys, such as exec_ms."""
 
     status: Status
     observations: dict
@@ -48,43 +48,38 @@ class SkillOutcome:
         return cls.error(code, message, observations={}, timing={})
 
 
-StateSource = Literal["service", "process"]
+StateReader = Callable[[], RobotState]
 
 
 @dataclass
 class StateSampler:
     """The state samples of one skill process, filled by take() and read by build_response;
     run_main owns it, so samples taken before an exception survive (skills/docs/skills.md).
-    source "service": read through the robot service (skills); "process": the backend in this
-    process, with its own DDS on the real backend (the utilities)."""
+    ``reader`` None: read through the robot service (skills), connecting outside state_ms (robot_connect_ms);
+    the utilities pass their own reader and a ``prepare`` (their DDS init), run before each sample, outside
+    state_ms."""
 
     before: RobotState | None = None
     after: RobotState | None = None
     errors: list[str] = field(default_factory=list)
     seconds: float = 0.0
     used: bool = False  # a sample was attempted: timing gets state_ms
-    source: StateSource = "service"
-    _service: robot_ipc.ServiceStateReader | None = field(default=None, repr=False, compare=False)
-
-    def _read(self) -> RobotState:
-        if self.source == "process":
-            return backend.sample_state()
-        if self._service is None:
-            self._service = robot_ipc.ServiceStateReader()
-        return self._service()
+    reader: StateReader | None = field(default=None, repr=False, compare=False)
+    prepare: Callable[[], None] | None = field(default=None, repr=False, compare=False)
 
     def take(self, label: Literal["before", "after"], *, strict: bool = False) -> RobotState | None:
         """Sample state into ``label``; on failure record "<label>: <Type>: <msg>" and return None.
         strict re-raises instead and records nothing. BackendNotConfigured always propagates."""
         self.used = True
         try:
-            if self.source == "process":
-                backend.init_dds()  # reported as dds_init_ms, not in state_ms
-            else:
-                backend.backend_name()  # a misconfigured backend fails the call, not just its samples
+            backend.backend_name()  # a misconfigured backend fails the call, not just its samples
+            if self.prepare is not None:
+                self.prepare()
+            elif self.reader is None:
+                robot_ipc.session.client()
             t = time.monotonic()
             try:
-                state = self._read()
+                state = self.reader() if self.reader is not None else robot_ipc.session.read_state()
             finally:
                 self.seconds += time.monotonic() - t
         except backend.BackendNotConfigured:
@@ -125,17 +120,18 @@ def build_response(
     states: StateSampler,
     total_ms: float,
     *,
-    dds_init_ms: float | None = None,
+    setup: Mapping[str, float] | None = None,
 ) -> SkillResponse:
-    """The SkillResponse (schema_version=2), built from the sources of its fields; dds_init_ms is None
-    when the process did not init DDS. Only the error-iff-status rule is checked here, the dispatcher
-    validates the rest (skills/docs/skills.md). error_message: collapsed to one line, not length-limited."""
+    """The SkillResponse (schema_version=2), built from the sources of its fields; ``setup`` is the process's
+    setup timing (robot_connect_ms in a skill, dds_init_ms in a utility), first in timing. Only the
+    error-iff-status rule is checked here, the dispatcher validates the rest (skills/docs/skills.md).
+    error_message: collapsed to one line, not length-limited."""
     error = None
     if outcome.status == "error":
         if outcome.error_code is None or outcome.error_message is None:
             raise ValueError("an error response needs error_code and error_message")
         error = SkillError(code=str(outcome.error_code), message=one_line(outcome.error_message))
-    timing = {} if dds_init_ms is None else {"dds_init_ms": dds_init_ms}
+    timing = dict(setup or {})
     timing.update(outcome.timing)
     if states.used:
         timing["state_ms"] = round(states.seconds * 1000.0, 3)
@@ -158,12 +154,14 @@ def to_json(response: SkillResponse) -> str:
     return json.dumps(asdict(response), ensure_ascii=False, separators=(",", ":"), allow_nan=False)
 
 
-def emit(skill: str, outcome: SkillOutcome, states: StateSampler, total_ms: float) -> NoReturn:
+def emit(
+    skill: str, outcome: SkillOutcome, states: StateSampler, total_ms: float, setup: Mapping[str, float]
+) -> NoReturn:
     """line = to_json(build_response(...)). Write line + "\\n" to the saved stdout fd, os.fsync it,
     then os._exit(0 if ok else 1).
     os._exit is required: DDS/SDK threads can hang normal interpreter shutdown."""
     try:
-        line = to_json(build_response(skill, outcome, states, total_ms, dds_init_ms=backend.dds_init_ms()))
+        line = to_json(build_response(skill, outcome, states, total_ms, setup=setup))
     except Exception as e:  # a bug in the skill: still emit one valid line, without the body's data
         traceback.print_exc(file=sys.stderr)
         outcome = SkillOutcome.from_exception(e)
@@ -208,23 +206,25 @@ def run_main(
     body: Callable[[StateSampler], SkillOutcome],
     *,
     watchdog: bool = True,
-    state_source: StateSource = "service",
+    states: StateSampler | None = None,
+    setup: Callable[[], Mapping[str, float]] = robot_ipc.session.setup_timing,
 ) -> NoReturn:
     """Shared main() of skills and utilities: capture_stdout(), optional orphan watchdog, then
-    outcome = body(states) with a StateSampler reading from ``state_source``. An exception becomes
-    SkillOutcome.from_exception(e); states sampled before it are kept. Then emit() with total_ms since start."""
+    outcome = body(states), by default with a StateSampler reading through the robot service. An exception
+    becomes SkillOutcome.from_exception(e); states sampled before it are kept. Then emit() with total_ms since
+    start and the ``setup`` timing (skills: robot_connect_ms; utilities pass their dds_init_ms)."""
     process.capture_stdout()
     if watchdog:
         process.start_orphan_watchdog()
     t0 = time.monotonic()
-    states = StateSampler(source=state_source)
+    states = states if states is not None else StateSampler()
     try:
         outcome = body(states)
     except Exception as e:
         outcome = SkillOutcome.from_exception(e)
         if outcome.error_code == ErrorCode.EXCEPTION:
             traceback.print_exc(file=sys.stderr)
-    emit(skill, outcome, states, ms_since(t0))
+    emit(skill, outcome, states, ms_since(t0), setup())
 
 
 def run_skill(policy: SkillPolicy, body: Body, *, sample_state: bool = True) -> NoReturn:
@@ -233,8 +233,8 @@ def run_skill(policy: SkillPolicy, body: Body, *, sample_state: bool = True) -> 
     2. if sample_state: sample state_before through the robot service (exception -> state_error, continue)
     3. outcome = body(params), a SkillOutcome
     4. if sample_state: sample state_after (exception -> appended to state_error)
-    timing gets dds_init_ms (if DDS was initialised), state_ms (time in the samples, if any was
-    taken) and total_ms.
+    timing gets robot_connect_ms (if the process connected to the robot service), state_ms (time in the
+    samples, if any was taken) and total_ms.
     Exceptions map as in SkillOutcome.from_exception; the traceback goes to stderr."""
 
     def main(states: StateSampler) -> SkillOutcome:

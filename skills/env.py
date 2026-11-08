@@ -18,6 +18,7 @@ STUB_FAULT = "GO2_STUB_FAULT"
 PARENT_PID = "GO2_PARENT_PID"
 VISION_SOCKET = "GO2_VISION_SOCKET"
 ROBOT_SOCKET = "GO2_ROBOT_SOCKET"
+LEASE_TOKEN = "GO2_LEASE_TOKEN"
 
 
 def vision_socket_path(parent_pid: int) -> str:
@@ -47,9 +48,11 @@ def child_env(
     parent_pid: int,
     log_dir: str | Path,
     fault: str | None = None,
+    lease_token: str | None = None,
 ) -> dict[str, str]:
-    """``base`` plus the contract variables; ``GO2_STUB_FAULT`` is set only from ``fault``, never inherited."""
-    env = {k: v for k, v in base.items() if k != STUB_FAULT}
+    """``base`` plus the contract variables; ``GO2_STUB_FAULT`` and ``GO2_LEASE_TOKEN`` are set only from
+    ``fault`` and ``lease_token``, never inherited."""
+    env = {k: v for k, v in base.items() if k not in (STUB_FAULT, LEASE_TOKEN)}
     env.update(
         {
             "PYTHONUNBUFFERED": "1",
@@ -66,4 +69,6 @@ def child_env(
     )
     if fault:
         env[STUB_FAULT] = fault
+    if lease_token:
+        env[LEASE_TOKEN] = lease_token
     return env

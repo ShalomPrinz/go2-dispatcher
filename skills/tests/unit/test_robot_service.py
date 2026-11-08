@@ -1,17 +1,21 @@
-"""The robot service protocol in process: hello, state reads with min_seq, the stream, version mismatch and the
-lock (skills/docs/skills.md). The service as a process is tested in tests/integration/test_robot_service.py."""
+"""The robot service protocol in process: hello, state reads with min_seq, the stream, version mismatch, the lock,
+and the lease: motion only for the armed step, and a StopMove on its deadline, a stop, or the loss of its
+connection or the control connection (skills/docs/skills.md). The service as a process is tested in
+tests/integration/test_robot_service.py."""
 
 from __future__ import annotations
 
 import os
 import threading
 import time
+from collections.abc import Callable
 from multiprocessing.connection import Client, Listener
+from typing import NamedTuple
 
 import pytest
 
 from skills import ipc, robot_ipc, robot_service, state_store
-from skills.robot_ipc import LinkEvent, RobotClient, StateReply
+from skills.robot_ipc import LinkEvent, Refused, RobotClient, StateReply
 from skills.schema import RobotState
 from skills.state_store import StateStore
 
@@ -20,11 +24,43 @@ def state(height: float) -> RobotState:
     return RobotState(t=0.0, backend="stub", posture="standing", body_height=height)
 
 
+class Recorder:
+    """A sport client that records its calls; every call returns 0."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def Move(self, vx: float, vy: float, vyaw: float) -> int:
+        self.calls.append("Move")
+        return 0
+
+    def StopMove(self) -> int:
+        self.calls.append("StopMove")
+        return 0
+
+    def StandDown(self) -> int:
+        self.calls.append("StandDown")
+        return 0
+
+    def Stretch(self) -> int:
+        self.calls.append("Stretch")
+        return 0
+
+
+class Served(NamedTuple):
+    path: str
+    store: StateStore
+    robot: Recorder
+
+
 @pytest.fixture
 def service(tmp_path):
-    """A store served on a socket by robot_service.serve; yields (socket path, store)."""
+    """A store and a Motion over a Recorder, served on a socket by robot_service.serve; the motion clock is real."""
     path = str(tmp_path / "r.sock")
     store = StateStore(lambda msg: msg)
+    robot = Recorder()
+    motion = robot_service.Motion(robot, lambda s, abort: abort.wait(s), sim=False)
+    motion.start()
     listener = Listener(path, family=ipc.FAMILY)
 
     def accept() -> None:
@@ -33,10 +69,10 @@ def service(tmp_path):
                 conn = listener.accept()
             except OSError:
                 return
-            threading.Thread(target=robot_service.serve, args=(conn, store, "stub"), daemon=True).start()
+            threading.Thread(target=robot_service.serve, args=(conn, store, "stub", motion), daemon=True).start()
 
     threading.Thread(target=accept, daemon=True).start()
-    yield path, store
+    yield Served(path, store, robot)
     listener.close()
 
 
@@ -45,7 +81,7 @@ def put_later(store: StateStore, msg: RobotState, delay_s: float) -> None:
 
 
 def test_hello_and_state_reads(service):
-    path, store = service
+    path, store, _ = service
     with RobotClient.connect(path) as client:
         assert client.hello["backend"] == "stub"
         empty = client.state()
@@ -59,7 +95,7 @@ def test_hello_and_state_reads(service):
 
 def test_read_next_waits_for_a_newer_message(service):
     """min_seq = latest seq + 1: the first message after the request, as decided for comparability."""
-    path, store = service
+    path, store, _ = service
     store.put(state(0.30))
     with RobotClient.connect(path) as client:
         put_later(store, state(0.31), 0.1)
@@ -73,7 +109,7 @@ def test_read_next_waits_for_a_newer_message(service):
 
 def test_stream_sends_new_samples_and_link_changes(service, monkeypatch):
     monkeypatch.setattr(state_store, "LINK_GAP_S", 0.1)
-    path, store = service
+    path, store, _ = service
     store.put(state(0.30))
     with RobotClient.connect(path) as client:
         assert client.subscribe(0.02) == "up"
@@ -89,7 +125,7 @@ def test_stream_sends_new_samples_and_link_changes(service, monkeypatch):
 
 
 def test_version_mismatch_is_refused_both_ways(service, tmp_path):
-    path, _ = service
+    path, _, _ = service
     with Client(path, family=ipc.FAMILY) as conn:
         conn.send_bytes(ipc.encode({"v": 99, "op": "hello"}))
         reply = ipc.decode(conn.recv_bytes())
@@ -126,3 +162,131 @@ def test_lock_admits_one_holder(tmp_path, monkeypatch):
     assert robot_service.acquire_lock(lock)
     assert robot_service._lock_fd is not None
     os.close(robot_service._lock_fd)
+
+
+# --- lease ------------------------------------------------------------------------------
+
+
+def until(check: Callable[[], bool], wait_s: float = 2.0) -> bool:
+    deadline = time.monotonic() + wait_s
+    while not check():
+        if time.monotonic() > deadline:
+            return False
+        time.sleep(0.01)
+    return True
+
+
+def moving_in_thread(path: str, token: str, outcome: list) -> threading.Thread:
+    """A skill connection walking for 10 s in a thread; ``outcome`` gets the reply or the exception."""
+
+    def walk() -> None:
+        with RobotClient.connect(path) as skill:
+            try:
+                outcome.append(skill.move(0.3, 0.0, 0.0, 10.0, token=token))
+            except Exception as e:
+                outcome.append(e)
+
+    thread = threading.Thread(target=walk, daemon=True)
+    thread.start()
+    return thread
+
+
+def stopped_after_moving(robot: Recorder) -> bool:
+    """The robot moved, the last call is StopMove and no Move followed the first StopMove."""
+    calls = list(robot.calls)
+    return "Move" in calls and calls[-1] == "StopMove" and "Move" not in calls[calls.index("StopMove") :]
+
+
+def test_motion_needs_the_armed_lease_on_one_connection(service):
+    path, _, robot = service
+    with RobotClient.connect(path) as skill, RobotClient.connect(path, control=True) as control:
+        with pytest.raises(Refused, match="no lease is armed"):
+            skill.action("StandDown", token="t")
+        with pytest.raises(Refused, match="busy"):
+            RobotClient.connect(path, control=True)
+        control.arm("t", 5.0)
+        with pytest.raises(Refused, match="token does not match"):
+            skill.action("StandDown", token="other")
+        assert skill.action("StandDown", token="t") == 0
+        with RobotClient.connect(path) as intruder, pytest.raises(Refused, match="another connection"):
+            intruder.action("StandDown", token="t")
+        with pytest.raises(robot_ipc.ServiceUnavailable, match="bad_request"):
+            skill.arm("t2", 5.0)  # only the control connection arms
+    assert robot.calls[0] == "StandDown"
+
+
+def test_deadline_ends_the_lease_and_stops(service):
+    path, _, robot = service
+    outcome: list = []
+    with RobotClient.connect(path, control=True) as control:
+        control.arm("t", 0.3)
+        t = time.monotonic()
+        moving_in_thread(path, "t", outcome).join(5.0)
+        assert 0.25 < time.monotonic() - t < 2.0
+    assert isinstance(outcome[0], Refused) and outcome[0].code == robot_ipc.ERR_ABORTED
+    assert "lease deadline" in outcome[0].message and stopped_after_moving(robot)
+
+
+def test_stop_op_stops_and_ends_the_lease(service):
+    path, _, robot = service
+    outcome: list = []
+    with RobotClient.connect(path, control=True) as control:
+        control.arm("t", 30.0)
+        walking = moving_in_thread(path, "t", outcome)
+        assert until(lambda: "Move" in robot.calls)
+        sent = control.stop(0.5)
+        walking.join(2.0)
+    assert sent.ret == 0 and sent.stop_call_ms >= 0
+    assert isinstance(outcome[0], Refused) and outcome[0].code == robot_ipc.ERR_ABORTED
+    assert stopped_after_moving(robot)
+
+
+def test_closing_the_lease_connection_stops(service):
+    path, _, robot = service
+    with RobotClient.connect(path, control=True) as control:
+        control.arm("t", 30.0)
+        with Client(path, family=ipc.FAMILY) as skill:  # a skill killed mid-walk: no reply is read
+            skill.send_bytes(ipc.encode(robot_ipc.message("move", token="t", vx=0.3, vy=0.0, vyaw=0.0, duration_s=10)))
+            assert until(lambda: "Move" in robot.calls)
+        assert until(lambda: stopped_after_moving(robot))
+        with RobotClient.connect(path) as late, pytest.raises(Refused, match="no lease"):
+            late.action("StandDown", token="t")  # the lease ended with its connection
+
+
+def test_closing_the_control_connection_stops(service):
+    """The dispatcher is gone: the robot stops, whatever the lease."""
+    path, _, robot = service
+    outcome: list = []
+    control = RobotClient.connect(path, control=True)
+    control.arm("t", 30.0)
+    walking = moving_in_thread(path, "t", outcome)
+    assert until(lambda: "Move" in robot.calls)
+    control.close()
+    walking.join(2.0)
+    assert isinstance(outcome[0], Refused) and "control connection closed" in outcome[0].message
+    assert stopped_after_moving(robot)
+    with RobotClient.connect(path, control=True) as control:  # the next dispatcher may connect
+        control.ping()
+
+
+def test_an_action_never_starts_after_a_stop_and_a_stop_during_it_is_resent():
+    """The abort check and the action's commit share the lock; a stop that lands during the call is followed by a
+    trailing StopMove, so StopMove is the last command."""
+
+    class StopDuringStretch(Recorder):
+        def Stretch(self) -> int:
+            super().Stretch()
+            motion.halt("stop op")  # what a handler thread does while the action waits for its reply
+            return 0
+
+    robot = StopDuringStretch()
+    motion = robot_service.Motion(robot, lambda s, abort: abort.wait(s), sim=False)
+    job = robot_service.Job(run=motion.action("Stretch", None))
+    motion._job = job
+    assert job.run(job)["error"]["code"] == robot_ipc.ERR_ABORTED
+    assert robot.calls == ["Stretch", "StopMove", "StopMove"]
+    late = robot_service.Job(run=motion.action("StandDown", None))
+    motion._job = late
+    motion.halt("stop op")
+    assert late.run(late)["error"]["code"] == robot_ipc.ERR_ABORTED
+    assert "StandDown" not in robot.calls

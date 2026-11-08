@@ -10,7 +10,7 @@ uv run pytest -m integration                   # after touching a skill's subpro
 uv run pytest --update-golden                  # after a SKILL.md change; then git diff dispatcher/tests/golden
 uv run go2 catalog                             # after touching the catalog: check catalog and registry hash
 uv run go2 --reset-stub                        # stub checks: back to standing (sit persists across tasks)
-uv run go2 --fault 1:hang run "…"              # stub fault injection: error, hang, crash, garbage (needs ANTHROPIC_API_KEY)
+uv run go2 --fault 1:hang run "…"              # stub fault injection: error, hang, crash, garbage, service_hang, service_crash (needs ANTHROPIC_API_KEY)
 ```
 
 ## Docs

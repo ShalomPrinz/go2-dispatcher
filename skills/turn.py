@@ -26,7 +26,7 @@ POLICY = policy.SkillPolicy(
 def body(params: dict) -> runner.SkillOutcome:
     direction = params["direction"]
     angle_deg = float(params["angle_deg"])
-    outcome = motion.move_loop(motion.Velocity(0.0, 0.0, DIRECTION_SIGN[direction] * YAW_RATE_RPS), _motion_s(params))
+    outcome = motion.move(motion.Velocity(0.0, 0.0, DIRECTION_SIGN[direction] * YAW_RATE_RPS), _motion_s(params))
     return replace(outcome, observations={"direction": direction, "angle_deg": angle_deg, **outcome.observations})
 
 

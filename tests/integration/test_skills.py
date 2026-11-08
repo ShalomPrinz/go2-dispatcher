@@ -1,5 +1,5 @@
-"""The five skills on the stub backend: contract, stub behaviour, faults, orphan
-watchdog (skills/docs/skills.md, tests/docs/testing.md)."""
+"""The five skills on the stub backend, with the robot service and an armed lease: contract, stub behaviour,
+faults, orphan watchdog (skills/docs/skills.md, tests/docs/testing.md)."""
 
 from __future__ import annotations
 
@@ -35,6 +35,12 @@ def state_file(tmp_path):
     return tmp_path / "stub_state.json"
 
 
+@pytest.fixture
+def svc(tmp_path):
+    with robot.running(stub_env(tmp_path)) as service:
+        yield service
+
+
 def run_ok(name, params, env):
     proc = run_module(name, params, env)
     resp = RESPONSE.validate_python(single_response(proc))
@@ -47,18 +53,17 @@ def run_ok(name, params, env):
 
 
 @pytest.mark.parametrize("name", SKILLS)
-def test_contract_valid(tmp_path, name):
-    with robot.running(stub_env(tmp_path)) as env, vision.running(env) as env:
-        resp = run_ok(name, VALID[name], env)
+def test_contract_valid(svc, name):
+    with vision.running(svc.env) as env:
+        resp = run_ok(name, VALID[name], svc.arm(env))
     assert resp.skill == name and resp.error is None
     assert resp.state_before is not None and resp.state_before.backend == "stub"
     assert resp.state_after is not None and resp.state_after.backend == "stub"
     assert resp.state_error is None
+    assert list(resp.timing)[0] == "robot_connect_ms"  # skills never touch DDS
     assert {"exec_ms", "state_ms", "total_ms"} <= set(resp.timing)
-    if name == "detect_object":  # never touches DDS: state comes from the robot service
-        assert "connect_ms" in resp.timing and "dds_init_ms" not in resp.timing
-    else:
-        assert {"dds_init_ms", "client_init_ms"} <= set(resp.timing)
+    assert not {"dds_init_ms", "client_init_ms"} & set(resp.timing)
+    assert ("connect_ms" in resp.timing) == (name == "detect_object")  # the vision service connect
 
 
 def test_invalid_json(tmp_path):
@@ -119,6 +124,7 @@ print(json.dumps({"modules": names, "heavy": heavy, "out": buf.getvalue(),
         "vision_ipc",
         "vision_service",
         "ipc",
+        "local",
         "robot_ipc",
         "robot_service",
         "state_store",
@@ -133,26 +139,26 @@ print(json.dumps({"modules": names, "heavy": heavy, "out": buf.getvalue(),
 # --- observations -----------------------------------------------------------------
 
 
-def test_walk_observations(tmp_path):
-    resp = run_ok("walk", {"direction": "backward", "distance_m": 0.3}, stub_env(tmp_path))
+def test_walk_observations(svc):
+    resp = run_ok("walk", {"direction": "backward", "distance_m": 0.3}, svc.arm())
     assert resp.observations == {"direction": "backward", "distance_m": 0.3, "duration_s": 2.1, "sdk_ret": 0}
+    assert resp.state_after is not None and resp.state_after.position == pytest.approx([-0.63, 0.0, 0.32])
 
 
-def test_turn_observations(tmp_path):
-    resp = run_ok("turn", {"direction": "right", "angle_deg": 90}, stub_env(tmp_path))
+def test_turn_observations(svc):
+    resp = run_ok("turn", {"direction": "right", "angle_deg": 90}, svc.arm())
     assert resp.observations == {"direction": "right", "angle_deg": 90.0, "duration_s": 1.8, "sdk_ret": 0}
 
 
 # --- stub behaviour -----------------------------------------------------------------
 
 
-def test_sit_then_walk_fails(tmp_path):
-    env = stub_env(tmp_path)
-    resp = run_ok("sit", {}, env)
+def test_sit_then_walk_fails(tmp_path, svc):
+    resp = run_ok("sit", {}, svc.arm())
     assert resp.observations == {"sdk_ret": 0}
     assert stub.read_posture(state_file(tmp_path)) == "sitting"
 
-    proc = run_module("walk", VALID["walk"], env)
+    proc = run_module("walk", VALID["walk"], svc.arm())
     walk = RESPONSE.validate_python(single_response(proc))
     assert proc.returncode == 1
     assert walk.error is not None
@@ -162,14 +168,14 @@ def test_sit_then_walk_fails(tmp_path):
     assert stub.read_posture(state_file(tmp_path)) == "sitting"
 
 
-def test_sit_while_sitting_is_ok(tmp_path):
+def test_sit_while_sitting_is_ok(tmp_path, svc):
     stub.write_posture("sitting", state_file(tmp_path))
-    run_ok("sit", {}, stub_env(tmp_path))
+    run_ok("sit", {}, svc.arm())
 
 
-def test_stretch_while_sitting_fails(tmp_path):
+def test_stretch_while_sitting_fails(tmp_path, svc):
     stub.write_posture("sitting", state_file(tmp_path))
-    proc = run_module("stretch", {}, stub_env(tmp_path))
+    proc = run_module("stretch", {}, svc.arm())
     resp = RESPONSE.validate_python(single_response(proc))
     assert proc.returncode == 1
     assert resp.error is not None
@@ -180,9 +186,9 @@ def test_stretch_while_sitting_fails(tmp_path):
 def test_detect_follows_the_pose(tmp_path):
     """A chair behind the camera at the start is ahead after a left turn (pose kept in the state file)."""
     world = stub_env(tmp_path, objects={"chair": {"x": 0.0, "y": 1.2}})
-    with robot.running(world) as env, vision.running(env) as env:
+    with robot.running(world) as svc, vision.running(svc.env) as env:
         assert run_ok("detect_object", {"target": "chair"}, env).observations["object_found"] is False
-        turned = run_ok("turn", {"direction": "left", "angle_deg": 90}, env).state_after
+        turned = run_ok("turn", {"direction": "left", "angle_deg": 90}, svc.arm(env)).state_after
         assert turned is not None and turned.imu_rpy == pytest.approx(
             [0.0, 0.0, 1.8]
         )  # 18 commands of 0.1 rad, lead included
@@ -240,7 +246,7 @@ def test_vision_service_exits_when_parent_dies(tmp_path):
 
 @pytest.mark.parametrize("name", ["walk", "sit", "detect_object"])
 def test_fault_error(tmp_path, name):
-    """walk: move loop; sit: single action; detect_object: camera_unavailable."""
+    """walk: move; sit: single action; detect_object: camera_unavailable. Applied before any service call."""
     with vision.running(stub_env(tmp_path, fault="error")) as env:
         proc = run_module(name, VALID[name], env)
     resp = RESPONSE.validate_python(single_response(proc))
@@ -284,19 +290,3 @@ def test_orphan_watchdog_exits(tmp_path):
     assert time.monotonic() - t0 < 3.0
     assert proc.returncode == 137
     assert proc.stdout == ""
-
-
-@pytest.mark.parametrize(
-    "name,params",
-    [("walk", {"direction": "left", "distance_m": 3.0}), ("turn", {"direction": "right", "angle_deg": 180})],
-)
-def test_orphaned_motion_loop_breaks_and_stops(tmp_path, name, params):
-    env = stub_env(tmp_path, GO2_STUB_TIME_SCALE="1", GO2_PARENT_PID=str(os.getppid() or 1))
-    t0 = time.monotonic()
-    proc = run_module(name, params, env, timeout=10)
-    resp = RESPONSE.validate_python(single_response(proc))
-    assert time.monotonic() - t0 < 3.0
-    assert resp.status == "ok"
-    assert resp.observations["orphaned"] is True
-    assert resp.observations["sdk_ret"] == 0
-    assert resp.observations["duration_s"] < 2.0

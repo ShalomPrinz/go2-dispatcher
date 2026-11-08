@@ -176,6 +176,15 @@ class RobotService:
             raise StateReadError(f"link down; the latest state message is {reply.state.age_ms} ms old")
         return reply.state
 
+    def kill(self) -> None:
+        """SIGKILL a dead or hung service (docs/safety.md); the next ``start`` or ``read_state`` starts it again."""
+        with self._lock:
+            proc = self._proc
+            if proc is not None and proc.poll() is None:
+                proc.kill()
+                proc.wait()
+                self._note("robot service lost; killed it")
+
     def stop(self) -> None:
         """SIGTERM, SIGKILL after ``STOP_GRACE_S``; idempotent, and the service is never started again."""
         with self._lock:

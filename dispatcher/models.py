@@ -104,6 +104,7 @@ class StopCause(str, Enum):
     STEP_TIMEOUT = "step_timeout"
     INTERNAL_ERROR = "internal_error"
     STATE_UNAVAILABLE = "state_unavailable"  # the task-start state read failed; StopMove only
+    ROBOT_SERVICE_LOST = "robot_service_lost"  # the robot service died or hung; fallback stop (docs/safety.md)
 
     @property
     def task_outcome(self) -> TaskOutcomeCode:
@@ -112,7 +113,8 @@ class StopCause(str, Enum):
 
     @property
     def kill(self) -> StepKill:
-        """What a skill process killed for this cause reports (all but INTERNAL_ERROR and STATE_UNAVAILABLE)."""
+        """What a skill process killed for this cause reports (all but INTERNAL_ERROR, STATE_UNAVAILABLE and
+        ROBOT_SERVICE_LOST, which the executor reports as an ``error`` step)."""
         return _KILLS[self]
 
 
@@ -136,13 +138,24 @@ _KILLS: dict[StopCause, StepKill] = {
 KILLED_OUTCOMES = frozenset(k.outcome for k in _KILLS.values())  # posture unknown after these
 
 
+StopPath = Literal["service", "fallback"]
+
+
 class StopMoveResult(_Model):
+    """One run of the stop path: the service's ``stop``, or the fresh-process ``stop_move`` (docs/safety.md)."""
+
     ok: bool
     reason: StopCause
-    duration_ms: float
-    exit_code: int | None = None
-    response: SkillResponse | None = None  # includes state_after sampled after StopMove
-    stderr_tail: str | None = None
+    stop_path: StopPath | None  # None only when the stop path itself raised (dispatcher/docs/run-log.md)
+    duration_ms: float  # the whole stop path, including a failed service stop before the fallback
+    kill_to_stop_ms: float | None = None  # from the skill kill to the confirmed or failed stop; None without a kill
+    stop_call_ms: float | None = None  # service: StopMove's call time in the service (stop_sent)
+    service_error: str | None = None  # fallback: why the service stop was not used
+    service_lost: bool = False  # the service was lost (and killed) on this stop path (dispatcher/docs/run-log.md)
+    state_after: RobotState | None = None  # read after the stop; None if the read failed
+    exit_code: int | None = None  # fallback
+    response: SkillResponse | None = None  # fallback: the stop_move utility's response
+    stderr_tail: str | None = None  # fallback: the stop_move process's stderr
 
 
 class StepDispatch(_Model):
@@ -189,6 +202,7 @@ TaskOutcomeCode = Literal[
     "LLM_INVALID",
     "LLM_ERROR",
     "STATE_UNAVAILABLE",
+    "ROBOT_SERVICE_LOST",
     "INTERNAL_ERROR",
 ]
 

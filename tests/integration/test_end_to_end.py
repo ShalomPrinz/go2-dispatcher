@@ -22,6 +22,7 @@ pytestmark = pytest.mark.integration
 
 TURN = PlanStep(skill="turn", params={"direction": "left", "angle_deg": 90})
 DETECT = PlanStep(skill="detect_object", params={"target": "chair"})
+WALK = PlanStep(skill="walk", params={"direction": "forward", "distance_m": 1.0})
 STOP_AFTER_S = 0.5
 STOP_WITHIN_S = 3.0
 
@@ -117,3 +118,37 @@ def test_stop_during_hang(tmp_path, registry):
     sm = [r for r in read_jsonl(o.log_path) if r["type"] == "stop_move"]
     assert sm and all(r["ok"] is True for r in sm)
     assert any(r["type"] == "stop_requested" for r in read_jsonl(o.log_path))
+
+
+def crash_faults(*steps):
+    return {"faults": [{"step": n, "kind": "service_crash"} for n in steps]}
+
+
+def test_service_crash_mid_walk_falls_back_restarts_and_replans(tmp_path, registry):
+    items = [Plan(status="PLAN", steps=[WALK, TURN]), Plan(status="DONE", message="Done.")]
+    d, _, cfg = build(tmp_path, registry, items, stub=crash_faults(1))
+    try:
+        o = d.run_task("walk forward", source="test")
+    finally:
+        d.shutdown(0)
+    assert o.outcome == "DONE", o.message
+    assert [s.outcome for s in o.steps] == ["error"]  # the turn was abandoned with the plan
+    recs = read_jsonl(o.log_path)
+    stops = [r for r in recs if r["type"] == "stop_move"]
+    assert len(stops) == 1 and stops[0]["ok"] and stops[0]["stop_path"] == "fallback"
+    assert stops[0]["reason"] == "robot_service_lost"
+    reasons = [r["return_reason"] for r in recs if r["type"] == "llm_request"]
+    assert reasons == ["initial", "robot_service_lost"]
+    assert stub.read_state(cfg.stub.state_file).command is None
+
+
+def test_second_service_crash_ends_the_task(tmp_path, registry):
+    items = [Plan(status="PLAN", steps=[WALK]), Plan(status="PLAN", steps=[WALK]), Plan(status="DONE")]
+    d, planner, cfg = build(tmp_path, registry, items, stub=crash_faults(1, 2))
+    try:
+        o = d.run_task("walk forward", source="test")
+    finally:
+        d.shutdown(0)
+    assert o.outcome == "ROBOT_SERVICE_LOST" and "a second time" in o.message
+    assert o.llm_calls == 2 and not o.stop_move_failed
+    assert stub.read_state(cfg.stub.state_file).command is None

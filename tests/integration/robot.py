@@ -1,19 +1,24 @@
-"""Start the robot service for tests that run skills as subprocesses (skills/docs/skills.md)."""
+"""Start the robot service for tests that run skills as subprocesses, and arm their leases on a control
+connection as the dispatcher does (skills/docs/skills.md)."""
 
 from __future__ import annotations
 
 import selectors
 import subprocess
 import sys
+import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 
 from skills import robot_service
-from skills.env import ROBOT_SOCKET, STUB_STATE_FILE
+from skills.env import LEASE_TOKEN, ROBOT_SOCKET, STUB_STATE_FILE
+from skills.robot_ipc import RobotClient
 from tests.helpers import REPO_ROOT
 
 READY_WAIT_S = 10.0
+ARM_TIMEOUT_S = 30.0  # a lease longer than any test skill run
 
 
 def with_socket(env: dict[str, str]) -> dict[str, str]:
@@ -56,12 +61,28 @@ def stop(proc: subprocess.Popen) -> None:
         proc.stdout.close()
 
 
+@dataclass
+class Service:
+    """A running service with the test's control connection; ``env`` has ``GO2_ROBOT_SOCKET`` set."""
+
+    proc: subprocess.Popen
+    env: dict[str, str]
+    control: RobotClient
+
+    def arm(self, env: dict[str, str] | None = None, timeout_s: float = ARM_TIMEOUT_S) -> dict[str, str]:
+        """Arm a lease for one skill run; returns ``env`` (default: the service's) with its token."""
+        token = uuid.uuid4().hex
+        self.control.arm(token, timeout_s)
+        return {**(env or self.env), LEASE_TOKEN: token}
+
+
 @contextmanager
-def running(env: dict[str, str]) -> Iterator[dict[str, str]]:
-    """A service for a ``stub_env`` skill env; yields that env with ``GO2_ROBOT_SOCKET`` set."""
+def running(env: dict[str, str]) -> Iterator[Service]:
+    """A service for a ``stub_env`` skill env, with a control connection open."""
     env = with_socket(env)
     proc = start(env)
     try:
-        yield env
+        with RobotClient.connect(env[ROBOT_SOCKET], control=True) as control:
+            yield Service(proc, env, control)
     finally:
         stop(proc)

@@ -1,21 +1,18 @@
-"""Shared helpers for the skills that call the sport client (skills/docs/skills.md): the
-constant-velocity 10 Hz command loop, and single SDK actions with a settle wait.
-Standard library and skills only."""
+"""Shared helpers for the skills that move the robot (skills/docs/skills.md): they ask the robot service for a
+motion primitive with the step's lease token and turn its reply into a SkillOutcome. Skill processes never
+touch DDS. Standard library and skills only."""
 
 from __future__ import annotations
 
-import sys
 import time
-import traceback
-from typing import Any, NamedTuple
+from typing import NamedTuple
 
-from skills import backend, process, runner
-from skills.real import SPORT_CLIENT_TIMEOUT_S
+from skills import backend, robot_ipc, runner, stub
+from skills.robot_ipc import Refused, ServiceUnavailable
 from skills.schema import ErrorCode
 
-CMD_PERIOD_S = 0.1  # Move command period of the move loop (10 Hz)
-PROCESS_OVERHEAD_S = 5.0  # process start + SDK init + two state samples (tunable)
-MOTION_BASE_S = PROCESS_OVERHEAD_S + SPORT_CLIENT_TIMEOUT_S  # plus one lost StopMove reply (skills/docs/skills.md)
+PROCESS_OVERHEAD_S = 5.0  # process start + robot service connect + two state samples (tunable)
+MOTION_BASE_S = PROCESS_OVERHEAD_S + robot_ipc.SPORT_CLIENT_TIMEOUT_S  # plus one lost StopMove reply
 MOTION_FACTOR = 1.5  # safety factor on commanded motion time (tunable)
 
 
@@ -28,80 +25,77 @@ class Velocity(NamedTuple):
 
 
 def motion_timeout(motion_s: float) -> float:
-    """Process timeout for a move-loop skill commanding ``motion_s`` seconds of motion."""
+    """Process timeout for a skill commanding ``motion_s`` seconds of motion."""
     return MOTION_BASE_S + MOTION_FACTOR * motion_s
 
 
-# --- actions --------------------------------------------------------------------
+def _fault() -> str | None:
+    """The stub fault for this skill's first primitive: "error", a service fault to forward, or None."""
+    return stub.inject_fault() if backend.backend_name() == "stub" else None
 
 
-def sport_client() -> tuple[Any, dict]:
-    """Init DDS, then create the sport client. Returns the client and timing with client_init_ms;
-    the DDS init time is reported by the runner as dds_init_ms."""
-    backend.init_dds()
-    t = time.monotonic()
-    client = backend.get_sport_client()
-    return client, {"client_init_ms": runner.ms_since(t)}
+def _refused(e: Refused | ServiceUnavailable, obs: dict, timing: dict) -> runner.SkillOutcome:
+    robot_ipc.session.drop()
+    if isinstance(e, ServiceUnavailable):
+        code, message = ErrorCode.ROBOT_UNAVAILABLE, runner.describe_exception(e)
+    elif e.code == robot_ipc.ERR_SDK_EXCEPTION:
+        code, message = ErrorCode.EXCEPTION, e.message
+    else:
+        code, message = ErrorCode.MOTION_REJECTED, f"{e.code}: {e.message}"
+    return runner.SkillOutcome.error(code, message, observations=obs, timing=timing)
 
 
-def _safe_stop(client) -> int | None:
-    """StopMove during cleanup after an exception; never raises."""
-    try:
-        return client.StopMove()
-    except Exception:
-        traceback.print_exc(file=sys.stderr)
-        return None
+def move(velocity: Velocity, duration_s: float) -> runner.SkillOutcome:
+    """Ask the robot service to command ``velocity`` for ``duration_s`` at its CMD_PERIOD_S, then StopMove.
 
-
-def move_loop(velocity: Velocity, duration_s: float, *, period_s: float = CMD_PERIOD_S) -> runner.SkillOutcome:
-    """Command Move(*velocity) every ``period_s`` for ``duration_s``, then StopMove().
-
-    Returns a SkillOutcome whose observations hold ``duration_s`` (iterations commanded × period), ``sdk_ret`` and
-    ``orphaned: true`` when the loop broke because the parent died."""
-    client, timing = sport_client()
-    t = time.monotonic()
-    n = max(1, round(duration_s / period_s))
-    obs: dict = {}
-    sent = 0
-    try:
-        for _ in range(n):
-            if process.orphaned():
-                obs["orphaned"] = True
-                break
-            ret = client.Move(*velocity)
-            if ret != 0:
-                stop_ret = client.StopMove()
-                msg = f"Move returned {ret}"
-                if stop_ret != 0:
-                    msg += f"; StopMove returned {stop_ret}"
-                obs.update(duration_s=round(sent * period_s, 3), sdk_ret=ret)
-                timing["exec_ms"] = runner.ms_since(t)
-                return runner.SkillOutcome.error(ErrorCode.SDK_ERROR, msg, observations=obs, timing=timing)
-            sent += 1
-            backend.sleep(period_s)
-    except BaseException:
-        _safe_stop(client)
-        raise
-    ret = client.StopMove()
-    timing["exec_ms"] = runner.ms_since(t)
-    obs.update(duration_s=round(sent * period_s, 3), sdk_ret=ret)
-    if ret != 0:
+    Observations: ``duration_s`` (Moves sent x period) and ``sdk_ret`` (the failing Move's code, else the
+    StopMove's)."""
+    fault = _fault()
+    if fault == "error":
+        obs = {"duration_s": 0.0, "sdk_ret": stub.STUB_ERR_INJECTED}
         return runner.SkillOutcome.error(
-            ErrorCode.SDK_ERROR, f"StopMove returned {ret}", observations=obs, timing=timing
+            ErrorCode.SDK_ERROR, f"Move returned {stub.STUB_ERR_INJECTED}", observations=obs, timing={}
+        )
+    extra = {"fault": fault} if fault else {}
+    t = time.monotonic()
+    try:
+        client = robot_ipc.session.client()
+        result = client.move(*velocity, duration_s, token=robot_ipc.lease_token(), **extra)
+    except (Refused, ServiceUnavailable) as e:
+        return _refused(e, {}, {"exec_ms": runner.ms_since(t)})
+    timing = {"exec_ms": runner.ms_since(t)}
+    if result.move_ret != 0:
+        msg = f"Move returned {result.move_ret}"
+        if result.stop_ret != 0:
+            msg += f"; StopMove returned {result.stop_ret}"
+        obs = {"duration_s": result.duration_s, "sdk_ret": result.move_ret}
+        return runner.SkillOutcome.error(ErrorCode.SDK_ERROR, msg, observations=obs, timing=timing)
+    obs = {"duration_s": result.duration_s, "sdk_ret": result.stop_ret}
+    if result.stop_ret != 0:
+        return runner.SkillOutcome.error(
+            ErrorCode.SDK_ERROR, f"StopMove returned {result.stop_ret}", observations=obs, timing=timing
         )
     return runner.SkillOutcome.ok(observations=obs, timing=timing)
 
 
 def single_action(call: str, settle_s: float) -> runner.SkillOutcome:
-    """Call ``client.<call>()``; on success wait ``settle_s`` (via backend.sleep) so
-    state_after is sampled after the motion ends. Returns a SkillOutcome."""
-    client, timing = sport_client()
+    """Ask the robot service to run ``call`` (one of robot_ipc.ACTIONS); on success wait ``settle_s`` (via
+    backend.sleep) so state_after is sampled after the motion ends."""
+    fault = _fault()
+    if fault == "error":
+        obs = {"sdk_ret": stub.STUB_ERR_INJECTED}
+        return runner.SkillOutcome.error(
+            ErrorCode.SDK_ERROR, f"{call} returned {stub.STUB_ERR_INJECTED}", observations=obs, timing={}
+        )
+    extra = {"fault": fault} if fault else {}
     t = time.monotonic()
-    ret = getattr(client, call)()
+    try:
+        ret = robot_ipc.session.client().action(call, token=robot_ipc.lease_token(), **extra)
+    except (Refused, ServiceUnavailable) as e:
+        return _refused(e, {}, {"exec_ms": runner.ms_since(t)})
     obs = {"sdk_ret": ret}
     if ret != 0:
-        timing["exec_ms"] = runner.ms_since(t)
+        timing = {"exec_ms": runner.ms_since(t)}
         return runner.SkillOutcome.error(ErrorCode.SDK_ERROR, f"{call} returned {ret}", observations=obs, timing=timing)
     backend.sleep(settle_s)
-    timing["exec_ms"] = runner.ms_since(t)
-    return runner.SkillOutcome.ok(observations=obs, timing=timing)
+    return runner.SkillOutcome.ok(observations=obs, timing={"exec_ms": runner.ms_since(t)})

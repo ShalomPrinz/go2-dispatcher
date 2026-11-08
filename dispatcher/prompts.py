@@ -68,8 +68,12 @@ __all__ = [
     "KILL_OPERATOR",
     "KILL_TASK_TIME_LIMIT",
     "KILL_SHUTDOWN",
+    "KILL_ROBOT_SERVICE_LOST",
     "NOT_DISPATCHED_PREFIX",
     "OPERATOR_MESSAGES",
+    "SERVICE_LOST_STOP_FAILED",
+    "SERVICE_LOST_RESTART_FAILED",
+    "SERVICE_LOST_TWICE",
     "DONE_DEFAULT_MESSAGE",
     "STOP_MOVE_WARNING",
     "OutcomeFacts",
@@ -185,12 +189,18 @@ NOTICES: dict[str, str] = {
         "{f} of {max_failures}. Revise the plan to avoid that failure, or return ABORT "
         "with a message if the task cannot be done."
     ),
+    "robot_service_lost": (
+        "The robot's control service was lost while step {n} ({skill}) ran. The robot was "
+        "stopped and its state read again; plan again from the state above. This counts as "
+        "a planning call."
+    ),
 }
 
 
 def notice(reason: str, **args: Any) -> str:
     """Notice for a return reason. ``checkpoint`` needs ``n``; ``failure`` needs ``n``,
-    ``skill``, ``outcome``, ``f``, ``max_failures``. Unknown reason → KeyError."""
+    ``skill``, ``outcome``, ``f``, ``max_failures``; ``robot_service_lost`` needs ``n``, ``skill``.
+    Unknown reason → KeyError."""
     return NOTICES[reason].format(**args)
 
 
@@ -238,6 +248,7 @@ KILL_STEP_TIMEOUT = "killed after {timeout_s:g}s timeout"
 KILL_OPERATOR = "stopped by operator"
 KILL_TASK_TIME_LIMIT = "task time limit reached"
 KILL_SHUTDOWN = "dispatcher shutting down"
+KILL_ROBOT_SERVICE_LOST = "stopped: the robot control service was lost"
 
 NOT_DISPATCHED_PREFIX = "- rejected before running: "
 
@@ -258,8 +269,15 @@ OPERATOR_MESSAGES: dict[str, str] = {
     "LLM_INVALID": "Stopped: the model returned an invalid plan twice.",
     "LLM_ERROR": "Stopped: the model could not be reached ({detail}).",
     "STATE_UNAVAILABLE": "Stopped: the robot state could not be read ({detail}).",
+    "ROBOT_SERVICE_LOST": (
+        "Stopped: the robot control service was lost ({detail}). A stop command was sent to the robot."
+    ),
     "INTERNAL_ERROR": "Stopped: internal error ({exception_type}). See run log {run_id}.",
 }
+# ROBOT_SERVICE_LOST details: which end condition (dispatcher/docs/loop-and-context.md)
+SERVICE_LOST_STOP_FAILED = "the fallback stop failed"
+SERVICE_LOST_RESTART_FAILED = "restart or state read failed: {error}"
+SERVICE_LOST_TWICE = "lost a second time in this task"
 DONE_DEFAULT_MESSAGE = "Task completed, LLM didn't provide more details."  # DONE without a message
 STOP_MOVE_WARNING = " WARNING: the stop command to the robot failed. Stop the robot manually."
 
@@ -274,7 +292,7 @@ class OutcomeFacts:
     failures: int
     last_failure: StepResult | None = None
     message: str | None = None  # DONE / ABORTED: the model's message
-    detail: str = ""  # LLM_ERROR, STATE_UNAVAILABLE
+    detail: str = ""  # LLM_ERROR, STATE_UNAVAILABLE, ROBOT_SERVICE_LOST
     exception_type: str = "Exception"  # INTERNAL_ERROR
 
 
@@ -294,7 +312,7 @@ def _operator_args(outcome: TaskOutcomeCode, facts: OutcomeFacts) -> dict[str, A
         }
     if outcome == "CALL_BUDGET_EXHAUSTED":
         return {"n": facts.max_llm_calls}
-    if outcome in ("LLM_ERROR", "STATE_UNAVAILABLE"):
+    if outcome in ("LLM_ERROR", "STATE_UNAVAILABLE", "ROBOT_SERVICE_LOST"):
         return {"detail": facts.detail}
     if outcome == "INTERNAL_ERROR":
         return {"exception_type": facts.exception_type, "run_id": facts.run_id}

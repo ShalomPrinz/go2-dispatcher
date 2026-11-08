@@ -1,15 +1,14 @@
-"""Robot backend selection (skills/docs/robot.md).
+"""Robot backend selection and the errors shared by the backends (skills/docs/robot.md).
 
-Dispatches on env ``GO2_BACKEND`` (``real`` | ``stub``). The backend modules are
-imported lazily, and ``real`` imports its third-party dependencies only inside
-functions, so importing this module has no side effects.
+Reads env ``GO2_BACKEND`` (``real`` | ``stub``). Never imports ``skills.real``: skill processes do not touch
+DDS. The utilities' own robot access is in skills/local.py, the robot service's in skills/robot_service.py.
 """
 
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass
-from types import ModuleType
 
 from skills.env import BACKEND
 from skills.schema import ErrorCode
@@ -67,36 +66,11 @@ def backend_name() -> str:
     return name
 
 
-def _impl() -> ModuleType:
-    if backend_name() == "real":
-        from skills import real
+def sleep(seconds: float) -> None:
+    """A skill's wait: real time on the robot, scaled by the stub time scale on the stub."""
+    if backend_name() == "stub":
+        from skills import stub
 
-        return real
-    from skills import stub
-
-    return stub
-
-
-def _forward(name: str):
-    """A function that calls ``name`` on the configured backend module at call time."""
-
-    def call(*args, **kwargs):
-        return getattr(_impl(), name)(*args, **kwargs)
-
-    call.__name__ = name
-    return call
-
-
-def dds_init_ms() -> float | None:
-    """Time this process spent in DDS init, or None if none was attempted or no backend is configured."""
-    try:
-        impl = _impl()
-    except BackendNotConfigured:
-        return None
-    return impl.dds_init_ms()
-
-
-init_dds = _forward("init_dds")  # once per process; real: ChannelFactoryInitialize, stub: nothing
-get_sport_client = _forward("get_sport_client")  # object with Move, StopMove, StandDown, Stretch -> int
-sample_state = _forward("sample_state")  # -> skills.schema.RobotState
-sleep = _forward("sleep")  # real: time.sleep(seconds); stub: scaled by time_scale
+        stub.sleep(seconds)
+    else:
+        time.sleep(seconds)

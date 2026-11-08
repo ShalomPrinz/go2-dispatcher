@@ -16,19 +16,17 @@ from typing import Any
 
 from skills.backend import BackendNotConfigured, StateUnavailable
 from skills.env import IFACE
+from skills.robot_ipc import SPORT_CLIENT_TIMEOUT_S
 from skills.schema import ObstacleDistances, Posture, RobotState
 from skills.state_store import STATE_WAIT_S, StateStore
 
 DDS_DOMAIN_ID = 0
-SPORT_CLIENT_TIMEOUT_S = 5.0  # per-call reply wait; must fit in the process timeouts (tunable, skills/docs/skills.md)
 SPORT_STATE_TOPIC = "rt/sportmodestate"
 SUBSCRIBER_QUEUE_LEN = 10
 POSTURE_SITTING_MAX_M = 0.15  # (tunable, skills/docs/robot.md)
 POSTURE_STANDING_MIN_M = 0.22  # (tunable, skills/docs/robot.md)
 RANGE_OBSTACLE_ORDER = ("front", "back", "left", "right")  # assumed index order, unverified (skills/docs/robot.md)
 RANGE_OBSTACLE_MAX_M = 30.0  # larger values are taken as a "nothing seen" sentinel (tunable, skills/docs/robot.md)
-
-sleep = time.sleep
 
 _dds_ready = False
 _dds_lock = threading.Lock()
@@ -63,6 +61,7 @@ def dds_init_ms() -> float | None:
 
 
 def get_sport_client():
+    """One SportClient: the robot service's for its lifetime, or the stop_move utility's own."""
     init_dds()
     from unitree_sdk2py.go2.sport.sport_client import SportClient
 

@@ -47,8 +47,8 @@ def body(params: dict) -> runner.SkillOutcome:
     t = time.monotonic()
     try:
         with conn:
-            if backend.backend_name() == "stub":
-                stub.inject_detect_fault()
+            if backend.backend_name() == "stub" and stub.inject_fault() == "error":
+                raise backend.CameraUnavailable("injected camera fault")
             found = vision_ipc.detect(conn, target, REPLY_WAIT_S)
     except backend.DetectorError as e:
         timing["exec_ms"] = runner.ms_since(t)

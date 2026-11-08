@@ -15,7 +15,7 @@ Everything that limits or stops the robot. The dispatcher bounds what the LLM ca
 
 ## The stop path
 
-All stops use one path: **kill the running skill process group, then send `StopMove` from a fresh process.**
+All stops use one path: **kill the running skill process group and send `stop` to the [robot service](../skills/docs/skills.md#robot-service) on the dispatcher's control connection; if no `stop_sent` arrives within 500 ms (*tunable*), SIGKILL the service and send `StopMove` from a fresh process (the fallback).**
 
 | Trigger | How |
 |---|---|
@@ -24,31 +24,48 @@ All stops use one path: **kill the running skill process group, then send `StopM
 | Task time limit | `loop.task_time_limit_s` (300 s, *tunable*) from task start. Checked before every LLM call and step, during LLM retry backoff, and by the executor while a step runs. Outcome `TIME_LIMIT_EXCEEDED`. |
 | Shutdown | A second Ctrl+C, SIGTERM, Telegram bot shutdown, or `atexit`: `Dispatcher.shutdown()`. In `go2 bot`, SIGINT/SIGTERM first calls `request_stop("shutdown")`, so a running task is stopped at once (outcome `STOPPED`) before the Telegram library shuts down; `shutdown()` remains the backstop and, if the task is still running after its wait, kills it and sends `StopMove` itself. |
 | Internal error | An unhandled exception in the dispatcher: kill + `StopMove`, outcome `INTERNAL_ERROR`. Logging, kill and `StopMove` are each guarded, so `task_end` and the index line are always written. |
+| Robot service lost | The service misses a `ping` (every 0.5 s while a step runs) or a `stop_sent` within 500 ms, or its control connection, an `arm` or a `disarm` fails: SIGKILL the service and the skill process group, then the fallback `StopMove`. See [robot service lost](#robot-service-lost). |
 
 **Stop word.** The Telegram message `stop` in any case, with surrounding spaces trimmed (`text.strip().lower() == "stop"`), or the `/stop` command. It is checked before the busy check, so it gets through while a task runs.
 
 Details:
 
 - Each skill runs in its own session; the kill is `SIGKILL` to the whole process group. The executor checks for process exit and sends the kill under one lock, so a reused PID is never signalled. The first kill cause wins.
-- `StopMove` runs as `python -m skills.stop_move '{}'` in a new process. A fresh process gets a clean DDS channel (the SDK uses a process-wide singleton). Like every skill, it needs the Ethernet link to the robot: with the link down, no software stop reaches the robot and the physical e-stop is the stop. In the first supervised runs an unstable cable made 5 of 8 `stop_move` calls fail at channel initialisation, so they never sent `StopMove` ([known issues](../skills/docs/robot.md#known-issues)). It is never registered as the current process, so a stop can never kill it. It waits up to its `POLICY` timeout (12 s, [skills.md](../skills/docs/skills.md)) and is not retried. It sends `StopMove` even if its params are invalid, then waits ([settle waits](../skills/docs/robot.md#settle-waits)) and samples the state. `Executor.stop_move()` never raises: if the process cannot even be started, it returns a failed result, so the operator still gets the warning.
-- If a stop, the time limit or shutdown kills a running step, the executor sends `StopMove` right after the kill, and that is the only one: the task then ends without a second, end-of-task `StopMove`. How the posture is updated: [loop-and-context.md](../dispatcher/docs/loop-and-context.md#user-message).
+- **Leases.** The dispatcher holds the service's one control connection from startup. Before each step it `arm`s the service with a random token and the step timeout as the lease deadline, and passes the token to the skill in `GO2_LEASE_TOKEN`; it `disarm`s when the step ends. Without a lease the service refuses every motion request, which enforces [stationary during LLM calls](#the-robot-is-stationary-during-llm-calls) in the service too. When the skill's connection closes (the kill), the service ends the lease and sends `StopMove` itself, which backs up the dispatcher's `stop` ([skills.md](../skills/docs/skills.md#robot-service)).
+- **Service stop.** `stop` makes the service send `StopMove` through its long-lived sport client and end any lease; it replies `stop_sent` with the SDK code and `stop_call_ms`. The executor sends it right after the `SIGKILL`, which does not wait for the process to exit, so the two run in parallel. A `stop_sent` with a non-zero code runs the fallback too, but keeps the service.
+- **Fallback.** No `stop_sent` within 500 ms, or a service that is not running or not reachable, counts as a lost service: the executor closes the control connection, SIGKILLs the service and runs the fallback. The fallback is permanent, not a migration aid.
+- The fallback `StopMove` runs as `python -m skills.stop_move '{}'` in a new process. A fresh process gets a clean DDS channel (the SDK uses a process-wide singleton). Like every skill, it needs the Ethernet link to the robot: with the link down, no software stop reaches the robot and the physical e-stop is the stop. In the first supervised runs an unstable cable made 5 of 8 `stop_move` calls fail at channel initialisation, so they never sent `StopMove` ([known issues](../skills/docs/robot.md#known-issues)). It is never registered as the current process, so a stop can never kill it. It waits up to its `POLICY` timeout (12 s, [skills.md](../skills/docs/skills.md)) and is not retried. It sends `StopMove` even if its params are invalid, then waits ([settle waits](../skills/docs/robot.md#settle-waits)) and samples the state. `Executor.stop_move()` never raises: if the process cannot even be started, it returns a failed result, so the operator still gets the warning.
+- If a stop, the time limit or shutdown kills a running step, the executor sends the stop right after the kill, and that is the only one: the task then ends without a second, end-of-task `StopMove`. How the posture is updated: [loop-and-context.md](../dispatcher/docs/loop-and-context.md#user-message).
 - If a stop or the time limit arrives while **no** step runs (during an LLM call or between steps), the dispatcher still sends `StopMove` when the task ends. This is idempotent.
 - If the task-start state read through the robot service fails, the task ends `STATE_UNAVAILABLE` and the dispatcher sends `StopMove` (reason `state_unavailable`): with the state unknown it cannot confirm the robot is stationary ([loop-and-context.md](../dispatcher/docs/loop-and-context.md#design-decisions)). A stop that arrived during the read is covered by the same `StopMove`.
-- `StopMove` is not sent after a step that ends normally: walk and turn already end with `StopMove()`.
+- `StopMove` is not sent after a step that ends normally: walk and turn already end with `StopMove()`, and the `disarm` sends one if the lease was used for motion.
 - The [vision service](running.md#vision-service) is not part of the stop path: it only reads the camera and never commands motion, so a stop, a step timeout or the time limit kills only the `detect_object` skill process group, as for any skill. A stop that arrives while the executor waits for the service to become ready ends the wait at once; the step is then killed and `StopMove` sent as usual. The service is stopped only when the dispatcher shuts down.
 - An LLM request already in flight is not cancelled; the stop takes effect when it returns ([llm.md](../dispatcher/docs/llm.md#infrastructure-retries)).
 
+### Robot service lost
+
+A service that crashes (EOF on the control connection) or hangs (no `pong` or `stop_sent` within 500 ms) mid-task is handled in this order:
+
+1. **Detect** it (above).
+2. **Stop first:** SIGKILL the service and the skill process group, then run the fallback `stop_move`.
+3. **Restart** the service and read a fresh state through it.
+4. **Replan** from that state with return reason `robot_service_lost` ([loop-and-context.md](../dispatcher/docs/loop-and-context.md#return-reasons)).
+
+The task ends `ROBOT_SERVICE_LOST` instead (operator alerted) when the fallback stop fails (no LLM call without a confirmed stop), the restart or the fresh read fails, or the service is lost a second time in the same task. A loss while a stop, the time limit or shutdown is already ending the task only changes which path stops the robot.
+
+Residual risk: between the crash and the fallback `StopMove` (detection up to about 1 s, plus the fallback's process start and DDS init) the robot has no stop command. The system assumes the worst case, that the Go2 keeps its last velocity until a `StopMove` arrives ([robot.md](../skills/docs/robot.md#working-assumptions)).
+
 ### StopMove failure
 
-If the `stop_move` process cannot be started, times out, exits without a valid response, or reports a non-zero SDK code, `stop_move_failed` is set on the task and the operator message ends with the warning above. The `stop_move` record holds the details ([run-log.md](../dispatcher/docs/run-log.md#stop_move)). There is no automatic retry; a person must stop the robot.
+If the service stop fails and the fallback `stop_move` process cannot be started, times out, exits without a valid response, or reports a non-zero SDK code, `stop_move_failed` is set on the task and the operator message ends with the warning above. The `stop_move` record holds the details ([run-log.md](../dispatcher/docs/run-log.md#stop_move)). There is no automatic retry; a person must stop the robot.
 
 ### Between kill and StopMove
 
-A SIGKILL runs no cleanup, so the killed skill cannot send `StopMove()` itself. Until the new `StopMove` arrives (process start + DDS init), the robot has received no stop command. Whether the Go2 sport service stops on its own when `Move` commands stop arriving is **unverified on the robot**. Until the checklist has measured it, assume the robot may keep moving at the last commanded velocity (≤ 0.3 m/s, or ≤ 1 rad/s when turning) for that time.
+A SIGKILL runs no cleanup, so the killed skill cannot send `StopMove()` itself. The service sends it on the dispatcher's `stop` and, independently, when the skill's connection closes; on the service path the gap is one IPC round trip plus the `StopMove` call. On the fallback path, until the new `StopMove` arrives (process start + DDS init), the robot has received no stop command. Whether the Go2 sport service stops on its own when `Move` commands stop arriving is **unverified on the robot**. Until the checklist has measured it, assume the robot may keep moving at the last commanded velocity (≤ 0.3 m/s, or ≤ 1 rad/s when turning) for that time.
 
 ### Measured latency
 
-`stop_move` records `timing.dds_init_ms`, `client_init_ms` and `stop_call_ms` ([skills.md](../skills/docs/skills.md#response-schema)). Kill-to-stop latency = executor kill + process start + `dds_init_ms` + `client_init_ms` + `stop_call_ms`. There is no required number. On the robot, successful stops measured `stop_call_ms` 891–900 ms from utility start, which includes DDS init and client creation ([reading records without `dds_init_ms`](../skills/docs/skills.md#response-schema)), and `total_ms` 1404–1428 ms (3 of 8 calls, [robot.md results](../skills/docs/robot.md#results), row 5); the other 5 failed from link loss ([known issues](../skills/docs/robot.md#known-issues)).
+Every `stop_move` record holds `stop_path` and, after a kill, the dispatcher-measured `kill_to_stop_ms` ([run-log.md](../dispatcher/docs/run-log.md#stop_move)). A service stop reports `stop_sent.stop_call_ms` (the `StopMove` call in the service); a fallback stop reports the `stop_move` utility's own `timing` ([skills.md](../skills/docs/skills.md#response-schema)). There is no required number; the warm service stop is assumed to take tens of ms, which the 500 ms `stop_sent` wait is set well above. The figures below are fresh-process stops, the fallback path. On the robot, successful stops measured `stop_call_ms` 891–900 ms from utility start, which includes DDS init and client creation ([reading records without `dds_init_ms`](../skills/docs/skills.md#response-schema)), and `total_ms` 1404–1428 ms (3 of 8 calls, [robot.md results](../skills/docs/robot.md#results), row 5); the other 5 failed from link loss ([known issues](../skills/docs/robot.md#known-issues)).
 
 ## Busy-reject
 
@@ -73,7 +90,7 @@ Every step of a plan is checked against its `SKILL.md` declaration before anythi
 
 ## If the dispatcher dies
 
-Each skill process watches its parent (`GO2_PARENT_PID`) every 0.2 s. If the dispatcher disappears, the `ORPHANED` flag is set; motion loops check it on every iteration, break, and send `StopMove()` themselves (the step reports `orphaned: true`). Any skill still alive 2 s later exits with code 137. The watchdog does nothing when `GO2_PARENT_PID` is unset (manual runs). `stop_move` and `read_state` do not watch their parent, so a `StopMove` always finishes. The [vision service](../skills/docs/skills.md#vision-service) and the [robot service](../skills/docs/skills.md#robot-service) run the same watchdog and exit with code 137 too; neither commands motion. Every normal exit of the transports calls `Dispatcher.shutdown()`.
+The robot service stops the robot: the dispatcher's death closes the control connection, and the service then ends any lease and sends `StopMove`. Its orphan watchdog (`GO2_PARENT_PID`, checked every 0.2 s) is the backup: it ends the lease, sends `StopMove`, and exits with code 137 about 2 s later. Skill processes run the same watchdog and exit with code 137; their motion runs in the service, so they do not stop the robot themselves. The watchdog does nothing when `GO2_PARENT_PID` is unset (manual runs). `stop_move` and `read_state` do not watch their parent, so a `StopMove` always finishes. The [vision service](../skills/docs/skills.md#vision-service) runs the same watchdog and never commands motion. Every normal exit of the transports calls `Dispatcher.shutdown()`, which closes the control connection and stops the service.
 
 If the dispatcher host loses power or the network drops, none of this helps, and the operator can no longer send `stop`. Use the physical stop, which is why it must be within reach at all times ([above](#supervised-operation-rules)).
 
@@ -90,12 +107,15 @@ If the dispatcher host loses power or the network drops, none of this helps, and
 
 ## Design decisions
 
-- **One stop path** (kill the process group, then `StopMove` from a fresh process) for operator stop, step timeouts, the task time limit, shutdown and internal errors. One tested mechanism; a killed process cannot clean up after itself, and a fresh process has a clean DDS channel.
+- **One stop path** (kill the process group and `stop` through the robot service, with `StopMove` from a fresh process as fallback) for operator stop, step timeouts, the task time limit, shutdown, internal errors and a lost service. One tested mechanism; a killed process cannot clean up after itself. The service's warm sport client stops in tens of ms instead of a process start plus DDS init.
+- **The fresh-process `stop_move` stays as a permanent fallback.** The stop path must work when the service hangs or is dead, and a fresh process has its own DDS participant. Rejected: dropping it once the service stop exists (a hung service would leave no software stop).
+- **The service stop and the motion share one sport client.** Replies are matched per request id and `Move` never waits for one, so a stop is never queued behind motion. Rejected: a separate stop client in the service (more DDS state, no gain).
+- **A lost service mid-task is stopped first, then restarted and replanned** (`robot_service_lost`, counted like any planning call), and ends the task on a failed stop, a failed restart or read, or a second loss. Rejected: continuing the original plan (the state is unknown after the loss); ending the task on every loss (a confirmed stop plus a fresh read make the replan safe).
 - **The stop word bypasses busy-reject**, because a stop must reach a running task. Accepted variants: any case, surrounding spaces trimmed, and Telegram `/stop`.
 - **Busy-reject: no queue, no interrupt by new tasks.** It keeps one task, one plan and one log at a time; the system assumes a single operator. Forwarding mid-run messages to the model is a future idea ([roadmap.md](roadmap.md#future-ideas)).
 - **A per-task cumulative motion budget, separate for travel and rotation.** Per-step bounds alone would let ten 3 m walks through. It bounds commanded motion because v1 has no trusted position measurement; estimating position from commanded velocity (dead reckoning) was rejected, because it restates the walk skill's own open-loop assumption. A geofence waits for a real position source ([roadmap.md](roadmap.md#verifiability-per-skill)).
 - **Charge the budget at dispatch, however the step ends**, because commanded motion may have happened even if the step errors or is killed.
-- **Orphan watchdog in skill processes**, so skills stop the robot and exit if the dispatcher dies.
+- **The robot service stops the robot if the dispatcher dies**, on EOF of the control connection and through its orphan watchdog; skills exit through the same watchdog.
 - **One dispatcher process per machine (file lock)**, so two processes can never drive one robot, overwrite the stub state, or interleave `index.jsonl`.
 - **The robot is stationary during LLM calls**, so a slow or failing LLM call never leaves the robot moving.
 - **Agent limits are permission rules, not only CLAUDE.md prose**, because instructions are context, not enforcement. Bash argument patterns can be bypassed (`sh -c`, a changed config file); a PreToolUse guard hook is pending ([roadmap.md](roadmap.md#future-ideas)).

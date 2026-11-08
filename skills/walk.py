@@ -27,7 +27,7 @@ def body(params: dict) -> runner.SkillOutcome:
     direction = params["direction"]
     distance_m = float(params["distance_m"])
     sx, sy = DIRECTION_VECTORS[direction]
-    outcome = motion.move_loop(motion.Velocity(sx * VELOCITY_MPS, sy * VELOCITY_MPS, 0.0), _motion_s(params))
+    outcome = motion.move(motion.Velocity(sx * VELOCITY_MPS, sy * VELOCITY_MPS, 0.0), _motion_s(params))
     return replace(outcome, observations={"direction": direction, "distance_m": distance_m, **outcome.observations})
 
 

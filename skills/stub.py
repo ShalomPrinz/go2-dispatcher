@@ -1,22 +1,24 @@
-"""Stub backend (skills/docs/skills.md): keeps posture and an odometry pose in a shared JSON state file,
-simulates the front camera over objects placed in the world, and supports fault injection. Replaces only
-the SDK layer inside the skill subprocess."""
+"""Stub backend (skills/docs/skills.md): keeps posture, an odometry pose and the running velocity command in a
+shared JSON state file, simulates the sport client (SimRobot, run by the robot service and the stop_move utility)
+and the front camera over objects placed in the world, and supports fault injection."""
 
 from __future__ import annotations
 
 import json
 import math
 import os
+import signal
 import sys
 import tempfile
+import threading
 import time
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Literal, get_args
 
 from skills import process, vision
-from skills.backend import CameraUnavailable, DetectResult
+from skills.backend import DetectResult
 from skills.env import STUB_FAULT, STUB_OBJECTS, STUB_STATE_FILE, STUB_TIME_SCALE
 from skills.schema import ObstacleDistances, RobotState
 
@@ -30,8 +32,9 @@ DEFAULT_POSTURE: StubPosture = "standing"
 
 STUB_ERR_NOT_STANDING = 1
 STUB_ERR_INJECTED = 99
-FaultKind = Literal["error", "hang", "crash", "garbage"]
+FaultKind = Literal["error", "hang", "crash", "garbage", "service_hang", "service_crash"]
 FAULT_KINDS: tuple[FaultKind, ...] = get_args(FaultKind)
+SERVICE_FAULTS: tuple[FaultKind, ...] = ("service_hang", "service_crash")  # applied by the robot service
 CRASH_EXIT_CODE = 139
 GARBAGE_TEXT = "not json\n"
 HANG_POLL_S = 1.0
@@ -58,9 +61,6 @@ OBSTACLE_RADIUS_M = 0.15  # (tunable)
 OBSTACLE_MAX_M = 5.0  # nothing hit within this range -> None (tunable)
 OBSTACLE_DIRECTIONS = {"front": 0.0, "back": math.pi, "left": math.pi / 2, "right": -math.pi / 2}  # body frame
 
-_command: tuple[float, float, float] | None = None  # last accepted Move(vx, vy, vyaw), until StopMove
-_dds_init_s: float | None = None  # set by init_dds; the stub has no DDS, so it is 0
-
 
 @dataclass(frozen=True)
 class Pose:
@@ -71,10 +71,14 @@ class Pose:
     yaw: float = 0.0
 
 
+Command = tuple[float, float, float]  # body-frame (vx, vy, vyaw) of the last accepted Move
+
+
 @dataclass(frozen=True)
 class StubState:
     posture: StubPosture = DEFAULT_POSTURE
     pose: Pose = Pose()
+    command: Command | None = None  # set by Move, cleared by StopMove: the robot keeps it until then
 
 
 @dataclass(frozen=True)
@@ -134,10 +138,8 @@ def objects() -> dict[str, WorldObject]:
 
 
 def sleep(seconds: float) -> None:
-    """Wait ``seconds`` scaled by the time scale; a running Move advances the pose by the unscaled seconds."""
+    """Wait ``seconds`` scaled by the time scale."""
     time.sleep(seconds * time_scale())
-    if _command is not None:
-        write_pose(advance(read_state().pose, _command, seconds))
 
 
 # --- odometry and camera ----------------------------------------------------------
@@ -200,7 +202,8 @@ def obstacle_distances(pose: Pose, world: Mapping[str, WorldObject]) -> Obstacle
 
 
 def read_state(path: Path | None = None) -> StubState:
-    """The state file; a missing file means standing at the origin, a missing pose means the origin."""
+    """The state file; a missing file means standing at the origin, a missing pose the origin and a missing
+    command none."""
     path = path or state_file()
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -211,10 +214,13 @@ def read_state(path: Path | None = None) -> StubState:
         if posture not in STUB_POSTURES:
             raise ValueError(posture)
         pose = data.get("pose")
+        command = data.get("command")
         return StubState(
-            posture=posture, pose=Pose() if pose is None else Pose(**{k: float(pose[k]) for k in ("x", "y", "yaw")})
+            posture=posture,
+            pose=Pose() if pose is None else Pose(**{k: float(pose[k]) for k in ("x", "y", "yaw")}),
+            command=None if command is None else (float(command[0]), float(command[1]), float(command[2])),
         )
-    except (TypeError, KeyError, ValueError, AttributeError) as e:
+    except (TypeError, KeyError, ValueError, AttributeError, IndexError) as e:
         raise ValueError(f"invalid stub state file {path}: {data!r}") from e
 
 
@@ -244,20 +250,27 @@ def _check_posture(posture: str) -> None:
 
 
 def write_posture(posture: StubPosture, path: Path | None = None) -> None:
-    """Set the posture, keeping the pose."""
+    """Set the posture, keeping the rest."""
     _check_posture(posture)
     path = path or state_file()
-    _write_state(StubState(posture=posture, pose=read_state(path).pose), path)
+    _write_state(replace(read_state(path), posture=posture), path)
 
 
 def write_pose(pose: Pose, path: Path | None = None) -> None:
-    """Set the pose, keeping the posture."""
+    """Set the pose, keeping the rest."""
     path = path or state_file()
-    _write_state(StubState(posture=read_state(path).posture, pose=pose), path)
+    _write_state(replace(read_state(path), pose=pose), path)
+
+
+def write_command(command: Command | None, path: Path | None = None) -> None:
+    """Set or clear the running command, keeping the rest."""
+    path = path or state_file()
+    _write_state(replace(read_state(path), command=command), path)
 
 
 def reset(posture: StubPosture, path: Path | None = None) -> None:
-    """Put the stub into a known state: ``posture`` at the origin; the dispatcher's only write to stub state."""
+    """Put the stub into a known state: ``posture`` at the origin, no command; the dispatcher's only write to
+    stub state."""
     _check_posture(posture)
     _write_state(StubState(posture=posture), path or state_file())
 
@@ -266,14 +279,14 @@ def reset(posture: StubPosture, path: Path | None = None) -> None:
 
 
 class _FaultInjector:
-    """Process-wide fault state shared by every stub client: only the first action call is faulted."""
+    """The skill process's fault state: only its first action call is faulted."""
 
     def __init__(self) -> None:
         self.consumed = False
 
     def apply_fault(self) -> str | None:
         """Apply the injected fault to this call. May hang forever, exit the process or write to stdout;
-        otherwise returns ``None`` or ``"error"``."""
+        otherwise returns ``None``, ``"error"`` or a service fault for the robot service to apply."""
         if self.consumed:
             return None
         self.consumed = True
@@ -291,58 +304,79 @@ class _FaultInjector:
             print("stub fault: garbage", file=sys.stderr, flush=True)
             process.write_raw_stdout(GARBAGE_TEXT)
             os._exit(0)
-        return kind  # None or "error"
+        return kind  # None, "error" or a service fault
 
 
 _faults = _FaultInjector()
 
 
-def disable_faults() -> None:
-    """No injected fault in this process; the utilities call it so the stop path always works."""
-    _faults.consumed = True
+def inject_fault() -> str | None:
+    """A skill's action call for fault injection, in the skill process before it asks a service."""
+    return _faults.apply_fault()
 
 
-# --- clients ----------------------------------------------------------------------
+def apply_service_fault(kind: str) -> None:
+    """The robot service's side of a service fault: hang (the whole process stops, sockets stay open) or crash."""
+    print(f"stub fault: {kind}", file=sys.stderr, flush=True)
+    if kind == "service_crash":
+        os._exit(CRASH_EXIT_CODE)
+    os.kill(os.getpid(), signal.SIGSTOP)
 
 
-class StubSportClient:
-    """Every method returns int, 0 = success."""
+# --- simulated sport client --------------------------------------------------------
+
+
+class SimRobot:
+    """The stub's sport client, over the state file. Every call returns int, 0 = success. ``wait`` is the robot
+    service's motion clock: it waits the scaled time and advances the pose by the unscaled seconds while a
+    command is set. Without a wait the pose stays put, but the command stays set until StopMove. ``_lock``
+    serialises this process's read-modify-writes, so a stop from another thread is never overwritten."""
+
+    def __init__(self, path: Path | None = None) -> None:
+        self.path = path or state_file()
+        self._lock = threading.Lock()
 
     def Move(self, vx: float, vy: float, vyaw: float) -> int:
-        global _command
-        if _faults.apply_fault() == "error":
-            return STUB_ERR_INJECTED
-        if read_posture() != "standing":
-            return STUB_ERR_NOT_STANDING
-        _command = (vx, vy, vyaw)
+        with self._lock:
+            if read_posture(self.path) != "standing":
+                return STUB_ERR_NOT_STANDING
+            write_command((vx, vy, vyaw), self.path)
         return 0
 
     def StopMove(self) -> int:
-        global _command
-        if _faults.apply_fault() == "error":
-            return STUB_ERR_INJECTED
-        _command = None
+        with self._lock:
+            write_command(None, self.path)
         return 0
 
     def StandDown(self) -> int:
-        if _faults.apply_fault() == "error":
-            return STUB_ERR_INJECTED
-        if read_posture() == "standing":
-            write_posture("sitting")
-            sleep(STAND_DOWN_S)
+        with self._lock:
+            state = read_state(self.path)
+            if state.posture != "standing":
+                return 0
+            _write_state(replace(state, posture="sitting", command=None), self.path)
+        sleep(STAND_DOWN_S)
         return 0
 
     def Stretch(self) -> int:
-        if _faults.apply_fault() == "error":
-            return STUB_ERR_INJECTED
-        if read_posture() != "standing":
+        if read_posture(self.path) != "standing":
             return STUB_ERR_NOT_STANDING
         sleep(STRETCH_S)
         return 0
 
+    def wait(self, seconds: float, abort: threading.Event) -> None:
+        """Wait ``seconds`` scaled, or until ``abort``; a set command moves the pose by the unscaled time waited."""
+        scale = time_scale()
+        t = time.monotonic()
+        aborted = abort.wait(seconds * scale)
+        waited = min((time.monotonic() - t) / scale, seconds) if aborted and scale > 0 else seconds
+        with self._lock:
+            state = read_state(self.path)
+            if state.command is not None:
+                _write_state(replace(state, pose=advance(state.pose, state.command, waited)), self.path)
+
 
 class StubDetector:
-    """The vision service's stub camera; faults are applied in the skill process (inject_detect_fault)."""
+    """The vision service's stub camera; faults are applied in the skill process (inject_fault)."""
 
     def warm_up(self) -> None:
         pass
@@ -353,34 +387,13 @@ class StubDetector:
         return DetectResult(found=False) if obj is None else project(read_state().pose, obj)
 
 
-def inject_detect_fault() -> None:
-    """detect_object's action call for fault injection, in the skill process before it asks the vision service."""
-    if _faults.apply_fault() == "error":
-        raise CameraUnavailable("injected camera fault")
-
-
-def init_dds() -> None:
-    """Stands in for DDS init, which the stub does not need; recorded so dds_init_ms is reported as on the robot."""
-    global _dds_init_s
-    if _dds_init_s is None:
-        _dds_init_s = 0.0
-
-
-def dds_init_ms() -> float | None:
-    return None if _dds_init_s is None else round(_dds_init_s * 1000.0, 3)
-
-
-def get_sport_client() -> StubSportClient:
-    return StubSportClient()
-
-
 def sample_state() -> RobotState:
     """Posture and pose in the real fields; velocity is the running command in the world frame (zero at rest);
     obstacle distances are ray-cast against the stub objects."""
     state = read_state()
     pose = state.pose
     height = BODY_HEIGHT_STANDING_M if state.posture == "standing" else BODY_HEIGHT_SITTING_M
-    vx, vy, vyaw = _command or (0.0, 0.0, 0.0)
+    vx, vy, vyaw = state.command or (0.0, 0.0, 0.0)
     cos, sin = math.cos(pose.yaw), math.sin(pose.yaw)
     return RobotState(
         t=time.time(),

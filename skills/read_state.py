@@ -1,7 +1,7 @@
 """Utility: sample robot state once, with its own DDS on the real backend, not through the robot service
 (skills/docs/robot.md). Not a skill.
 
-``python -m skills.read_state '{}'``. No faults, no watchdog.
+``python -m skills.read_state '{}'``. Stub faults do not apply; no watchdog.
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from __future__ import annotations
 import sys
 import traceback
 
-from skills import backend, policy, runner, stub
+from skills import backend, local, policy, runner
 from skills.runner import SkillOutcome, StateSampler
 from skills.schema import ErrorCode
 
@@ -19,7 +19,6 @@ POLICY = policy.SkillPolicy(name="read_state", timeout=TIMEOUT_S)  # utility: ze
 
 
 def body(states: StateSampler) -> SkillOutcome:
-    stub.disable_faults()  # utilities ignore faults
     runner.parse_params()
     backend.backend_name()  # raises BackendNotConfigured
     try:
@@ -33,7 +32,8 @@ def body(states: StateSampler) -> SkillOutcome:
 
 
 def main() -> None:
-    runner.run_main(POLICY.name, body, watchdog=False, state_source="process")
+    states = StateSampler(reader=local.sample_state, prepare=local.init_dds)
+    runner.run_main(POLICY.name, body, watchdog=False, states=states, setup=local.setup_timing)
 
 
 if __name__ == "__main__":

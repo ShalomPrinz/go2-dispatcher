@@ -21,6 +21,8 @@ from tests.helpers import REPO_ROOT
 pytestmark = pytest.mark.integration
 
 TURN = {"direction": "left", "angle_deg": 30}
+LONG_WALK = {"direction": "forward", "distance_m": 1.0}  # 4.4 s at time scale 1
+STOP_AFTER_S = 1.0  # the walk is moving by then
 DETECT = {"target": "chair"}
 LONG_TIMEOUT_S = 20.0
 LONG_REMAINING_S = 60.0
@@ -120,8 +122,8 @@ def test_hang_timeout(executor, registry):
     assert res.error_code == "timeout" and res.error_message == "killed after 1s timeout"
     assert_group_gone(res.pid)
     assert res.stop_move is not None and res.stop_move.ok
-    assert res.stop_move.reason == "step_timeout"
-    assert res.stop_move.response.state_after.posture == "standing"
+    assert res.stop_move.reason == "step_timeout" and res.stop_move.stop_path == "service"
+    assert res.stop_move.state_after.posture == "standing"
 
 
 def test_kill_current_operator(executor, registry):
@@ -197,9 +199,46 @@ def test_read_state(executor, cfg):
     assert executor.read_state().posture == "standing"
 
 
-def test_stop_move_direct(executor):
+def test_killed_walk_stops_through_the_service(tmp_path, registry):
+    """A kill mid-walk sends the service's stop with the kill; the sim command is cleared (docs/safety.md)."""
+    cfg = make_config(tmp_path, stub={"time_scale": 1.0})  # a walk that is still moving at the kill
+    executor = Executor(cfg, REPO_ROOT)
+    stop_event = threading.Event()
+    threading.Timer(STOP_AFTER_S, stop_event.set).start()
+    try:
+        res = run(executor, registry, "walk", LONG_WALK, stop_event=stop_event)
+    finally:
+        executor.close()
+    assert res.outcome == "interrupted" and not res.service_lost
+    smr = res.stop_move
+    assert (
+        smr is not None
+        and smr.ok
+        and smr.stop_path == "service"
+        and smr.stop_call_ms is not None
+        and not smr.service_lost
+    )
+    assert smr.kill_to_stop_ms is not None and smr.kill_to_stop_ms < 1000.0
+    assert stub.read_state(cfg.stub.state_file).command is None
+
+
+def test_service_hang_falls_back(executor, registry, cfg):
+    """A hung service misses its ping: the service and the skill are killed and the fallback stop runs."""
+    t0 = time.monotonic()
+    res = run(executor, registry, "walk", LONG_WALK, fault="service_hang")
+    assert time.monotonic() - t0 < 5.0  # well before the skill's own reply wait ends
+    assert res.service_lost and res.outcome == "error" and res.error_code == "robot_service_lost"
+    smr = res.stop_move
+    assert smr is not None and smr.ok and smr.stop_path == "fallback" and smr.service_error and smr.service_lost
+    assert executor.robot.pid is None  # killed; the next step or state read starts it again
+    assert stub.read_state(cfg.stub.state_file).command is None
+    assert executor.fresh_state().backend == "stub"
+
+
+def test_stop_move_without_service_falls_back(executor):
     res = executor.stop_move(reason="internal_error")
     assert res.ok and res.reason == "internal_error" and res.exit_code == 0
+    assert res.stop_path == "fallback"
     assert res.response.skill == "stop_move"
     assert executor.kill_current("operator") is False  # never registered as current
 

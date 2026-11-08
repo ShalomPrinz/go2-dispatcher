@@ -85,6 +85,12 @@ type = "protected"                      # skill processes must never load torch,
 protected_modules = ["skills.real_detector", "skills.vision_service"]
 allowed_importers = ["skills.vision_service", "dispatcher.vision", "skills.tests", "tests.integration"]  # dispatcher.vision: lifecycle constants only
 
+[[tool.importlinter.contracts]]
+name = "Skill processes never touch DDS"
+type = "forbidden"                      # they reach the robot only through the robot service (skills/docs/skills.md)
+source_modules = ["skills.walk", "skills.turn", "skills.sit", "skills.stretch", "skills.detect_object", "skills.motion", "skills.runner"]
+forbidden_modules = ["skills.real", "skills.local", "skills.robot_service", "unitree_sdk2py", "cyclonedds"]
+
 [tool.basedpyright]                     # type check: uv run basedpyright (tests/docs/testing.md)
 include = ["dispatcher", "skills", "tests"]
 exclude = ["**/__pycache__", "**/.*"]   # replaces the defaults; .venv and caches sit outside include anyway

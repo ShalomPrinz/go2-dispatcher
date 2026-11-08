@@ -7,6 +7,7 @@ import os
 import sys
 import threading
 import time
+from collections.abc import Callable
 
 from skills.env import PARENT_PID
 
@@ -15,7 +16,6 @@ ORPHAN_GRACE_S = 2.0
 ORPHAN_EXIT_CODE = 137
 
 _saved_stdout_fd: int | None = None
-ORPHANED = False
 _watchdog_started = False
 
 
@@ -61,25 +61,21 @@ def fsync_stdout() -> None:
 # --- orphan watchdog ----------------------------------------------------------
 
 
-def orphaned() -> bool:
-    return ORPHANED
-
-
-def _watchdog(parent_pid: int) -> None:
-    global ORPHANED
+def _watchdog(parent_pid: int, on_orphan: Callable[[], object] | None) -> None:
     while os.getppid() == parent_pid:
         time.sleep(WATCHDOG_POLL_S)
-    ORPHANED = True
     print(f"orphan watchdog: parent {parent_pid} is gone; exiting in {ORPHAN_GRACE_S:g}s", file=sys.stderr, flush=True)
+    if on_orphan is not None:
+        on_orphan()
     time.sleep(ORPHAN_GRACE_S)
     os._exit(ORPHAN_EXIT_CODE)
 
 
-def start_orphan_watchdog() -> None:
+def start_orphan_watchdog(on_orphan: Callable[[], object] | None = None) -> None:
     """Start a daemon thread that polls os.getppid() every 0.2 s. If it differs from
-    int(os.environ["GO2_PARENT_PID"]), set the module flag ORPHANED; if the process is
-    still alive 2.0 s later, os._exit(137). Motion loops check orphaned() each iteration
-    and break (then StopMove). Does nothing if GO2_PARENT_PID is unset (manual runs)."""
+    int(os.environ["GO2_PARENT_PID"]), call ``on_orphan`` (the robot service stops the robot);
+    if the process is still alive 2.0 s later, os._exit(137).
+    Does nothing if GO2_PARENT_PID is unset (manual runs)."""
     global _watchdog_started
     raw = os.environ.get(PARENT_PID, "").strip()
     if not raw or _watchdog_started:
@@ -90,4 +86,4 @@ def start_orphan_watchdog() -> None:
         print(f"orphan watchdog: ignoring invalid {PARENT_PID}={raw!r}", file=sys.stderr)
         return
     _watchdog_started = True
-    threading.Thread(target=_watchdog, args=(parent_pid,), name="orphan-watchdog", daemon=True).start()
+    threading.Thread(target=_watchdog, args=(parent_pid, on_orphan), name="orphan-watchdog", daemon=True).start()

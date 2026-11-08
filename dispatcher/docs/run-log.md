@@ -93,7 +93,18 @@ All `StepResult` fields at the top level, with the step's identity nested under 
 
 ### `stop_move`
 
-All `StopMoveResult` fields: `ok`, `reason` (`operator` / `task_time_limit` / `step_timeout` / `shutdown` / `internal_error` / `state_unavailable`), `duration_ms`, `exit_code`, `response` (its `timing` and `state_after`), `stderr_tail`. It is the only record of a StopMove: written right after the `step_result` of a killed step, and for every StopMove the dispatcher sends itself. If the utility process could not even be started, `ok` is false, `exit_code` and `response` are null, and `stderr_tail` holds `"<ExceptionType>: <message>"` (StopMove never raises).
+All `StopMoveResult` fields, one run of the [stop path](../../docs/safety.md#the-stop-path):
+
+- `ok`, `reason` (`operator` / `task_time_limit` / `step_timeout` / `shutdown` / `internal_error` / `state_unavailable` / `robot_service_lost`).
+- `stop_path`: `service` (the robot service's `stop` answered `stop_sent` with code 0) or `fallback` (the fresh-process `stop_move` ran). Null only when the stop path itself raised (a test fake; the executor never raises).
+- `duration_ms`: the whole stop path, a failed service stop included. `kill_to_stop_ms`: measured by the dispatcher from the skill kill to the confirmed (or failed) stop; null when no step was killed.
+- `stop_call_ms`: the service's `StopMove` call time from `stop_sent`; null on a fallback unless the service answered with a non-zero code.
+- `service_error`: why the fallback ran (`ServiceUnavailable: no reply within 0.5s`, `StopMove returned 3104`, ...); null on the service path.
+- `service_lost`: true when the robot service was lost on this stop (hung, dead or no reply) and was SIGKILLed before the fallback; set on every loss path, whatever `reason` the stop was for (a loss during an operator or timeout stop keeps that `reason`). False on the service path and on a fallback after a non-zero `stop_sent`, where the service is kept.
+- `state_after`: the state after the stop, read through the service on the service path and the utility's `state_after` on the fallback; null if the read failed.
+- Fallback only: `exit_code`, `response` (its `timing`), `stderr_tail`. If the utility process could not even be started, `ok` is false, `exit_code` and `response` are null, and `stderr_tail` holds `"<ExceptionType>: <message>"`.
+
+It is the only record of a stop: written right after the `step_result` of a killed step or of a step during which the robot service was lost, and for every stop the dispatcher sends itself.
 
 ### `exception`
 
@@ -142,7 +153,7 @@ Pick the folder first (`logs/anthropic/real/` for the study), then group its tas
 | Tokens per task | `index.jsonl` `input_tokens` / `output_tokens`, or `task_end.usage_totals` (all numeric usage fields) |
 | Tokens per call | `llm_response.usage` |
 | LLM calls per task | `index.jsonl` `llm_calls` = number of `llm_response` records (schema retries included, infra retries not) |
-| Replanning frequency | count `llm_request` by `return_reason`. Replans are the calls after the first: `failure` (stop-and-report after a failed or rejected step), `checkpoint` (the model asked to review), `plan_complete` (the plan ran out before the task was done). Report `schema_retry` separately: it re-asks the same question after an invalid reply. At horizon 1 every step ends in `plan_complete`, so compare reasons, not just counts |
+| Replanning frequency | count `llm_request` by `return_reason`. Replans are the calls after the first: `failure` (stop-and-report after a failed or rejected step), `checkpoint` (the model asked to review), `plan_complete` (the plan ran out before the task was done), `robot_service_lost` (the robot service was lost, stopped, restarted and read again). Report `schema_retry` separately: it re-asks the same question after an invalid reply. At horizon 1 every step ends in `plan_complete`, so compare reasons, not just counts |
 | LLM latency per call | `llm_response.latency_ms` (successful attempt only) and `total_ms` (including failed attempts and backoff) |
 | Infrastructure retries | `llm_retry` records (`error_type`, `status_code`, `attempt_latency_ms`, `sleep_s`); `llm_response.attempts` |
 | Task latency | `index.jsonl` / `task_end` `duration_ms` |
@@ -150,9 +161,10 @@ Pick the folder first (`logs/anthropic/real/` for the study), then group its tas
 | Invalid replies | `plan_invalid` by `rejection_kind`; horizon rejection rate = `plan_invalid` with `rejection_kind == "horizon"` ÷ `llm_response` records (monitoring rule in [llm.md](llm.md#horizon-rejection)) |
 | Skill wall time | `step_result.duration_ms` (whole subprocess) |
 | Process overhead per step | `step_result.duration_ms − response.timing.total_ms` (interpreter start and teardown outside the skill's own timing) |
-| Stop latency | `dds_init_ms` + `client_init_ms` + `stop_call_ms` (the `StopMove()` call only) from `stop_move.response.timing`, and `stop_move.duration_ms` (whole utility process). Records without `dds_init_ms` use other timing meanings ([skills.md](../../skills/docs/skills.md)) |
+| Stop latency | `stop_move.kill_to_stop_ms` (kill to confirmed stop) by `stop_move.stop_path`. Service path: `stop_call_ms` is the `StopMove()` call in the service. Fallback: `dds_init_ms` + `client_init_ms` + `stop_call_ms` from `stop_move.response.timing`, and `duration_ms` (failed service stop plus the whole utility process). Records without `stop_path` all ran the fresh-process stop and have no `kill_to_stop_ms` ([safety.md](../../docs/safety.md#measured-latency)) |
+| Robot service losses | `stop_move` with `service_lost == true` (`service_error` says why; `reason` is the stop's cause, which is `robot_service_lost` only when the loss itself triggered the stop); tasks ended by one: `outcome == "ROBOT_SERVICE_LOST"` |
 | Motion commanded | `step_start.dispatch.motion_cost`, `task_end.budget_used` |
-| Robot state | `step_result.response.state_before` / `state_after`; `stop_move.response.state_after` ([robot.md](../../skills/docs/robot.md#state-sampling)) |
+| Robot state | `step_result.response.state_before` / `state_after`; `stop_move.state_after` ([robot.md](../../skills/docs/robot.md#state-sampling)) |
 | Exact prompts | `task_start.system_text` / `catalog_text` / `tool_schema` + `llm_request.user_text` |
 | Session continuity | `session_id` links tasks of one process; `task_start.previous_task` shows what carried over |
 | State at task start | `task_start.posture`, `state_age_ms`; failed reads: `task_end.outcome == "STATE_UNAVAILABLE"` and `task_start.state_error` |
@@ -172,6 +184,7 @@ Pick the folder first (`logs/anthropic/real/` for the study), then group its tas
 - **One folder per provider and backend, derived from config.** `{log.dir}/{llm.provider}/{robot.backend}/` keeps research data (`anthropic/real`) physically apart from stub and OpenRouter runs, so an analysis that reads one folder cannot mix them, and the logs of the two providers can keep their native shapes ([llm.md](llm.md#design-decisions)). The folder is computed, never configured, so a run cannot be filed under the wrong combination; `provider` and `backend` are still in every index row and in `task_start.config`, so a file stays self-describing if moved. The lock stays at the root so one process at a time writes anywhere under it. Rejected: one shared folder filtered by index columns, which relies on every analysis remembering the filter; a hand-set `log.dir` per combination, which can be forgotten.
 - **Every line is flushed as it is written**, under a lock, so a crash leaves a usable partial log and lines from the transport thread never interleave.
 - **The exact prompt surface is logged with every task** (system text, catalog, tool schema, registry hash) and the exact user message with every call, so any call can be reconstructed and conditions can be told apart by hash.
+- **`kill_to_stop_ms` is measured by the dispatcher, from the kill to the stop it confirms.** It is the number the safety case needs and the only one that covers both stop paths; the service's `stop_call_ms` and the utility's timing explain its parts. Rejected: deriving it from the parts (the IPC wait, a failed service stop and process start are in none of them).
 - **The return reason is logged on every call.** Without it, horizon 1 would look like constant replanning; with it, `plan_complete` calls can be separated from replans after a failure ([loop-and-context.md](loop-and-context.md#return-reasons)).
 - **Horizon rejections are a `plan_invalid` kind** (`rejection_kind == "horizon"`, with `steps_in_plan` and `horizon`), not a record of their own: one record per invalid reply, and the rate is still a simple filter per condition ([llm.md](llm.md#horizon-rejection)). The two fields are always present (null for other kinds) so every `plan_invalid` has the same keys.
 - **One place per StopMove result**: the `stop_move` record. A killed step's `step_result` does not repeat it; the `stop_move` record follows it directly.

@@ -75,7 +75,7 @@ def build_dispatcher(
     surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
     planner = make_planner(cfg, surface)
     executor = Executor(cfg, cfg.base_dir)
-    executor.robot.start()  # waits for ready; raises RobotServiceError (docs/running.md)
+    executor.start_robot()  # waits for ready, opens the control connection; raises RobotServiceError (docs/running.md)
     try:
         dispatcher = Dispatcher(
             cfg,

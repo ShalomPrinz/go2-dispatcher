@@ -1,9 +1,10 @@
-"""Stub state file, odometry and simulated camera (skills/docs/skills.md)."""
+"""Stub state file, the simulated sport client, odometry and simulated camera (skills/docs/skills.md)."""
 
 from __future__ import annotations
 
 import json
 import math
+import threading
 
 import pytest
 
@@ -19,7 +20,6 @@ def state(tmp_path, monkeypatch):
     monkeypatch.setenv(STUB_STATE_FILE, str(path))
     monkeypatch.setenv(STUB_TIME_SCALE, "0")
     monkeypatch.delenv(STUB_FAULT, raising=False)
-    monkeypatch.setattr(stub, "_command", None)
     return path
 
 
@@ -39,7 +39,9 @@ def test_writers_merge_and_missing_pose_is_origin(state):
     assert stub.read_state(state) == stub.StubState("sitting", stub.Pose())
     stub.write_pose(stub.Pose(1.0, -2.0, 0.25), state)
     stub.write_posture("standing", state)
-    assert json.loads(state.read_text()) == {"posture": "standing", "pose": {"x": 1.0, "y": -2.0, "yaw": 0.25}}
+    stub.write_command((0.1, 0.0, 0.0), state)
+    expected = {"posture": "standing", "pose": {"x": 1.0, "y": -2.0, "yaw": 0.25}, "command": [0.1, 0.0, 0.0]}
+    assert json.loads(state.read_text()) == expected
     state.write_text(json.dumps({"posture": "standing", "pose": {"x": 1.0}}))
     with pytest.raises(ValueError, match="invalid stub state file"):
         stub.read_state(state)
@@ -56,28 +58,36 @@ def test_advance_body_frame():
     assert (p.x, p.y, p.yaw) == pytest.approx((1.0, 1.0, math.pi / 2))
 
 
-def test_move_sleep_stop_integrates_and_samples_pose(state):
-    client = stub.get_sport_client()
-    assert client.Move(0.5, 0.0, 0.0) == 0
-    stub.sleep(2.0)  # unscaled seconds drive the pose
+def test_move_wait_stop_integrates_and_samples_pose(state):
+    sim, abort = stub.SimRobot(), threading.Event()
+    assert sim.Move(0.5, 0.0, 0.0) == 0
+    sim.wait(2.0, abort)  # unscaled seconds drive the pose
     moving = stub.sample_state()
     assert moving.velocity == pytest.approx([0.5, 0.0, 0.0])
-    assert client.StopMove() == 0
-    stub.sleep(5.0)
+    assert stub.SimRobot().StopMove() == 0  # another process's client: the command lives in the state file
+    sim.wait(5.0, abort)
     at_rest = stub.sample_state()
     assert at_rest.position == pytest.approx([1.0, 0.0, stub.BODY_HEIGHT_STANDING_M])
     assert (at_rest.velocity, at_rest.yaw_speed, at_rest.imu_rpy) == ([0.0, 0.0, 0.0], 0.0, [0.0, 0.0, 0.0])
     assert (at_rest.mode, at_rest.gait_type, at_rest.foot_force) == (None, None, None)
     stub.write_pose(stub.Pose(0.0, 0.0, math.pi / 2), state)
-    assert client.Move(0.5, 0.0, 0.0) == 0
+    assert sim.Move(0.5, 0.0, 0.0) == 0
     assert stub.sample_state().velocity == pytest.approx([0.0, 0.5, 0.0])  # body-frame command in the world frame
 
 
 def test_move_while_sitting_stores_no_command(state):
     stub.reset("sitting", state)
-    assert stub.get_sport_client().Move(0.5, 0.0, 0.0) == stub.STUB_ERR_NOT_STANDING
-    stub.sleep(2.0)
-    assert stub.read_state(state).pose == stub.Pose()
+    sim = stub.SimRobot()
+    assert sim.Move(0.5, 0.0, 0.0) == stub.STUB_ERR_NOT_STANDING
+    sim.wait(2.0, threading.Event())
+    assert stub.read_state(state) == stub.StubState("sitting", stub.Pose())
+
+
+def test_stand_down_clears_the_command(state):
+    sim = stub.SimRobot()
+    assert sim.Move(0.5, 0.0, 0.0) == 0 and sim.StandDown() == 0
+    assert stub.read_state(state) == stub.StubState("sitting", stub.Pose())
+    assert sim.Stretch() == stub.STUB_ERR_NOT_STANDING
 
 
 BOTTLE_HEIGHT_M = 0.25

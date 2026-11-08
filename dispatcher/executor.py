@@ -1,10 +1,11 @@
-"""Executor: one subprocess per skill call, timeouts, kill, StopMove (docs/safety.md); owns the vision and robot
-services (docs/running.md)."""
+"""Executor: one subprocess per skill call under a robot service lease, timeouts, kill, the stop path with its
+fallback, robot service loss (docs/safety.md); owns the vision and robot services (docs/running.md)."""
 
 from __future__ import annotations
 
 import json
 import os
+import secrets
 import signal
 import subprocess
 import sys
@@ -21,10 +22,11 @@ from skills import read_state as read_state_utility
 from skills import stop_move as stop_move_utility
 from skills.env import child_env, robot_socket_path
 from skills.policy import SkillPolicy
+from skills.robot_ipc import MAX_TIMEOUT_S, Refused, RobotClient, ServiceUnavailable
 
 from . import prompts
 from .config import SECRET_ENV, Config
-from .models import RobotState, SkillResponse, StopCause, StopMoveResult
+from .models import RobotServiceError, RobotState, SkillResponse, StateReadError, StopCause, StopMoveResult
 from .registry import SkillDescriptor
 from .robot import RobotService, StateStream
 from .robot import log_path as robot_log_path
@@ -34,6 +36,10 @@ from .vision import log_path as vision_log_path
 POLL_INTERVAL_S = 0.05  # wait-loop poll period (docs/safety.md)
 READER_JOIN_TIMEOUT_S = 2.0  # join timeout per reader thread (docs/safety.md)
 STDERR_TAIL_CHARS = 2000  # stderr kept for the log (skills/docs/skills.md)
+STOP_WAIT_S = 0.5  # wait for stop_sent or pong before the service counts as lost (tunable, docs/safety.md)
+LIVENESS_PERIOD_S = 0.5  # ping period on the control connection while a step runs (tunable, docs/safety.md)
+
+_SERVICE_ERRORS = (RobotServiceError, ServiceUnavailable, Refused)  # the control connection cannot be used
 
 _RESPONSE_ADAPTER = TypeAdapter(SkillResponse)  # built once; validates the stdlib dataclass
 
@@ -52,6 +58,7 @@ class ExecResult(BaseModel):
     error_code: str | None = None
     error_message: str | None = None
     stop_move: StopMoveResult | None = None
+    service_lost: bool = False  # the robot service was lost during the step and killed (docs/safety.md)
 
 
 class SkillExecutor(Protocol):
@@ -70,10 +77,13 @@ class SkillExecutor(Protocol):
 
     def kill_current(self, cause: StopCause) -> bool: ...
 
-    def stop_move(self, reason: StopCause) -> StopMoveResult: ...
+    def stop_move(self, reason: StopCause) -> StopMoveResult:
+        """The stop path: the service's ``stop``, else the fallback ``stop_move`` process; never raises."""
+        ...
 
     def fresh_state(self) -> RobotState:
-        """The latest state through the robot service; raises ``robot.StateReadError``."""
+        """The latest state through the robot service, starting a dead service first; raises
+        ``models.StateReadError``."""
         ...
 
     def state_stream(self, path: Path, t_start: float) -> StreamHandle:
@@ -160,6 +170,10 @@ def _ms(t0: float) -> float:
     return (time.monotonic() - t0) * 1000.0
 
 
+def _error_text(e: BaseException) -> str:
+    return f"{type(e).__name__}: {e}"
+
+
 class Executor:
     def __init__(self, cfg: Config, base_dir: Path):
         self.cfg = cfg
@@ -167,6 +181,9 @@ class Executor:
         self._lock = threading.Lock()
         self._current: subprocess.Popen | None = None
         self._kill_cause: StopCause | None = None
+        self._kill_mono: float | None = None  # when the current process was killed
+        self._control_lock = threading.Lock()  # one user of the control connection at a time
+        self._client: RobotClient | None = None  # the control connection (skills/docs/skills.md)
         self.vision = VisionService(self.base_dir, vision_log_path(cfg.log.dir), lambda: self._env(None))
         self.robot = RobotService(
             self.base_dir, robot_log_path(cfg.log.dir), robot_socket_path(cfg.log.dir), lambda: self._env(None)
@@ -174,7 +191,7 @@ class Executor:
 
     # --- environment and process start (skills/docs/skills.md) ----------------------------------
 
-    def _env(self, fault: str | None) -> dict[str, str]:
+    def _env(self, fault: str | None, lease_token: str | None = None) -> dict[str, str]:
         return child_env(
             {k: v for k, v in os.environ.items() if k not in SECRET_ENV},
             backend=self.cfg.robot.backend,
@@ -186,6 +203,7 @@ class Executor:
             parent_pid=os.getpid(),
             log_dir=self.cfg.log.dir,
             fault=fault,
+            lease_token=lease_token,
         )
 
     def _popen(self, module: str, params: dict, env: dict[str, str]) -> subprocess.Popen:
@@ -212,13 +230,19 @@ class Executor:
             if proc.poll() is not None:
                 return False
             self._kill_cause = StopCause(cause)
+            self._kill_mono = time.monotonic()
             _killpg(proc.pid)
             return True
 
-    def _release_locked(self) -> StopCause | None:
-        """Clear the current process (caller holds the lock); returns why it was killed, if it was."""
-        cause, self._current, self._kill_cause = self._kill_cause, None, None
-        return cause
+    def _killed_locked(self) -> tuple[StopCause | None, float | None]:
+        """Why and when the current process was killed, if it was (caller holds the lock)."""
+        return self._kill_cause, self._kill_mono
+
+    def _release_locked(self) -> tuple[StopCause | None, float | None]:
+        """Clear the current process (caller holds the lock); returns why and when it was killed, if it was."""
+        released = self._killed_locked()
+        self._current, self._kill_cause, self._kill_mono = None, None, None
+        return released
 
     def kill_current(self, cause: StopCause) -> bool:
         """Kill the running skill process, if any; returns whether one was killed."""
@@ -243,26 +267,58 @@ class Executor:
         if needs_vision(skill):  # the wait counts against the task, not the step
             remaining_task_s -= self.vision.ensure_ready(stop_event, remaining_task_s)
         t0 = time.monotonic()
-        proc = self._popen(skill.entrypoint, params, self._env(fault))
+        token = secrets.token_hex(16)
+        try:
+            with self._control_lock:
+                self._control(start=True).arm(token, min(timeout_s, MAX_TIMEOUT_S))
+        except _SERVICE_ERRORS as e:
+            stop = self._fallback(StopCause.ROBOT_SERVICE_LOST, t0, None, service_error=_error_text(e), lose=True)
+            return self._not_started(stop, duration_ms=_ms(t0))
+        proc = self._popen(skill.entrypoint, params, self._env(fault, lease_token=token))
         readers = _Readers(proc)
         with self._lock:
             self._current = proc
             self._kill_cause = None
+            self._kill_mono = None
 
+        lost: str | None = None  # why the service counts as lost, once it does
+        stop: StopMoveResult | None = None
+        service_lost = False
+        next_ping = t0 + LIVENESS_PERIOD_S
         while True:
             with self._lock:
                 rc = proc.poll()
-                if rc is not None:
-                    cause = self._release_locked()
-                    break
-            elapsed = time.monotonic() - t0
-            if stop_event.is_set():
+                cause, kill_mono = self._killed_locked()
+            if cause is not None and stop is None:  # stop now, in parallel with the SIGKILL (docs/safety.md)
+                stop, service_lost = self._stop_after_kill(cause, kill_mono, lost)
+            if rc is not None:
+                with self._lock:
+                    self._release_locked()
+                break
+            now = time.monotonic()
+            elapsed = now - t0
+            if cause is not None:
+                pass  # killed and stopped: wait for the exit
+            elif now >= next_ping:
+                next_ping = now + LIVENESS_PERIOD_S
+                lost = self._ping()
+                if lost is not None:  # SIGKILL the service and the skill, then the fallback stop above
+                    self.robot.kill()
+                    self._kill_locked(proc, StopCause.ROBOT_SERVICE_LOST)
+            elif stop_event.is_set():
                 self._kill_locked(proc, StopCause.OPERATOR)
             elif elapsed >= remaining_task_s:
                 self._kill_locked(proc, StopCause.TASK_TIME_LIMIT)
             elif elapsed >= timeout_s:
                 self._kill_locked(proc, StopCause.STEP_TIMEOUT)
             time.sleep(POLL_INTERVAL_S)
+
+        if stop is None and lost is not None:  # lost after the skill had exited: nothing was killed
+            stop = self._fallback(StopCause.ROBOT_SERVICE_LOST, time.monotonic(), None, service_error=lost, lose=True)
+            service_lost = True
+        elif stop is None and (lost := self._disarm()) is not None:
+            stop = self._fallback(StopCause.ROBOT_SERVICE_LOST, time.monotonic(), None, service_error=lost, lose=True)
+            service_lost = True
         readers.join()
         duration_ms = _ms(t0)
 
@@ -270,10 +326,11 @@ class Executor:
 
         outcome: ExecOutcome
         interrupt_cause: StopCause | None = None
-        stop: StopMoveResult | None = None
-        if cause is not None:
+        if cause == StopCause.ROBOT_SERVICE_LOST:
+            outcome, error_code = "error", StopCause.ROBOT_SERVICE_LOST.value
+            error_message = prompts.KILL_ROBOT_SERVICE_LOST
+        elif cause is not None:
             outcome, error_code, template = cause.kill
-            stop = self.stop_move(reason=cause)
             interrupt_cause = cause if outcome == "interrupted" else None
             error_message = template.format(timeout_s=timeout_s)
         elif response is None:
@@ -289,11 +346,24 @@ class Executor:
             error_code=error_code,
             error_message=error_message,
             stop_move=stop,
+            service_lost=service_lost,
             exit_code=rc,
             pid=proc.pid,
             duration_ms=duration_ms,
             stderr_tail=readers.stderr_tail,
             response=response,
+        )
+
+    @staticmethod
+    def _not_started(stop: StopMoveResult, *, duration_ms: float) -> ExecResult:
+        """A step that never started because the service could not be armed."""
+        return ExecResult(
+            outcome="error",
+            error_code=StopCause.ROBOT_SERVICE_LOST.value,
+            error_message=prompts.KILL_ROBOT_SERVICE_LOST,
+            stop_move=stop,
+            service_lost=True,
+            duration_ms=duration_ms,
         )
 
     # --- utilities (docs/safety.md) ------------------------------------------------------------
@@ -314,27 +384,135 @@ class Executor:
         tail = _stderr_tail(err)
         return proc.returncode, response, tail, duration_ms
 
+    # --- stop path (docs/safety.md) ----------------------------------------------------------
+
+    def _stop_after_kill(
+        self, cause: StopCause, kill_mono: float | None, lost: str | None
+    ) -> tuple[StopMoveResult, bool]:
+        """The stop for a killed skill: the fallback when the service is already lost, else the service's ``stop``."""
+        if lost is not None:
+            t_lost = kill_mono if kill_mono is not None else time.monotonic()
+            return self._fallback(StopCause.ROBOT_SERVICE_LOST, t_lost, kill_mono, service_error=lost, lose=True), True
+        return self._stop(cause, kill_mono)
+
     def stop_move(self, reason: StopCause) -> StopMoveResult:
-        """Never raises: any failure is returned as ``ok=False`` with the error in stderr_tail."""
+        return self._stop(reason, None)[0]
+
+    def _stop(self, reason: StopCause, kill_mono: float | None) -> tuple[StopMoveResult, bool]:
+        """The service's ``stop``; the fallback when no ``stop_sent`` arrives in STOP_WAIT_S or StopMove failed.
+        Returns the result and whether the service was lost (and killed)."""
         t0 = time.monotonic()
         try:
-            rc, response, tail, duration_ms = self._run_utility(stop_move_utility)
-        except Exception as e:  # noqa: BLE001 - the stop path must not raise (docs/safety.md)
-            return StopMoveResult(
-                ok=False,
-                reason=reason,
-                duration_ms=_ms(t0),
-                stderr_tail=_stderr_tail(f"{type(e).__name__}: {e}"),
-            )
-        ok = response is not None and response.status == "ok"
-        return StopMoveResult(
-            ok=ok, reason=reason, duration_ms=duration_ms, exit_code=rc, response=response, stderr_tail=tail
+            with self._control_lock:
+                sent = self._control(start=False).stop(STOP_WAIT_S)
+        except _SERVICE_ERRORS as e:
+            return self._fallback(reason, t0, kill_mono, service_error=_error_text(e), lose=True), True
+        if sent.ret != 0:  # the service answered but its StopMove failed: the fallback has its own DDS
+            error = f"StopMove returned {sent.ret}"
+            smr = self._fallback(reason, t0, kill_mono, service_error=error, stop_call_ms=sent.stop_call_ms, lose=False)
+            return smr, False
+        kill_to_stop_ms = _ms(kill_mono) if kill_mono is not None else None
+        duration_ms = _ms(t0)
+        smr = StopMoveResult(
+            ok=True,
+            reason=reason,
+            stop_path="service",
+            duration_ms=duration_ms,
+            kill_to_stop_ms=kill_to_stop_ms,
+            stop_call_ms=sent.stop_call_ms,
+            state_after=self._state_after(),
         )
+        return smr, False
+
+    def _fallback(
+        self,
+        reason: StopCause,
+        t0: float,
+        kill_mono: float | None,
+        *,
+        service_error: str,
+        stop_call_ms: float | None = None,
+        lose: bool,
+    ) -> StopMoveResult:
+        """The fresh-process ``stop_move``; with ``lose``, first close the control connection and SIGKILL the
+        service. Never raises: any failure is ``ok=False`` with the error in stderr_tail."""
+        if lose:
+            self._close_control()
+            self.robot.kill()
+        try:
+            rc, response, tail, _ = self._run_utility(stop_move_utility)
+        except Exception as e:  # noqa: BLE001 - the stop path must not raise (docs/safety.md)
+            rc, response, tail = None, None, _stderr_tail(_error_text(e))
+        return StopMoveResult(
+            ok=response is not None and response.status == "ok",
+            reason=reason,
+            stop_path="fallback",
+            duration_ms=_ms(t0),
+            kill_to_stop_ms=_ms(kill_mono) if kill_mono is not None else None,
+            stop_call_ms=stop_call_ms,
+            service_error=service_error,
+            service_lost=lose,
+            state_after=response.state_after if response is not None else None,
+            exit_code=rc,
+            response=response,
+            stderr_tail=tail,
+        )
+
+    def _state_after(self) -> RobotState | None:
+        try:
+            return self.robot.read_state()
+        except StateReadError:
+            return None
 
     def read_state(self) -> RobotState | None:
         """The ``read_state`` utility's state, read with its own DDS, not through the robot service (diagnosis)."""
         _, response, _, _ = self._run_utility(read_state_utility)
         return response.state_after if response is not None else None
+
+    # --- control connection (skills/docs/skills.md) -------------------------------------------
+
+    def start_robot(self) -> None:
+        """Start the robot service and open the control connection; raises RobotServiceError."""
+        try:
+            with self._control_lock:
+                self._control(start=True)
+        except (ServiceUnavailable, Refused) as e:
+            raise RobotServiceError(f"Robot service control connection failed: {_error_text(e)}") from None
+
+    def _control(self, *, start: bool) -> RobotClient:
+        """The control connection, opened if needed (caller holds _control_lock); with ``start``, a dead service
+        is started first. Raises RobotServiceError, ServiceUnavailable or Refused."""
+        if self._client is None:
+            if start:
+                self.robot.start()
+            elif self.robot.pid is None:
+                raise RobotServiceError("Robot service not running.")
+            self._client = RobotClient.connect(self.robot.socket_path, control=True)
+        return self._client
+
+    def _ping(self) -> str | None:
+        """None if the service answers within STOP_WAIT_S, else why not."""
+        try:
+            with self._control_lock:
+                self._control(start=False).ping(STOP_WAIT_S)
+        except _SERVICE_ERRORS as e:
+            return _error_text(e)
+        return None
+
+    def _disarm(self) -> str | None:
+        """End the step's lease; None on success, else why the service counts as lost."""
+        try:
+            with self._control_lock:
+                self._control(start=False).disarm()
+        except _SERVICE_ERRORS as e:
+            return _error_text(e)
+        return None
+
+    def _close_control(self) -> None:
+        with self._control_lock:
+            client, self._client = self._client, None
+        if client is not None:
+            client.close()  # the service sends StopMove when the control connection closes
 
     # --- robot service (docs/running.md) ----------------------------------------------------------
 
@@ -345,6 +523,7 @@ class Executor:
         return StateStream(self.robot.socket_path, path, t_start)
 
     def close(self) -> None:
-        """Stop the vision and robot services (docs/running.md); idempotent."""
+        """Close the control connection, stop the vision and robot services (docs/running.md); idempotent."""
+        self._close_control()
         self.vision.stop()
         self.robot.stop()

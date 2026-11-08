@@ -62,14 +62,15 @@ def test_error_code_serialises_as_plain_string():
 def test_run_skill_keeps_state_sampled_before_an_exception(monkeypatch):
     """The state taken before the body raised survives into the error response."""
     state = RobotState(t=1.0, backend="stub", posture="standing", body_height=0.32)
-    monkeypatch.setattr(robot_ipc.ServiceStateReader, "__call__", lambda self: state)
+    monkeypatch.setattr(robot_ipc.session, "read_state", lambda: state)
+    monkeypatch.setattr(robot_ipc.session, "client", lambda: None)  # connected
     monkeypatch.setenv(env.BACKEND, "stub")
     monkeypatch.setattr(process, "capture_stdout", lambda: None)
     monkeypatch.setattr(sys, "argv", ["walk", "{}"])
     sent = []
 
-    def emit(*args):
-        sent.append(runner.build_response(*args))
+    def emit(skill, outcome, states, total_ms, setup):
+        sent.append(runner.build_response(skill, outcome, states, total_ms, setup=setup))
         raise SystemExit
 
     def body(params):
@@ -86,11 +87,12 @@ def test_run_skill_keeps_state_sampled_before_an_exception(monkeypatch):
 
 def test_state_ms_excludes_dds_init(monkeypatch):
     """A utility's own DDS init before its first sample is reported as dds_init_ms, not in state_ms."""
-    monkeypatch.setattr(backend, "init_dds", lambda: time.sleep(0.05))
-    monkeypatch.setattr(backend, "sample_state", lambda: None)
-    states = StateSampler(source="process")
+    monkeypatch.setenv(env.BACKEND, "stub")
+    states = StateSampler(
+        reader=lambda: RobotState(t=0.0, backend="stub", posture="standing"), prepare=lambda: time.sleep(0.05)
+    )
     states.take("before")
-    assert states.used and states.seconds < 0.05
+    assert states.used and states.seconds < 0.05 and states.before is not None
 
 
 def test_capture_stdout_keeps_junk_off_the_response_line(tmp_path, monkeypatch):

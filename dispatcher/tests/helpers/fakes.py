@@ -92,12 +92,13 @@ def exec_result(
 def stop_move_result(
     reason: StopCause = StopCause.OPERATOR, *, ok: bool = True, posture: Posture | None = None
 ) -> StopMoveResult:
-    response = None
-    if posture is not None:
-        response = SkillResponse(
-            schema_version=SCHEMA_VERSION, skill="stop_move", status="ok", state_after=state(posture)
-        )
-    return StopMoveResult(ok=ok, reason=reason, duration_ms=1.0, exit_code=0 if ok else 1, response=response)
+    """A service stop when ``ok``, else a failed fallback."""
+    after = state(posture) if posture is not None else None
+    if ok:
+        return StopMoveResult(ok=True, reason=reason, stop_path="service", duration_ms=1.0, state_after=after)
+    return StopMoveResult(
+        ok=False, reason=reason, stop_path="fallback", duration_ms=1.0, exit_code=1, state_after=after
+    )
 
 
 class FakeStream:

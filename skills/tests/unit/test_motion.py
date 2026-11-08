@@ -1,16 +1,17 @@
-"""SDK-calling skill code in process with a fake sport client: the motion loop, single
-actions and the stop_move utility (skills/docs/skills.md, docs/safety.md). The stub's faults
-only fail the first SDK call, so the mid-loop and cleanup paths are covered here."""
+"""Motion in process with a fake sport client: the robot service's move loop and actions, the skills' mapping of
+primitive replies to outcomes, and the stop_move utility (skills/docs/skills.md, docs/safety.md). The stub's
+faults only fail the first call, so the mid-loop and cleanup paths are covered here. The lease is tested in
+test_robot_service.py."""
 
 from __future__ import annotations
 
 import sys
+import threading
 
 import pytest
 
-from skills import backend, motion, process, runner, stop_move
-
-PERIOD = 0.1
+from skills import backend, local, motion, process, robot_ipc, robot_service, runner, stop_move
+from skills.robot_ipc import MoveResult
 
 
 class FakeClient:
@@ -40,81 +41,133 @@ class FakeClient:
         self.calls.append("StandDown")
         return self.stand_down
 
+    def Stretch(self):
+        self.calls.append("Stretch")
+        return 0
+
+
+def run_job(client: FakeClient, run) -> dict:
+    """Run one primitive on the service's motion loop with an instant clock; returns its reply."""
+    m = robot_service.Motion(client, lambda s, abort: None, sim=False)
+    threading.Thread(target=m._loop, daemon=True).start()
+    job = robot_service.Job(run=run(m))
+    m._jobs.put(job)
+    assert job.done.wait(5)
+    assert job.reply is not None
+    return job.reply
+
+
+# --- the service's move loop -----------------------------------------------------------
+
+
+@pytest.mark.parametrize("stop, stop_ret", [(0, 0), (5, 5), (RuntimeError("x"), None)], ids=["ok", "fails", "raises"])
+def test_move_fails_mid_loop_then_stops(stop, stop_ret):
+    client = FakeClient(move=[0, 0, 7], stop=stop)
+    reply = run_job(client, lambda m: m.move(0.3, 0, 0, 1.0, None))
+    assert (reply["op"], reply["duration_s"], reply["move_ret"], reply["stop_ret"]) == ("move", 0.2, 7, stop_ret)
+    assert client.calls == ["Move"] * 3 + ["StopMove"]
+
+
+def test_move_runs_its_duration_then_stops():
+    client = FakeClient()
+    reply = run_job(client, lambda m: m.move(0.3, 0, 0, 0.3, None))
+    assert (reply["duration_s"], reply["move_ret"], reply["stop_ret"]) == (0.3, 0, 0)
+    assert client.calls == ["Move"] * 3 + ["StopMove"]
+
+
+def test_move_raises_still_stops():
+    client = FakeClient(move=[0, ValueError("dds down")])
+    reply = run_job(client, lambda m: m.move(0.3, 0, 0, 1.0, None))
+    assert reply["error"] == {"code": robot_ipc.ERR_SDK_EXCEPTION, "message": "ValueError: dds down"}
+    assert client.calls == ["Move", "Move", "StopMove"]
+
+
+def test_action_returns_its_code():
+    client = FakeClient(stand_down=3)
+    assert run_job(client, lambda m: m.action("StandDown", None))["ret"] == 3
+    assert client.calls == ["StandDown"]
+
+
+# --- the skills' side ---------------------------------------------------------------------
+
+
+class FakeSession:
+    def __init__(self, reply):
+        self.reply = reply
+        self.dropped = False
+
+    def client(self):
+        return self
+
+    def drop(self):
+        self.dropped = True
+
+    def move(self, *args, **kwargs):
+        if isinstance(self.reply, BaseException):
+            raise self.reply
+        return self.reply
+
+    def action(self, *args, **kwargs):
+        return self.move()
+
 
 @pytest.fixture
-def sdk(monkeypatch):
-    """Install a FakeClient (returned by ``sdk(client)``) and record backend sleeps."""
+def session(monkeypatch):
+    """Install a FakeSession answering ``reply``; record backend sleeps."""
     sleeps: list[float] = []
+    monkeypatch.setenv("GO2_BACKEND", "real")  # no stub faults
     monkeypatch.setattr(backend, "sleep", sleeps.append)
-    monkeypatch.setattr(backend, "init_dds", lambda: None)
-    monkeypatch.setattr(process, "ORPHANED", False)
 
-    def install(client):
-        monkeypatch.setattr(backend, "get_sport_client", lambda: client)
-        return sleeps
+    def install(reply):
+        fake = FakeSession(reply)
+        monkeypatch.setattr(robot_ipc, "session", fake)
+        return fake, sleeps
 
     return install
 
 
-# --- move_loop -----------------------------------------------------------------------
+@pytest.mark.parametrize(
+    "result, code, message, sdk_ret",
+    [
+        (MoveResult(2.0, 0, 0), None, None, 0),
+        (MoveResult(0.2, 7, 5), "sdk_error", "Move returned 7; StopMove returned 5", 7),
+        (MoveResult(0.3, 0, 4), "sdk_error", "StopMove returned 4", 4),
+    ],
+    ids=["ok", "move_fails", "stop_fails"],
+)
+def test_move_outcome(session, result, code, message, sdk_ret):
+    session(result)
+    o = motion.move(motion.Velocity(0.3, 0, 0), 2.0)
+    assert (o.error_code, o.error_message) == (code, message)
+    assert o.observations == {"duration_s": result.duration_s, "sdk_ret": sdk_ret}
 
 
-@pytest.mark.parametrize("stop, suffix", [(0, ""), (5, "; StopMove returned 5")], ids=["stop_ok", "stop_fails"])
-def test_move_fails_mid_loop(sdk, stop, suffix):
-    client = FakeClient(move=[0, 0, 7], stop=stop)
-    sdk(client)
-    o = motion.move_loop(motion.Velocity(0.3, 0, 0), 1.0, period_s=PERIOD)
-    assert (o.status, o.error_code, o.error_message) == ("error", "sdk_error", "Move returned 7" + suffix)
-    assert o.observations == {"duration_s": round(2 * PERIOD, 3), "sdk_ret": 7}
-    assert client.calls == ["Move"] * 3 + ["StopMove"]
-
-
-def test_final_stop_move_fails(sdk):
-    client = FakeClient(stop=4)
-    sdk(client)
-    o = motion.move_loop(motion.Velocity(0.3, 0, 0), 0.3, period_s=PERIOD)
-    assert (o.status, o.error_code, o.error_message) == ("error", "sdk_error", "StopMove returned 4")
-    assert o.observations == {"duration_s": round(3 * PERIOD, 3), "sdk_ret": 4}
-    assert client.calls == ["Move"] * 3 + ["StopMove"]
-
-
-@pytest.mark.parametrize("stop", [0, RuntimeError("stop broke")], ids=["stop_ok", "stop_raises"])
-def test_move_raises_still_stops(sdk, stop):
-    """The Move exception propagates; _safe_stop swallows a second one from StopMove."""
-    client = FakeClient(move=[0, ValueError("dds down")], stop=stop)
-    sdk(client)
-    with pytest.raises(ValueError, match="dds down"):
-        motion.move_loop(motion.Velocity(0.3, 0, 0), 1.0, period_s=PERIOD)
-    assert client.calls == ["Move", "Move", "StopMove"]
-
-
-def test_orphaned_breaks_and_stops(sdk, monkeypatch):
-    client = FakeClient()
-    sdk(client)
-    monkeypatch.setattr(process, "ORPHANED", True)
-    o = motion.move_loop(motion.Velocity(0.3, 0, 0), 1.0, period_s=PERIOD)
-    assert (o.status, o.error_code) == ("ok", None)
-    assert o.observations == {"orphaned": True, "duration_s": 0.0, "sdk_ret": 0}
-    assert client.calls == ["StopMove"]
-
-
-# --- single_action ---------------------------------------------------------------------
-
-
-def test_single_action_failure_skips_settle(sdk):
-    sleeps = sdk(FakeClient(stand_down=3))
+@pytest.mark.parametrize(
+    "error, code, message",
+    [
+        (robot_ipc.Refused("no_lease", "no lease is armed"), "motion_rejected", "no_lease: no lease is armed"),
+        (robot_ipc.Refused("sdk_exception", "ValueError: x"), "exception", "ValueError: x"),
+        (robot_ipc.ServiceUnavailable("gone"), "robot_unavailable", "ServiceUnavailable: gone"),
+    ],
+    ids=["no_lease", "sdk_exception", "unavailable"],
+)
+def test_refused_primitive_drops_the_connection(session, error, code, message):
+    fake, _ = session(error)
     o = motion.single_action("StandDown", 2.0)
-    assert (o.status, o.observations, o.error_code, o.error_message) == (
-        "error",
-        {"sdk_ret": 3},
+    assert (o.status, o.error_code, o.error_message) == ("error", code, message)
+    assert fake.dropped
+
+
+def test_single_action_settles_only_on_success(session):
+    _, sleeps = session(3)
+    o = motion.single_action("StandDown", 2.0)
+    assert (o.error_code, o.error_message, o.observations, sleeps) == (
         "sdk_error",
         "StandDown returned 3",
+        {"sdk_ret": 3},
+        [],
     )
-    assert sleeps == []
-
-
-def test_single_action_ok_settles(sdk):
-    sleeps = sdk(FakeClient())
+    _, sleeps = session(0)
     assert motion.single_action("StandDown", 2.0).status == "ok" and sleeps == [2.0]
 
 
@@ -126,25 +179,27 @@ class Emitted(Exception):
 
 
 @pytest.fixture
-def run_stop_move(sdk, monkeypatch):
-    """Run stop_move.main() in process; returns the SkillResponse it would emit."""
+def run_stop_move(monkeypatch):
+    """Run stop_move.main() in process with its own fake sport client; returns the SkillResponse it would emit."""
 
     def run(argv, client, state=None):
-        sdk(client)
-
         def sample():
             if isinstance(state, BaseException):
                 raise state
             return state or {"posture": "standing"}
 
-        monkeypatch.setattr(backend, "sample_state", sample)
-        monkeypatch.setattr(backend, "dds_init_ms", lambda: 1.0)
+        monkeypatch.setenv("GO2_BACKEND", "stub")
+        monkeypatch.setattr(backend, "sleep", lambda s: None)
+        monkeypatch.setattr(local, "init_dds", lambda: None)
+        monkeypatch.setattr(local, "sport_client", lambda: client)
+        monkeypatch.setattr(local, "sample_state", sample)
+        monkeypatch.setattr(local, "setup_timing", lambda: {"dds_init_ms": 1.0})
         monkeypatch.setattr(process, "capture_stdout", lambda: None)
         monkeypatch.setattr(sys, "argv", ["stop_move", *argv])
         emitted = []
 
-        def emit(skill, outcome, states, total_ms):
-            emitted.append(runner.build_response(skill, outcome, states, total_ms, dds_init_ms=backend.dds_init_ms()))
+        def emit(skill, outcome, states, total_ms, setup):
+            emitted.append(runner.build_response(skill, outcome, states, total_ms, setup=setup))
             raise Emitted
 
         monkeypatch.setattr(runner, "emit", emit)
