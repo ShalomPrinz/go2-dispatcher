@@ -270,7 +270,7 @@ class Executor:
         token = secrets.token_hex(16)
         try:
             with self._control_lock:
-                self._control(start=True).arm(token, min(timeout_s, MAX_TIMEOUT_S))
+                self._control().arm(token, min(timeout_s, MAX_TIMEOUT_S))
         except _SERVICE_ERRORS as e:
             stop = self._fallback(StopCause.ROBOT_SERVICE_LOST, t0, None, service_error=_error_text(e), lose=True)
             return self._not_started(stop, duration_ms=_ms(t0))
@@ -404,7 +404,7 @@ class Executor:
         t0 = time.monotonic()
         try:
             with self._control_lock:
-                sent = self._control(start=False).stop(STOP_WAIT_S)
+                sent = self._control().stop(STOP_WAIT_S)
         except _SERVICE_ERRORS as e:
             return self._fallback(reason, t0, kill_mono, service_error=_error_text(e), lose=True), True
         if sent.ret != 0:  # the service answered but its StopMove failed: the fallback has its own DDS
@@ -474,18 +474,17 @@ class Executor:
     def start_robot(self) -> None:
         """Start the robot service and open the control connection; raises RobotServiceError."""
         try:
+            self.robot.start()
             with self._control_lock:
-                self._control(start=True)
+                self._control()
         except (ServiceUnavailable, Refused) as e:
             raise RobotServiceError(f"Robot service control connection failed: {_error_text(e)}") from None
 
-    def _control(self, *, start: bool) -> RobotClient:
-        """The control connection, opened if needed (caller holds _control_lock); with ``start``, a dead service
-        is started first. Raises RobotServiceError, ServiceUnavailable or Refused."""
+    def _control(self) -> RobotClient:
+        """The control connection, opened if needed (caller holds _control_lock); it never starts the service.
+        Raises RobotServiceError, ServiceUnavailable or Refused."""
         if self._client is None:
-            if start:
-                self.robot.start()
-            elif self.robot.pid is None:
+            if self.robot.pid is None:
                 raise RobotServiceError("Robot service not running.")
             self._client = RobotClient.connect(self.robot.socket_path, control=True)
         return self._client
@@ -494,7 +493,7 @@ class Executor:
         """None if the service answers within STOP_WAIT_S, else why not."""
         try:
             with self._control_lock:
-                self._control(start=False).ping(STOP_WAIT_S)
+                self._control().ping(STOP_WAIT_S)
         except _SERVICE_ERRORS as e:
             return _error_text(e)
         return None
@@ -503,7 +502,7 @@ class Executor:
         """End the step's lease; None on success, else why the service counts as lost."""
         try:
             with self._control_lock:
-                self._control(start=False).disarm()
+                self._control().disarm()
         except _SERVICE_ERRORS as e:
             return _error_text(e)
         return None
@@ -517,6 +516,8 @@ class Executor:
     # --- robot service (docs/running.md) ----------------------------------------------------------
 
     def fresh_state(self) -> RobotState:
+        if self.robot.pid is None:  # a dead service's connection is useless; the next arm opens a new one
+            self._close_control()
         return self.robot.read_state()
 
     def state_stream(self, path: Path, t_start: float) -> StateStream:

@@ -20,6 +20,7 @@ pytestmark = pytest.mark.integration
 
 HELPERS_DIR = REPO_ROOT / "dispatcher" / "tests" / "helpers"
 TURN = {"skill": "turn", "params": {"direction": "left", "angle_deg": 90}}
+WALK = {"skill": "walk", "params": {"direction": "forward", "distance_m": 1.0}}
 PLAN_TURN = {"status": "PLAN", "steps": [TURN]}
 DONE = {"status": "DONE", "steps": [], "message": "Turned left."}
 ABORT = {"status": "ABORT", "steps": [], "message": "Cannot do that."}
@@ -115,6 +116,20 @@ def test_batch(cfg_path, tmp_path):
     assert proc.stdout.splitlines() == ["Task 1: turn left", "", "Task 2: fly"]
     ends = [ln for ln in proc.stderr.splitlines() if " · " in ln and "LLM call" in ln]
     assert [e.split(" · ")[0] for e in ends] == ["DONE", "ABORTED"]
+
+
+def test_batch_stops_at_the_first_robot_service_lost(cfg_path, tmp_path):
+    tasks = tmp_path / "tasks.txt"
+    tasks.write_text("turn left\nwalk\nturn right\nsit\n", encoding="utf-8")
+    script = [PLAN_TURN, DONE, {"status": "PLAN", "steps": [TURN, WALK]}]  # no script for the lines after the loss
+    proc = cli(cfg_path, "--fault", "2:service_crash", "batch", str(tasks), script=script)
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert proc.stdout.splitlines() == ["Task 1: turn left", "", "Task 2: walk"]
+    assert proc.stderr.splitlines()[-3:] == [
+        "Batch stopped at task 2: the robot service was lost.",
+        "Not run: task 3: turn right",
+        "Not run: task 4: sit",
+    ]
 
 
 def test_fault_with_real_backend(cfg_path):

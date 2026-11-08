@@ -56,6 +56,7 @@ def run(
     remaining_task_s=LONG_REMAINING_S,
     stop_event=None,
 ):
+    executor.start_robot()
     return executor.run(
         registry.get(skill),
         params,
@@ -103,6 +104,7 @@ def test_fault_garbage(executor, registry):
 def test_wrong_skill_name_is_malformed(executor, registry):
     d = registry.get("turn")
     other = dataclasses.replace(d, name="walk")
+    executor.start_robot()
     res = executor.run(
         other,
         TURN,
@@ -180,6 +182,7 @@ def test_child_env_has_no_secrets(executor, monkeypatch):
         sections=(),
         policy=ENV_DUMP_POLICY,
     )
+    executor.start_robot()
     res = executor.run(
         desc, {}, fault=None, timeout_s=LONG_TIMEOUT_S, remaining_task_s=LONG_REMAINING_S, stop_event=threading.Event()
     )
@@ -230,9 +233,24 @@ def test_service_hang_falls_back(executor, registry, cfg):
     assert res.service_lost and res.outcome == "error" and res.error_code == "robot_service_lost"
     smr = res.stop_move
     assert smr is not None and smr.ok and smr.stop_path == "fallback" and smr.service_error and smr.service_lost
-    assert executor.robot.pid is None  # killed; the next step or state read starts it again
+    assert executor.robot.pid is None  # killed; only the next task's state read starts it again
     assert stub.read_state(cfg.stub.state_file).command is None
     assert executor.fresh_state().backend == "stub"
+
+
+def test_step_does_not_start_a_dead_service(executor, registry):
+    """A step never starts the service: it cannot be armed, so it counts as a loss and never runs."""
+    res = executor.run(
+        registry.get("turn"),
+        TURN,
+        fault=None,
+        timeout_s=LONG_TIMEOUT_S,
+        remaining_task_s=LONG_REMAINING_S,
+        stop_event=threading.Event(),
+    )
+    assert res.service_lost and res.outcome == "error" and res.pid is None
+    assert res.stop_move is not None and res.stop_move.ok and res.stop_move.stop_path == "fallback"
+    assert executor.robot.pid is None
 
 
 def test_stop_move_without_service_falls_back(executor):

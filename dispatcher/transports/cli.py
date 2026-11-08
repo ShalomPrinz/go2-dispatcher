@@ -34,6 +34,8 @@ COMMENT_PREFIX = "#"
 TOOL_SCHEMA_HEADER = "## Tool schema"
 REGISTRY_HASH_LINE = "Registry hash: {hash}"
 BATCH_TASK_LINE = "Task {i}: {task}"
+BATCH_SERVICE_LOST_LINE = "Batch stopped at task {i}: the robot service was lost."
+BATCH_NOT_RUN_LINE = "Not run: task {i}: {task}"
 
 
 # --- arguments -------------------------------------------------------------------------
@@ -201,9 +203,14 @@ def cmd_batch(cfg, tasks_file: Path) -> int:
         if i > 1:
             print()
         print(BATCH_TASK_LINE.format(i=i, task=task), flush=True)
-        runner.run(task)
+        outcome = runner.run(task)
         if runner.stop_requested:
             return EXIT_SIGINT
+        if outcome.outcome == "ROBOT_SERVICE_LOST":  # a crashing service must not keep spending (docs/running.md)
+            print(BATCH_SERVICE_LOST_LINE.format(i=i), file=sys.stderr)
+            for j, rest in enumerate(tasks[i:], i + 1):
+                print(BATCH_NOT_RUN_LINE.format(i=j, task=rest), file=sys.stderr)
+            return EXIT_FAIL
     return EXIT_OK
 
 

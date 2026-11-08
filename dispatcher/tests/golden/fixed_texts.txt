@@ -53,10 +53,10 @@ Stopped: the robot state could not be read (overloaded).
 Stopped: the robot state could not be read (overloaded). WARNING: the stop command to the robot failed. Stop the robot manually.
 
 === operator_message ROBOT_SERVICE_LOST ===
-Stopped: the robot control service was lost (overloaded). A stop command was sent to the robot.
+Stopped: the robot control service was lost (overloaded).
 
 === operator_message ROBOT_SERVICE_LOST stop_move_failed ===
-Stopped: the robot control service was lost (overloaded). A stop command was sent to the robot. WARNING: the stop command to the robot failed. Stop the robot manually.
+Stopped: the robot control service was lost (overloaded). WARNING: the stop command to the robot failed. Stop the robot manually.
 
 === operator_message INTERNAL_ERROR ===
 Stopped: internal error (KeyError). See run log abc123.
@@ -75,9 +75,6 @@ You asked to review results after step 2 of your previous plan. Its remaining st
 
 === notice failure ===
 Your previous plan failed at step 2 (walk): error. This is failure 1 of 3. Revise the plan to avoid that failure, or return ABORT with a message if the task cannot be done.
-
-=== notice robot_service_lost ===
-The robot's control service was lost while step 2 (walk) ran. The robot was stopped and its state read again; plan again from the state above. This counts as a planning call.
 
 === motion budget message ===
 this step needs 1.5 m of travel but only 0.5 m remain for this task
@@ -271,14 +268,11 @@ stopped: the robot control service was lost
 === NOT_DISPATCHED_PREFIX (repr) ===
 '- rejected before running: '
 
+=== SERVICE_LOST_STOP_CONFIRMED ===
+the fallback stop was confirmed
+
 === SERVICE_LOST_STOP_FAILED ===
 the fallback stop failed
-
-=== SERVICE_LOST_RESTART_FAILED ===
-restart or state read failed: RobotServiceError: exited with code 1 before ready
-
-=== SERVICE_LOST_TWICE ===
-lost a second time in this task
 
 === DONE_DEFAULT_MESSAGE ===
 Task completed, LLM didn't provide more details.

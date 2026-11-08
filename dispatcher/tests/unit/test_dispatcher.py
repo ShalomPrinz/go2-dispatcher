@@ -11,7 +11,7 @@ import pytest
 from dispatcher import prompts
 from dispatcher.context import PromptSurface
 from dispatcher.dispatcher import Dispatcher
-from dispatcher.executor import STDERR_TAIL_CHARS
+from dispatcher.executor import STDERR_TAIL_CHARS, ExecOutcome
 from dispatcher.models import (
     BusyError,
     LLMInterrupted,
@@ -659,3 +659,35 @@ def test_log_open_fails_internal_error_without_index_row(tmp_path, registry, mon
     assert o.outcome == "INTERNAL_ERROR" and o.log_path == ""
     assert not (r.cfg.run_log_dir / "index.jsonl").exists()
     assert not r.d.is_busy()
+
+
+def lost_step(*, stop_ok=True, outcome: ExecOutcome = "error", interrupt_cause=None):
+    stop = stop_move_result(StopCause.ROBOT_SERVICE_LOST, ok=stop_ok)
+    res = exec_result(outcome, interrupt_cause=interrupt_cause, stop_move=stop)
+    return res.model_copy(update={"service_lost": True})
+
+
+@pytest.mark.parametrize(
+    ("stop_ok", "message"),
+    [
+        (True, "Stopped: the robot control service was lost (the fallback stop was confirmed)."),
+        (
+            False,
+            "Stopped: the robot control service was lost (the fallback stop failed)." + prompts.STOP_MOVE_WARNING,
+        ),
+    ],
+)
+def test_service_loss_ends_the_task_with_no_further_call(tmp_path, registry, stop_ok, message):
+    executor = FakeExecutor([lost_step(stop_ok=stop_ok)])
+    r = Rig(tmp_path, registry, [plan(walk(), turn())], executor=executor)
+    o = r.run()
+    assert (o.outcome, o.llm_calls, o.message) == ("ROBOT_SERVICE_LOST", 1, message)
+    assert o.stop_move_failed is not stop_ok
+    assert executor.fresh_reads == 1 and len(executor.runs) == 1  # the task-start read only; the turn never ran
+    assert [rec["type"] for rec in records(o)][-3:] == ["step_result", "stop_move", "task_end"]
+
+
+def test_service_loss_during_a_stop_keeps_the_stop_outcome(tmp_path, registry):
+    executor = FakeExecutor([lost_step(outcome="interrupted", interrupt_cause=StopCause.OPERATOR)])
+    o = Rig(tmp_path, registry, [plan(walk())], executor=executor).run()
+    assert (o.outcome, o.llm_calls) == ("STOPPED", 1)

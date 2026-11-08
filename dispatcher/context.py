@@ -18,7 +18,7 @@ from .registry import Registry, registry_hash
 NOT_DISPATCHED_OUTCOMES = frozenset({"rejected", "motion_budget_exceeded"})
 NUM_DECIMALS = 2  # budget and obstacle numbers: round(x, 2) then :g (dispatcher/docs/loop-and-context.md)
 
-ReturnReason = Literal["initial", "plan_complete", "checkpoint", "failure", "robot_service_lost"]
+ReturnReason = Literal["initial", "plan_complete", "checkpoint", "failure"]
 RequestReason = ReturnReason | Literal["schema_retry"]  # logged on llm_request (dispatcher/docs/run-log.md)
 RemainingTag = Literal["pending", "abandoned"]
 
@@ -131,7 +131,7 @@ class Feedback:
     remaining: tuple[tuple[int, PlanStep], ...] = ()  # (plan_step, raw step) of the latest plan
     remaining_tag: RemainingTag | None = None
     stop_at: int | None = None  # checkpoint
-    failed: StepResult | None = None  # failure: the failed or rejected step; robot_service_lost: the step
+    failed: StepResult | None = None  # failure: the failed or rejected step
     failures: int = 0  # failure: failure count including it
 
     @classmethod
@@ -147,11 +147,6 @@ class Feedback:
         """``ran``: plan steps that ran, the failed one included (0 for a pre-check rejection)."""
         return cls("failure", _numbered_after(steps, ran), "abandoned", failed=failed, failures=failures)
 
-    @classmethod
-    def robot_service_lost(cls, steps: Sequence[PlanStep], step: StepResult, *, ran: int) -> Feedback:
-        """``step``: the step during which the service was lost; ``ran`` as for ``failure``."""
-        return cls("robot_service_lost", _numbered_after(steps, ran), "abandoned", failed=step)
-
     def notice(self, max_failures: int) -> str:
         if self.return_reason == "checkpoint":
             return prompts.notice("checkpoint", n=self.stop_at)
@@ -166,9 +161,6 @@ class Feedback:
                 f=self.failures,
                 max_failures=max_failures,
             )
-        if self.return_reason == "robot_service_lost":
-            assert self.failed is not None  # set by Feedback.robot_service_lost
-            return prompts.notice("robot_service_lost", n=self.failed.ref.plan_step, skill=self.failed.ref.skill)
         return prompts.notice(self.return_reason)
 
 

@@ -131,7 +131,7 @@ While a task runs, the dispatcher subscribes to the robot service and writes its
 | `link` | `t_mono_ms` (null if no message ever arrived), `link`: a change; for `down` the time of the last message before the gap, for `up` of the first one after it |
 | `stream_error` | `t_mono_ms`, `detail` (`ExceptionType: message`); the stream ends |
 
-A gap shows as a `link` `down` line, no samples, then a `link` `up` line ([skills.md](../../skills/docs/skills.md#robot-service)). The stream is off every critical path: it runs on its own thread and connection, and any failure (service down, connection lost, file error) ends only the stream, never the task. The stream does not resume after a service restart within the task.
+A gap shows as a `link` `down` line, no samples, then a `link` `up` line ([skills.md](../../skills/docs/skills.md#robot-service)). The stream is off every critical path: it runs on its own thread and connection, and a failure of the stream (connection lost, file error) ends only the stream, never the task. One task uses one service process, so the stream covers the task, and a [service loss](loop-and-context.md#robot-service-lost) ends both: `stream_error` is the stream's last line.
 
 ## `index.jsonl`
 
@@ -153,7 +153,7 @@ Pick the folder first (`logs/anthropic/real/` for the study), then group its tas
 | Tokens per task | `index.jsonl` `input_tokens` / `output_tokens`, or `task_end.usage_totals` (all numeric usage fields) |
 | Tokens per call | `llm_response.usage` |
 | LLM calls per task | `index.jsonl` `llm_calls` = number of `llm_response` records (schema retries included, infra retries not) |
-| Replanning frequency | count `llm_request` by `return_reason`. Replans are the calls after the first: `failure` (stop-and-report after a failed or rejected step), `checkpoint` (the model asked to review), `plan_complete` (the plan ran out before the task was done), `robot_service_lost` (the robot service was lost, stopped, restarted and read again). Report `schema_retry` separately: it re-asks the same question after an invalid reply. At horizon 1 every step ends in `plan_complete`, so compare reasons, not just counts |
+| Replanning frequency | count `llm_request` by `return_reason`. Replans are the calls after the first: `failure` (stop-and-report after a failed or rejected step), `checkpoint` (the model asked to review), `plan_complete` (the plan ran out before the task was done). Report `schema_retry` separately: it re-asks the same question after an invalid reply. At horizon 1 every step ends in `plan_complete`, so compare reasons, not just counts |
 | LLM latency per call | `llm_response.latency_ms` (successful attempt only) and `total_ms` (including failed attempts and backoff) |
 | Infrastructure retries | `llm_retry` records (`error_type`, `status_code`, `attempt_latency_ms`, `sleep_s`); `llm_response.attempts` |
 | Task latency | `index.jsonl` / `task_end` `duration_ms` |

@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import os
+import signal
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
@@ -13,7 +16,7 @@ from dispatcher.dispatcher import Dispatcher
 from dispatcher.executor import Executor
 from dispatcher.models import Plan, PlanStep
 from dispatcher.registry import Registry
-from dispatcher.runlog import INDEX_FILE
+from dispatcher.runlog import INDEX_FILE, stream_path
 from dispatcher.tests.helpers import ScriptedPlanner, make_config
 from skills import stub
 from tests.helpers import REPO_ROOT
@@ -120,35 +123,77 @@ def test_stop_during_hang(tmp_path, registry):
     assert any(r["type"] == "stop_requested" for r in read_jsonl(o.log_path))
 
 
+def _service(d):
+    assert isinstance(d.executor, Executor)
+    return d.executor.robot
+
+
+def _kill_service(d):
+    pid = _service(d).pid
+    assert pid is not None
+    os.kill(pid, signal.SIGKILL)
+    deadline = time.monotonic() + STOP_WITHIN_S
+    while _service(d).pid is not None and time.monotonic() < deadline:
+        time.sleep(0.01)
+
+
 def crash_faults(*steps):
     return {"faults": [{"step": n, "kind": "service_crash"} for n in steps]}
 
 
-def test_service_crash_mid_walk_falls_back_restarts_and_replans(tmp_path, registry):
-    items = [Plan(status="PLAN", steps=[WALK, TURN]), Plan(status="DONE", message="Done.")]
-    d, _, cfg = build(tmp_path, registry, items, stub=crash_faults(1))
+def test_service_crash_mid_walk_ends_the_task_and_the_next_task_restarts_it(tmp_path, registry):
+    items = [Plan(status="PLAN", steps=[TURN, WALK, TURN]), Plan(status="PLAN", steps=[TURN]), Plan(status="DONE")]
+    d, planner, cfg = build(tmp_path, registry, items, stub=crash_faults(2))  # per task: the next task has no step 2
     try:
-        o = d.run_task("walk forward", source="test")
+        o = d.run_task("turn and walk", source="test")
+        assert o.outcome == "ROBOT_SERVICE_LOST", o.message
+        assert "the fallback stop was confirmed" in o.message and not o.stop_move_failed
+        assert o.llm_calls == 1 and len(planner.calls) == 1  # no further LLM call
+        assert [s.outcome for s in o.steps] == ["ok", "error"]  # the last turn never ran
+        recs = read_jsonl(o.log_path)
+        stops = [r for r in recs if r["type"] == "stop_move"]
+        assert len(stops) == 1 and stops[0]["ok"] and stops[0]["stop_path"] == "fallback"
+        assert stops[0]["reason"] == "robot_service_lost"
+        assert stub.read_state(cfg.stub.state_file).command is None
+        assert _service(d).pid is None  # the next task's fresh read starts it
+
+        assert read_jsonl(stream_path(Path(o.log_path)))[-1]["type"] == "stream_error"  # the loss ended the stream too
+
+        next_task = d.run_task("turn", source="test")
+        assert next_task.outcome == "DONE", next_task.message
+        assert [s.outcome for s in next_task.steps] == ["ok"]
+        assert _service(d).pid is not None
     finally:
         d.shutdown(0)
-    assert o.outcome == "DONE", o.message
-    assert [s.outcome for s in o.steps] == ["error"]  # the turn was abandoned with the plan
-    recs = read_jsonl(o.log_path)
-    stops = [r for r in recs if r["type"] == "stop_move"]
-    assert len(stops) == 1 and stops[0]["ok"] and stops[0]["stop_path"] == "fallback"
-    assert stops[0]["reason"] == "robot_service_lost"
-    reasons = [r["return_reason"] for r in recs if r["type"] == "llm_request"]
-    assert reasons == ["initial", "robot_service_lost"]
-    assert stub.read_state(cfg.stub.state_file).command is None
 
 
-def test_second_service_crash_ends_the_task(tmp_path, registry):
-    items = [Plan(status="PLAN", steps=[WALK]), Plan(status="PLAN", steps=[WALK]), Plan(status="DONE")]
-    d, planner, cfg = build(tmp_path, registry, items, stub=crash_faults(1, 2))
+def test_service_gone_before_a_step_ends_the_task_without_a_restart(tmp_path, registry):
+    """The step cannot be armed and never starts; the service stays down until the next task."""
+    items = [Plan(status="PLAN", steps=[TURN])]
+    d, planner, _ = build(tmp_path, registry, items)
+    planner.on_call = lambda _call: _kill_service(d)
     try:
-        o = d.run_task("walk forward", source="test")
+        o = d.run_task("turn", source="test")
+        assert o.outcome == "ROBOT_SERVICE_LOST" and o.llm_calls == 1, o.message
+        assert [(s.outcome, s.error_code, s.pid) for s in o.steps] == [("error", "robot_service_lost", None)]
+        assert _service(d).pid is None
     finally:
         d.shutdown(0)
-    assert o.outcome == "ROBOT_SERVICE_LOST" and "a second time" in o.message
-    assert o.llm_calls == 2 and not o.stop_move_failed
-    assert stub.read_state(cfg.stub.state_file).command is None
+
+
+def test_service_lost_between_tasks_restarts_at_the_next_task(tmp_path, registry):
+    items = [
+        Plan(status="PLAN", steps=[TURN]),
+        Plan(status="DONE"),
+        Plan(status="PLAN", steps=[TURN]),
+        Plan(status="DONE"),
+    ]
+    d, _, _ = build(tmp_path, registry, items)
+    try:
+        assert d.run_task("turn", source="test").outcome == "DONE"  # opens the control connection
+        _kill_service(d)
+        o = d.run_task("turn", source="test")
+        assert o.outcome == "DONE", o.message
+        assert [s.outcome for s in o.steps] == ["ok"]
+    finally:
+        d.shutdown(0)

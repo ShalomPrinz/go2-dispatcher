@@ -75,7 +75,6 @@ class _Task:
     feedback: Feedback = field(default_factory=Feedback)
     last_failure: StepResult | None = None
     stop_move_failed: bool = False
-    service_losses: int = 0  # robot service losses in this task (dispatcher/docs/loop-and-context.md)
     usage_totals: dict[str, float] = field(default_factory=dict)
     state: RobotState | None = None  # last known state (dispatcher/docs/loop-and-context.md)
 
@@ -522,18 +521,15 @@ class Dispatcher:
         for i, step in enumerate(plan.steps[:stop_at], start=1):
             self._check_interrupts(t)
             ref = StepRef(call_index=t.llm_calls, plan_step=i, skill=step.skill, params=pre.filled[i - 1])
-            sr, service_lost = self._run_step(t, ref)
-            if service_lost:
-                return Feedback.robot_service_lost(plan.steps, sr, ran=i)
+            sr = self._run_step(t, ref)
             if sr.outcome in FAILURE_OUTCOMES:
                 return Feedback.failure(plan.steps, sr, t.failures, ran=i)
         if stop_at < len(plan.steps):
             return Feedback.checkpoint(plan.steps, stop_at)
         return Feedback.plan_complete()
 
-    def _run_step(self, t: _Task, ref: StepRef) -> tuple[StepResult, bool]:
-        """Dispatch the step ``ref`` names. Returns its recorded result and whether the robot service was lost
-        and recovered during it, or raises ``_TaskEnded``."""
+    def _run_step(self, t: _Task, ref: StepRef) -> StepResult:
+        """Dispatch the step ``ref`` names. Returns its recorded result, or raises ``_TaskEnded``."""
         desc = self.registry[ref.skill]  # precheck passed, so the skill exists
         params = ref.params
         t.dispatched_count += 1
@@ -567,21 +563,8 @@ class Dispatcher:
         if sr.outcome == "interrupted":
             assert ex.interrupt_cause is not None  # set iff interrupted (ExecResult)
             raise _TaskEnded(_Ending(ex.interrupt_cause.task_outcome))  # the executor already sent StopMove
-        if ex.service_lost:
-            self._recover_service(t, ex.stop_move)
-        return sr, ex.service_lost
-
-    def _recover_service(self, t: _Task, stop: StopMoveResult | None) -> None:
-        """After a robot service loss (the executor killed it and ran the fallback stop): end the task unless the
-        stop is confirmed, this is the first loss, and a restarted service gives a fresh state
-        (dispatcher/docs/loop-and-context.md)."""
-        t.service_losses += 1
-        if stop is None or not stop.ok:
-            raise _TaskEnded(_Ending("ROBOT_SERVICE_LOST", detail=prompts.SERVICE_LOST_STOP_FAILED))
-        if t.service_losses > 1:
-            raise _TaskEnded(_Ending("ROBOT_SERVICE_LOST", detail=prompts.SERVICE_LOST_TWICE))
-        try:
-            t.state = self.executor.fresh_state()  # starts the killed service again
-        except StateReadError as e:
-            detail = prompts.SERVICE_LOST_RESTART_FAILED.format(error=e)
-            raise _TaskEnded(_Ending("ROBOT_SERVICE_LOST", detail=detail)) from None
+        if ex.service_lost:  # every loss ends the task, with no further LLM call (dispatcher/docs/loop-and-context.md)
+            confirmed = ex.stop_move is not None and ex.stop_move.ok
+            detail = prompts.SERVICE_LOST_STOP_CONFIRMED if confirmed else prompts.SERVICE_LOST_STOP_FAILED
+            raise _TaskEnded(_Ending("ROBOT_SERVICE_LOST", detail=detail))
+        return sr

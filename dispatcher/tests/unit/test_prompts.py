@@ -37,7 +37,6 @@ NOTICE_ARGS = {
     "plan_complete": {},
     "checkpoint": {"n": 2},
     "failure": {"n": 2, "skill": "walk", "outcome": "error", "f": 1, "max_failures": 3},
-    "robot_service_lost": {"n": 2, "skill": "walk"},
 }
 
 # Texts already rendered through a function or a labelled part above.
@@ -68,7 +67,6 @@ TEXT_ARGS: dict[str, dict[str, object]] = {
     "PARAM_BELOW_MIN": {"where": "<where>", "lo": 0.1},
     "PARAM_ABOVE_MAX": {"where": "<where>", "hi": 3.0},
     "MALFORMED_RESPONSE": {"rc": 1},
-    "SERVICE_LOST_RESTART_FAILED": {"error": "RobotServiceError: exited with code 1 before ready"},
     "KILL_STEP_TIMEOUT": {"timeout_s": 30.0},
     "STEPS_LINE": {"run": 3, "failed": 1},
     "OMITTED_LINES": {"n": 4},
