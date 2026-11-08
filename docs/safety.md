@@ -20,7 +20,7 @@ All stops use one path: **kill the running skill process group and send `stop` t
 | Trigger | How |
 |---|---|
 | Operator stop | Telegram: the stop word or `/stop`. CLI: the first Ctrl+C. `request_stop()` sets the stop event and kills the current skill; it returns at once and is safe from any thread. While idle the bot replies `Nothing is running.` |
-| Step timeout | The executor kills a step that runs longer than `POLICY.timeout_s(params)` ([skills.md](../skills/docs/skills.md#policies)). Outcome `timeout`, a failure; the task continues with a replan. |
+| Step timeout | The executor kills a step that runs longer than `POLICY.timeout_s(params)` ([skills.md](../skills/docs/skills.md#policies)). Outcome `timeout`, a failure; the task continues with a replan if the stop is confirmed, and otherwise ends `STOP_FAILED` ([StopMove failure](#stopmove-failure)). |
 | Task time limit | `loop.task_time_limit_s` (300 s, *tunable*) from task start. Checked before every LLM call and step, during LLM retry backoff, and by the executor while a step runs. Outcome `TIME_LIMIT_EXCEEDED`. |
 | Shutdown | A second Ctrl+C, SIGTERM, Telegram bot shutdown, or `atexit`: `Dispatcher.shutdown()`. In `go2 bot`, SIGINT/SIGTERM first calls `request_stop("shutdown")`, so a running task is stopped at once (outcome `STOPPED`) before the Telegram library shuts down; `shutdown()` remains the backstop and, if the task is still running after its wait, kills it and sends `StopMove` itself. |
 | Internal error | An unhandled exception in the dispatcher: kill + `StopMove`, outcome `INTERNAL_ERROR`. Logging, kill and `StopMove` are each guarded, so `task_end` and the index line are always written. |
@@ -58,6 +58,8 @@ Residual risk: between the crash and the fallback `StopMove` (detection up to ab
 
 If the service stop fails and the fallback `stop_move` process cannot be started, times out, exits without a valid response, or reports a non-zero SDK code, `stop_move_failed` is set on the task and the operator message ends with the warning above. The `stop_move` record holds the details ([run-log.md](../dispatcher/docs/run-log.md#stop_move)). There is no automatic retry; a person must stop the robot.
 
+A failed stop ends the task with no further LLM call. A killed step whose stop failed while the service stays alive, such as a step timeout, ends the task `STOP_FAILED`. A step that a stop, the time limit or shutdown interrupted keeps its outcome, and a lost service keeps `ROBOT_SERVICE_LOST`; both carry the warning. `go2 batch` stops at the first `STOP_FAILED` ([running.md](running.md#output)).
+
 ### Between kill and StopMove
 
 A SIGKILL runs no cleanup, so the killed skill cannot send `StopMove()` itself. The service sends it on the dispatcher's `stop` and, independently, when the skill's connection closes; on the service path the gap is one IPC round trip plus the `StopMove` call. On the fallback path, until the new `StopMove` arrives (process start + DDS init), the robot has received no stop command. Whether the Go2 sport service stops on its own when `Move` commands stop arriving is **unverified on the robot**. Until the checklist has measured it, assume the robot may keep moving at the last commanded velocity (≤ 0.3 m/s, or ≤ 1 rad/s when turning) for that time.
@@ -73,6 +75,8 @@ One task runs at a time. While it runs, any other message gets `Busy: a task is 
 ## The robot is stationary during LLM calls
 
 Steps run only between LLM calls, never during one. When the dispatcher calls the model, the previous step has finished (its motion loop ended with `StopMove()`) or has been killed and stopped. A slow or failing LLM call never leaves the robot moving.
+
+**No LLM call without a confirmed stop.** After a stop the executor sends fails, the task ends and the model is not called again ([StopMove failure](#stopmove-failure)). This covers the executor's stops only: the `StopMove` that ends a `move` primitive reaches the dispatcher as an ordinary `sdk_error` step, and the one sent on `disarm` reports no code, so the model is still called after those ([roadmap.md](roadmap.md#open-questions)).
 
 ## Motion budget
 
@@ -117,6 +121,7 @@ If the dispatcher host loses power or the network drops, none of this helps, and
 - **The robot service stops the robot if the dispatcher dies**, on EOF of the control connection and through its orphan watchdog; skills exit through the same watchdog.
 - **One dispatcher process per machine (file lock)**, so two processes can never drive one robot, overwrite the stub state, or interleave `index.jsonl`.
 - **The robot is stationary during LLM calls**, so a slow or failing LLM call never leaves the robot moving.
+- **A failed stop ends the task with no LLM call; with the service alive the outcome is `STOP_FAILED`.** The robot may still be moving, the model cannot fix that, and a person must act. Rejected: reusing `ROBOT_SERVICE_LOST` (the service is alive, so the study would miscount service losses); keeping only the warning on the final message (an LLM call with the robot possibly moving).
 - **Agent limits are permission rules, not only CLAUDE.md prose**, because instructions are context, not enforcement. Bash argument patterns can be bypassed (`sh -c`, a changed config file); a PreToolUse guard hook is pending ([roadmap.md](roadmap.md#future-ideas)).
 - **A physical stop within reach whenever the system runs on the onboard computer** (the robot's remote or a separate stop button). The operator sends `stop` over Wi-Fi, and if the Wi-Fi drops it no longer reaches the dispatcher, while a running skill may keep the robot moving until its motion loop ends.
 - **The physical/remote e-stop remains the final safety measure.** The software stops are best effort, and every one depends on the robot link: with the link down no software stop reaches the robot and only the e-stop stops it ([known issues](../skills/docs/robot.md#known-issues)). Their latency is measured only for the first successful calls ([measured latency](#measured-latency)).

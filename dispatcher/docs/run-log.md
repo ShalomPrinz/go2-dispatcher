@@ -163,6 +163,7 @@ Pick the folder first (`logs/anthropic/real/` for the study), then group its tas
 | Process overhead per step | `step_result.duration_ms − response.timing.total_ms` (interpreter start and teardown outside the skill's own timing) |
 | Stop latency | `stop_move.kill_to_stop_ms` (kill to confirmed stop) by `stop_move.stop_path`. Service path: `stop_call_ms` is the `StopMove()` call in the service. Fallback: `dds_init_ms` + `client_init_ms` + `stop_call_ms` from `stop_move.response.timing`, and `duration_ms` (failed service stop plus the whole utility process). Records without `stop_path` all ran the fresh-process stop and have no `kill_to_stop_ms` ([safety.md](../../docs/safety.md#measured-latency)) |
 | Robot service losses | `stop_move` with `service_lost == true` (`service_error` says why; `reason` is the stop's cause, which is `robot_service_lost` only when the loss itself triggered the stop); tasks ended by one: `outcome == "ROBOT_SERVICE_LOST"` |
+| Failed stops | `stop_move` with `ok == false`; `task_end.stop_move_failed`; tasks ended by one with the service alive: `outcome == "STOP_FAILED"` |
 | Motion commanded | `step_start.dispatch.motion_cost`, `task_end.budget_used` |
 | Robot state | `step_result.response.state_before` / `state_after`; `stop_move.state_after` ([robot.md](../../skills/docs/robot.md#state-sampling)) |
 | Exact prompts | `task_start.system_text` / `catalog_text` / `tool_schema` + `llm_request.user_text` |

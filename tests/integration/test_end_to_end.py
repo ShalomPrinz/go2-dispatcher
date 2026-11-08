@@ -19,6 +19,7 @@ from dispatcher.registry import Registry
 from dispatcher.runlog import INDEX_FILE, stream_path
 from dispatcher.tests.helpers import ScriptedPlanner, make_config
 from skills import stub
+from skills.robot_ipc import RobotClient, StopSent
 from tests.helpers import REPO_ROOT
 
 pytestmark = pytest.mark.integration
@@ -163,6 +164,26 @@ def test_service_crash_mid_walk_ends_the_task_and_the_next_task_restarts_it(tmp_
         assert next_task.outcome == "DONE", next_task.message
         assert [s.outcome for s in next_task.steps] == ["ok"]
         assert _service(d).pid is not None
+    finally:
+        d.shutdown(0)
+
+
+def test_failed_stop_with_the_service_alive_ends_the_task(tmp_path, registry, monkeypatch):
+    """The stub's StopMove never fails, so both stop results are patched; the step, kill and service are real."""
+    monkeypatch.setattr(RobotClient, "stop", lambda _self, _wait_s: StopSent(ret=5, stop_call_ms=1.0))
+    monkeypatch.setattr(Executor, "_run_utility", lambda _self, _utility: (1, None, "StopMove failed", 1.0))
+    real_run = Executor.run
+    monkeypatch.setattr(Executor, "run", lambda self, *a, **kw: real_run(self, *a, **{**kw, "timeout_s": STOP_AFTER_S}))
+    items = [Plan(status="PLAN", steps=[TURN, TURN])]
+    d, planner, _ = build(tmp_path, registry, items, stub={"faults": [{"step": 1, "kind": "hang"}]})
+    try:
+        o = d.run_task("turn", source="test")
+        assert o.outcome == "STOP_FAILED" and o.stop_move_failed, o.message
+        assert o.llm_calls == 1 and len(planner.calls) == 1
+        assert [s.outcome for s in o.steps] == ["timeout"]
+        assert _service(d).pid is not None  # the service is alive, so this is no service loss
+        stops = [r for r in read_jsonl(o.log_path) if r["type"] == "stop_move"]
+        assert [(r["ok"], r["stop_path"], r["service_lost"]) for r in stops] == [(False, "fallback", False)]
     finally:
         d.shutdown(0)
 

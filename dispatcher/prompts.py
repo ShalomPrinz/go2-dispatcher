@@ -263,6 +263,7 @@ OPERATOR_MESSAGES: dict[str, str] = {
     "LLM_ERROR": "Stopped: the model could not be reached ({detail}).",
     "STATE_UNAVAILABLE": "Stopped: the robot state could not be read ({detail}).",
     "ROBOT_SERVICE_LOST": "Stopped: the robot control service was lost ({detail}).",
+    "STOP_FAILED": "Stopped: the robot may still be moving. A person must stop it.",
     "INTERNAL_ERROR": "Stopped: internal error ({exception_type}). See run log {run_id}.",
 }
 # ROBOT_SERVICE_LOST details: whether the fallback stop was confirmed (dispatcher/docs/loop-and-context.md)

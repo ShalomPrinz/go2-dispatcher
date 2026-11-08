@@ -12,7 +12,12 @@ import time
 
 import pytest
 
+from dispatcher.context import PromptSurface
+from dispatcher.dispatcher import Dispatcher
+from dispatcher.models import StopCause
 from dispatcher.registry import Registry
+from dispatcher.tests.helpers import FakeExecutor, ScriptedPlanner, exec_result, make_config, stop_move_result
+from dispatcher.transports import cli as cli_module
 from skills import stub
 from tests.helpers import REPO_ROOT
 
@@ -127,6 +132,27 @@ def test_batch_stops_at_the_first_robot_service_lost(cfg_path, tmp_path):
     assert proc.stdout.splitlines() == ["Task 1: turn left", "", "Task 2: walk"]
     assert proc.stderr.splitlines()[-3:] == [
         "Batch stopped at task 2: the robot service was lost.",
+        "Not run: task 3: turn right",
+        "Not run: task 4: sit",
+    ]
+
+
+def test_batch_stops_at_the_first_stop_failed(tmp_path, monkeypatch, capsys):
+    """In process: the stub's StopMove never fails, so a fake executor scripts the failed stop."""
+    tasks = tmp_path / "tasks.txt"
+    tasks.write_text("turn left\nwalk\nturn right\nsit\n", encoding="utf-8")
+    cfg = make_config(tmp_path)
+    registry = Registry.load(REPO_ROOT / "skills" / "catalog")
+    planner = ScriptedPlanner([PLAN_TURN, DONE, PLAN_TURN], PromptSurface.build(registry, cfg.loop.planning_horizon))
+    timeout = exec_result("timeout", stop_move=stop_move_result(StopCause.STEP_TIMEOUT, ok=False))
+    dispatcher = Dispatcher(cfg, registry, planner, FakeExecutor([exec_result(skill="turn"), timeout]))
+    monkeypatch.setattr(cli_module, "build_dispatcher", lambda *_args, **_kwargs: dispatcher)
+    monkeypatch.setattr(cli_module._Runner, "install", lambda _self: None)  # no process-wide signal or atexit hooks
+    assert cli_module.cmd_batch(cfg, tasks) == 1
+    captured = capsys.readouterr()
+    assert captured.out.splitlines() == ["Task 1: turn left", "", "Task 2: walk"]
+    assert captured.err.splitlines()[-3:] == [
+        "Batch stopped at task 2: the stop command to the robot failed.",
         "Not run: task 3: turn right",
         "Not run: task 4: sit",
     ]

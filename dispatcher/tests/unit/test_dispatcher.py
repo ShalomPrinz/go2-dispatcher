@@ -594,11 +594,26 @@ def test_stop_during_schema_retry_call(tmp_path, registry):
     assert r.executor.runs == []
 
 
-def test_step_stop_move_failure_warns(tmp_path, registry):
+def test_failed_stop_with_the_service_alive_ends_the_task_with_no_further_call(tmp_path, registry):
     timeout = exec_result("timeout", stop_move=stop_move_result(StopCause.STEP_TIMEOUT, ok=False))
-    r = Rig(tmp_path, registry, [plan(walk()), done()], [timeout])
+    executor = FakeExecutor([timeout])
+    r = Rig(tmp_path, registry, [plan(walk(), turn())], executor=executor)
     o = r.run()
-    assert o.outcome == "DONE"
+    assert (o.outcome, o.llm_calls, len(r.planner.calls), len(executor.runs)) == ("STOP_FAILED", 1, 1, 1)
+    assert o.stop_move_failed is True
+    assert o.message == "Stopped: the robot may still be moving. A person must stop it." + prompts.STOP_MOVE_WARNING
+    assert [rec["type"] for rec in records(o)][-3:] == ["step_result", "stop_move", "task_end"]
+
+
+@pytest.mark.parametrize(
+    ("cause", "outcome"),
+    [(StopCause.OPERATOR, "STOPPED"), (StopCause.TASK_TIME_LIMIT, "TIME_LIMIT_EXCEEDED")],
+)
+def test_interrupted_step_with_a_failed_stop_keeps_its_outcome(tmp_path, registry, cause, outcome):
+    step = exec_result("interrupted", interrupt_cause=cause, stop_move=stop_move_result(cause, ok=False))
+    r = Rig(tmp_path, registry, [plan(walk())], [step])
+    o = r.run()
+    assert (o.outcome, o.llm_calls) == (outcome, 1)
     assert o.stop_move_failed is True
     assert o.message.endswith(prompts.STOP_MOVE_WARNING)
 

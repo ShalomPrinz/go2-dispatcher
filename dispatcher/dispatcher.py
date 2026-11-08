@@ -567,4 +567,6 @@ class Dispatcher:
             confirmed = ex.stop_move is not None and ex.stop_move.ok
             detail = prompts.SERVICE_LOST_STOP_CONFIRMED if confirmed else prompts.SERVICE_LOST_STOP_FAILED
             raise _TaskEnded(_Ending("ROBOT_SERVICE_LOST", detail=detail))
+        if ex.stop_move is not None and not ex.stop_move.ok:  # no LLM call without a confirmed stop (docs/safety.md)
+            raise _TaskEnded(_Ending("STOP_FAILED"))
         return sr

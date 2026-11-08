@@ -203,6 +203,7 @@ TaskOutcomeCode = Literal[
     "LLM_ERROR",
     "STATE_UNAVAILABLE",
     "ROBOT_SERVICE_LOST",
+    "STOP_FAILED",
     "INTERNAL_ERROR",
 ]
 
