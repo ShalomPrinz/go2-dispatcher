@@ -217,6 +217,29 @@ def test_groups_are_never_pooled_and_dates_filter(tmp_path):
     assert day == datetime(2026, 10, 29, 23, 59, 59, 999999)
 
 
+def test_model_filter_counts_only_that_model(tmp_path, capsys):
+    write_task(tmp_path, "a", [request(1, "initial"), response(1, 1000.0), task_end(1000.0)], model="m1")
+    write_task(tmp_path, "b", [request(1, "initial"), response(1, 9000.0), task_end(9000.0)], model="m2")
+    write_task(tmp_path, "c", [request(1, "initial"), response(1, 7000.0), task_end(7000.0)], model="m1-mini")
+    with (tmp_path / report.INDEX_FILE).open("a", encoding="utf-8") as f:
+        f.write(json.dumps({"file": "a.jsonl", "ts_start": "2026-10-29T15:00:00+03:00"}) + "\n")  # older: no model
+    r = report.build(tmp_path, model="m1")
+    assert [g.key.model for g in r.groups] == ["m1"]
+    assert r.groups[0].all_calls.total.median == 1000.0
+    assert r.bad_index_lines == 1  # cannot be tied to a model, so stays visible and is in no group
+    assert cli.main(["report", str(tmp_path), "--model", "m2"]) == 0
+    out = capsys.readouterr().out
+    assert " | model m2" in out and "Model m1" not in out
+
+
+def test_model_filter_without_a_match_exits_non_zero(tmp_path, capsys):
+    write_task(tmp_path, "a", [request(1, "initial"), response(1, 1000.0), task_end(1000.0)], model="m1")
+    assert cli.main(["report", str(tmp_path), "--model", "M1"]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "model M1" in captured.err
+
+
 def test_cli_prints_seconds_and_exits_non_zero_without_logs(tmp_path, capsys):
     write_task(tmp_path / "logs", "a", [request(1, "initial"), response(1, 4500.0), task_end(5000.0)])
     assert cli.main(["report", str(tmp_path / "logs")]) == 0

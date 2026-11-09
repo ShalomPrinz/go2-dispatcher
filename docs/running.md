@@ -90,14 +90,16 @@ Tasks run one after another in one process. The previous task's summary **carrie
 ### Latency report
 
 ```
-go2 report [FOLDER] [--since WHEN] [--until WHEN]
+go2 report [FOLDER] [--since WHEN] [--until WHEN] [--model NAME]
 go2 report logs/openrouter/real --since 2026-10-29T14:57 --until 2026-10-29T17:00
+go2 report --model claude-sonnet-5-5
 ```
 
 Reads one log folder and prints a table to stdout, in seconds, one section per model, registry hash and condition: per call type, per task, and the time split. It reads logs only: no API key, lock, robot or network.
 
 - `FOLDER`: default `{log.dir}/anthropic/real`, the study folder. An explicit folder does not read the config.
 - `--since` / `--until`: `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`, local time as recorded at task start, both ends included. A bare `--until` date covers that whole day.
+- `--model`: only tasks whose `index.jsonl` `model` is exactly `NAME`. No matching task exits 1 with a message.
 
 The metric definitions and what is skipped are in [run-log.md](../dispatcher/docs/run-log.md#latency-report-go2-report).
 

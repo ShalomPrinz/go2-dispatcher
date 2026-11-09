@@ -33,7 +33,7 @@ SKIP_MISSING_FIELDS = "older log, fields missing"
 
 
 class NoLogs(Exception):
-    """The folder, or the date window, holds no task to report on."""
+    """The folder, the date window or the selected model holds no task to report on."""
 
 
 class _Skip(Exception):
@@ -136,6 +136,7 @@ class Report:
     folder: Path
     since: datetime | None
     until: datetime | None
+    model: str | None
     groups: list[Group]
     unindexed_files: int  # task logs with no index row: the process died before task_end
     bad_index_lines: int
@@ -361,7 +362,9 @@ def _file_start(path: Path) -> datetime | None:
         return None
 
 
-def build(folder: Path, since: datetime | None = None, until: datetime | None = None) -> Report:
+def build(
+    folder: Path, since: datetime | None = None, until: datetime | None = None, model: str | None = None
+) -> Report:
     """One report for ``folder``, one group per model, registry hash and condition. Raises ``NoLogs``."""
     rows, bad_lines = _read_index(folder)
     files = _task_files(folder)
@@ -375,7 +378,7 @@ def build(folder: Path, since: datetime | None = None, until: datetime | None = 
             unindexed += 1
     buckets: dict[GroupKey, _Bucket] = {}
     for start, row in rows:
-        if not _in_window(start, since, until):
+        if not _in_window(start, since, until) or (model is not None and row["model"] != model):
             continue
         key = GroupKey(row["model"], row["registry_hash"], row.get("condition") or "")
         bucket = buckets.setdefault(key, _Bucket())
@@ -388,9 +391,10 @@ def build(folder: Path, since: datetime | None = None, until: datetime | None = 
             bucket.skipped[str(e)] += 1
     if not buckets:
         detail = f" ({unindexed} log files have no index row)" if unindexed else ""
-        raise NoLogs(f"No finished tasks to report in {folder} for the selected dates{detail}.")
+        scope = "the selected dates" if model is None else f"model {model} and the selected dates"
+        raise NoLogs(f"No finished tasks to report in {folder} for {scope}{detail}.")
     groups = sorted((_group(k, b) for k, b in buckets.items()), key=lambda g: g.first_start)
-    return Report(folder, since, until, groups, unindexed, bad_lines)
+    return Report(folder, since, until, model, groups, unindexed, bad_lines)
 
 
 # --- rendering --------------------------------------------------------------------------
@@ -481,7 +485,8 @@ def render(report: Report) -> str:
     window = ""
     if report.since is not None or report.until is not None:
         window = f" | since {report.since or '-'} until {report.until or '-'}"
-    lines = [f"Latency report: {report.folder}{window}"]
+    selected = "" if report.model is None else f" | model {report.model}"
+    lines = [f"Latency report: {report.folder}{window}{selected}"]
     if report.unindexed_files:
         lines.append(f"Skipped {report.unindexed_files} log files with no index row (the process died mid-task).")
     if report.bad_index_lines:

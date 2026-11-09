@@ -173,7 +173,7 @@ Pick the folder first (`logs/anthropic/real/` for the study), then group its tas
 
 ### Latency report: `go2 report`
 
-`go2 report [FOLDER] [--since WHEN] [--until WHEN]` computes the latency metrics from one folder's existing records, read-only (`dispatcher/report.py`; usage in [running.md](../../docs/running.md#latency-report)). The default folder is the study folder, `{log.dir}/anthropic/real`. It selects tasks through `index.jsonl` by `ts_start`, read as the local time written in the row. One group per `model` + `registry_hash` + `condition`, never pooled.
+`go2 report [FOLDER] [--since WHEN] [--until WHEN] [--model NAME]` computes the latency metrics from one folder's existing records, read-only (`dispatcher/report.py`; usage in [running.md](../../docs/running.md#latency-report)). The default folder is the study folder, `{log.dir}/anthropic/real`. It selects tasks through `index.jsonl` by `ts_start`, read as the local time written in the row, and with `--model` by the row's `model`, an exact string match. The model is fixed per task (`llm.model`), so a selected row's whole log belongs to that model. One group per `model` + `registry_hash` + `condition`, never pooled.
 
 The per-call target is 4 s (`TARGET_CALL_MS`), the advisor's. **The primary reading is the median `total_ms` of the `all calls` row, with p90 beside it**: `total_ms` is what the operator waits through, retries and backoff included.
 
@@ -194,7 +194,7 @@ The per-call target is 4 s (`TARGET_CALL_MS`), the advisor's. **The primary read
 | Outcomes | every selected task in the group, measured or not |
 | Time split | over the group's measured tasks: model wait; `step_result.duration_ms` of motion skills and of the other dispatched skills (a rejected step has `dispatch = null` and ran nothing); `other` is the rest of the summed task durations (the task-start state read, the vision ready wait before a `detect_object` step, stops the dispatcher sends itself, calls without a response). A killed step's stop runs inside its `step_result.duration_ms`, so it counts under that step's skill row. A negative remainder shows `other` as 0 and prints a warning with the excess |
 
-A task is measured only when its log has `task_start`, `task_end`, at least one `llm_response` and every field above. Otherwise it is skipped and counted by reason in its group: `log file missing or unreadable`, `no task_end`, `no model response` (`STATE_UNAVAILABLE`, or an `LLM_ERROR` on the first call), `older log, fields missing`. A log file with no index row (the process died mid-task) and an index line that cannot be read belong to no group and are counted at the top of the report. No index rows and no log files in the folder, or none in the date window, exits 1 with a message.
+A task is measured only when its log has `task_start`, `task_end`, at least one `llm_response` and every field above. Otherwise it is skipped and counted by reason in its group: `log file missing or unreadable`, `no task_end`, `no model response` (`STATE_UNAVAILABLE`, or an `LLM_ERROR` on the first call), `older log, fields missing`. A log file with no index row (the process died mid-task) and an index line that cannot be read belong to no group and are counted at the top of the report, also under `--model`, because neither can be tied to a model; an older row with no `model` is such a line. No index rows and no log files in the folder, or none in the date window or for the selected model, exits 1 with a message.
 
 ## Design decisions
 

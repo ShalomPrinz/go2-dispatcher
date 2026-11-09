@@ -85,6 +85,7 @@ def _parser() -> argparse.ArgumentParser:
     rep.add_argument("folder", type=Path, nargs="?", metavar="FOLDER", help="log folder (default: the study folder)")
     rep.add_argument("--since", type=_since, metavar="WHEN", help="first task start, YYYY-MM-DD[THH:MM], local time")
     rep.add_argument("--until", type=_until, metavar="WHEN", help="last task start; a bare date covers the whole day")
+    rep.add_argument("--model", metavar="NAME", help="only tasks of this model, the exact index.jsonl model string")
     bot = sub.add_parser("bot", add_help=False, help="run the Telegram bot (go2 bot [--config PATH]; docs/running.md)")
     bot.add_argument("bot_args", nargs=argparse.REMAINDER)
     return p
@@ -153,7 +154,7 @@ def cmd_report(args: argparse.Namespace) -> int:
     if folder is None:
         folder = load_config_and_env(args.config, _overrides(args)).log.dir / report.STUDY_FOLDER
     try:
-        print(report.render(report.build(folder, args.since, args.until)))
+        print(report.render(report.build(folder, args.since, args.until, args.model)))
     except report.NoLogs as e:
         print(e, file=sys.stderr)
         return EXIT_FAIL
