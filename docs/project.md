@@ -76,7 +76,7 @@ Analysis of the predecessor's OpenClaw session logs: 23 sessions and 105 runs, a
 - **Latency.** Turn latency follows output tokens (Spearman 0.63), not input tokens (0.11, over a narrow range). Input tokens grew with the session (0.85) while first-turn latency did not (-0.02). The smaller context here is therefore not expected to reduce latency by itself.
 - **Compaction and retries.** See [architecture.md](architecture.md#why-a-purpose-built-dispatcher). No overflow errors occurred. SDK-level retries are not logged, so they cannot be counted.
 - **Errors.** 13 of 101 non-heartbeat runs ended in an error or abort, mostly provider faults. Recovery was the operator resubmitting.
-- **Horizon.** One step at a time, and emergent: no instruction sets it. Of 474 turns, 364 made one call, 100 none and 10 several, none with parallel skills. Of 185 moves, 86 were followed directly by a detect. In August, 46 of 245 skill executions chained skills with `&&`, up to 8, with nothing validating the chain.
+- **Horizon.** One step at a time, and emergent: no instruction sets it. Of 474 turns, 364 made one call, 100 none and 10 several, none with parallel skills. Of 185 moves, 86 were followed directly by a detect. In August, 46 of 245 skill executions chained skills with `&&`, up to 8, with nothing validating the chain. These counts depend on the predecessor's skills and setup, so they do not predict the baseline's horizon.
 - **Behaviour.** Unverified success claims, a search that oscillated for 33 turns until aborted, a short command that re-ran an earlier failed task, and the agent editing skill scripts. There is no stop tool and approaches had no obstacle check.
 
 ### Preparing the OpenClaw 2 comparison
@@ -88,7 +88,7 @@ What the logs imply for the baseline. Details of the harness are decided when it
 - **Session policy.** A fresh session per task adds startup delay; a shared session grows the context and allows earlier tasks to affect later ones. Choose one, state it, and measure its effect on first motion.
 - **Multi-skill tasks.** Task time grows fastest here, and the logs have only 10 such tasks, so the task set needs more. Candidates: find three distinct objects and then take a posture; search for a hidden object within a radius; find a person, approach, wait and return; a 360° scan. Wait steps need a skill on both sides.
 - **One clock on both systems.** The logs lack tool start events, physical motion, robot state, task outcome and retries. Skills write these themselves, so both systems are measured the same way, and a logging proxy covers retries.
-- **Horizon as a measure.** Log the steps committed per model call and the chain length, because OpenClaw's horizon is not fixed at one step. This remains descriptive ([not a research question](#not-a-research-question)).
+- **Horizon as a measure.** Log the steps committed per model call and the chain length on OpenClaw 2 with this project's skills, because nothing in OpenClaw sets a horizon and the old logs' counts do not carry over. This remains descriptive ([not a research question](#not-a-research-question)).
 - **Error and resubmission rules, set before running.** Decide how provider errors count and whether a resubmitted task is one task or two, since merging runs inflates task time.
 - **Progress.** The predecessor's OpenClaw had no plan or step structure and a median of one logged outbound message per task, so matching this system takes explicit work.
 - **Wrong-context actions.** Count actions caused by earlier session content.
