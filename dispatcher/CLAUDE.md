@@ -9,6 +9,7 @@ uv run pytest dispatcher -q                    # dispatcher unit tests only
 uv run pytest -m integration                   # after touching the executor, subprocess handling or the loop
 uv run pytest --update-golden                  # after changing fixed texts, rendering or the catalog; then git diff dispatcher/tests/golden
 uv run go2 catalog                             # check system text, catalog, tool schema and registry hash after changing prompts or the registry
+uv run go2 report [FOLDER]                     # latency report from existing run logs; --since / --until; no key needed
 ```
 
 ## Docs

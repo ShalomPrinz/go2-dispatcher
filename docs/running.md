@@ -8,12 +8,12 @@ Operating the system. There are two entry points over the same dispatcher: `go2`
 go2 [-h] [--config CONFIG] [--backend {stub,real}] [--horizon HORIZON]
     [--fault STEP:KIND] [--reset-stub] COMMAND ...
 
-COMMAND: run TASK | batch TASKS_FILE | catalog | state | bot
+COMMAND: run TASK | batch TASKS_FILE | catalog | state | report [FOLDER] | bot
 ```
 
 `go2 bot` starts the Telegram transport ([below](#telegram-bot)) and hands every argument after `bot` to it; it takes only its own `--config`, so a global option before `bot` is a usage error.
 
-Global options go **before** the command (argparse), for example `go2 --backend real state`, not `go2 state --backend real`. Every command accepts every global option; the commands take no options of their own. Exactly one of a command or `--reset-stub` is required; `--reset-stub` with a command is a usage error. `-h` / `--help` works globally and after each command.
+Global options go **before** the command (argparse), for example `go2 --backend real state`, not `go2 state --backend real`. Every command accepts every global option; only `report` has options of its own ([below](#latency-report)). Exactly one of a command or `--reset-stub` is required; `--reset-stub` with a command is a usage error. `-h` / `--help` works globally and after each command.
 
 | Option | Meaning |
 |---|---|
@@ -30,6 +30,7 @@ Global options go **before** the command (argparse), for example `go2 --backend 
 | `--reset-stub` | yes | yes | no | Resets the stub and exits. |
 | `catalog` | no | no | no | Prints the system text, `## Skills` + catalog, `## Tool schema` + the JSON schema, and `Registry hash: <16 hex>`. |
 | `state` | no | no | no | Runs the `read_state` utility (its own DDS read, not through the robot service) and prints the robot state as JSON. |
+| `report [FOLDER]` | no | no | no | Prints a latency report from existing run logs ([below](#latency-report)). |
 
 "The API key" is the variable for `llm.provider`: `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` ([configuration.md](configuration.md#env-file)). `run`, `batch` and the bot log each task under `{log.dir}/{llm.provider}/{robot.backend}/` ([run-log.md](../dispatcher/docs/run-log.md#files)).
 
@@ -60,9 +61,9 @@ On a terminal the trace is colored and the `Thinking...` and `▶` lines are rep
 
 | Code | When |
 |---|---|
-| 0 | `run` ended `DONE`; `batch` finished all lines with no task ending `ROBOT_SERVICE_LOST` or `STOP_FAILED`; `catalog`; `state` read a state; `--reset-stub` succeeded. |
-| 1 | `run` ended with any outcome other than `DONE` (including a stop by Ctrl+C); a `batch` task ended `ROBOT_SERVICE_LOST` or `STOP_FAILED`; `state` could not read a state (`Robot state unavailable.`). |
-| 2 | Usage error; `Config error: ...`; `Registry error: ...`; `Missing ANTHROPIC_API_KEY.` (or `OPENROUTER_API_KEY`); `Another dispatcher is running (lock: <path>).`; `--reset-stub` with the real backend; `run` with an empty task; a tasks file that cannot be read. |
+| 0 | `run` ended `DONE`; `batch` finished all lines with no task ending `ROBOT_SERVICE_LOST` or `STOP_FAILED`; `catalog`; `state` read a state; `report` printed a report; `--reset-stub` succeeded. |
+| 1 | `run` ended with any outcome other than `DONE` (including a stop by Ctrl+C); a `batch` task ended `ROBOT_SERVICE_LOST` or `STOP_FAILED`; `state` could not read a state (`Robot state unavailable.`); `report` found no logs in the folder or no finished task in the date window. |
+| 2 | Usage error (a bad `report` date among them); `Config error: ...`; `Registry error: ...`; `Missing ANTHROPIC_API_KEY.` (or `OPENROUTER_API_KEY`); `Another dispatcher is running (lock: <path>).`; `--reset-stub` with the real backend; `run` with an empty task; a tasks file that cannot be read. |
 | 130 | Ctrl+C: a second Ctrl+C, Ctrl+C while no task runs, or a `batch` stopped by the first Ctrl+C. |
 | 143 | SIGTERM. |
 
@@ -85,6 +86,20 @@ sit down
 ```
 
 Tasks run one after another in one process. The previous task's summary **carries over** from line to line, as it does between Telegram messages; the robot state does not: each task reads a fresh one through the [robot service](#robot-service). One `sit` affects every later task, because no skill can stand the robot up ([robot.md](../skills/docs/robot.md#open-robot-side-questions)). A reset per task is a future idea ([roadmap.md](roadmap.md#future-ideas)).
+
+### Latency report
+
+```
+go2 report [FOLDER] [--since WHEN] [--until WHEN]
+go2 report logs/openrouter/real --since 2026-10-29T14:57 --until 2026-10-29T17:00
+```
+
+Reads one log folder and prints a table to stdout, in seconds, one section per model, registry hash and condition: per call type, per task, and the time split. It reads logs only: no API key, lock, robot or network.
+
+- `FOLDER`: default `{log.dir}/anthropic/real`, the study folder. An explicit folder does not read the config.
+- `--since` / `--until`: `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`, local time as recorded at task start, both ends included. A bare `--until` date covers that whole day.
+
+The metric definitions and what is skipped are in [run-log.md](../dispatcher/docs/run-log.md#latency-report-go2-report).
 
 ## Telegram bot
 

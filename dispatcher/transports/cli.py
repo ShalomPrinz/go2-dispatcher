@@ -9,12 +9,13 @@ import json
 import signal
 import sys
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from skills import stub
 
-from .. import process_lock, prompts
+from .. import process_lock, prompts, report
 from ..context import PromptSurface
 from ..dispatcher import Dispatcher
 from ..executor import Executor
@@ -44,6 +45,21 @@ BATCH_NOT_RUN_LINE = "Not run: task {i}: {task}"
 # --- arguments -------------------------------------------------------------------------
 
 
+def _bound(text: str, *, end_of_day: bool) -> datetime:
+    try:
+        return report.parse_bound(text, end_of_day=end_of_day)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"expected YYYY-MM-DD or YYYY-MM-DDTHH:MM, got {text!r}") from None
+
+
+def _since(text: str) -> datetime:
+    return _bound(text, end_of_day=False)
+
+
+def _until(text: str) -> datetime:
+    return _bound(text, end_of_day=True)
+
+
 def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="go2", description="Go2 LLM dispatcher command line.")
     p.add_argument("--config", type=Path, default=None, help="config file (default ./config.toml)")
@@ -65,6 +81,10 @@ def _parser() -> argparse.ArgumentParser:
     batch.add_argument("tasks_file", type=Path, metavar="TASKS_FILE")
     sub.add_parser("catalog", help="print system text, catalog, tool schema and registry hash")
     sub.add_parser("state", help="read the robot state and print it as JSON")
+    rep = sub.add_parser("report", help="print a latency report from existing run logs")
+    rep.add_argument("folder", type=Path, nargs="?", metavar="FOLDER", help="log folder (default: the study folder)")
+    rep.add_argument("--since", type=_since, metavar="WHEN", help="first task start, YYYY-MM-DD[THH:MM], local time")
+    rep.add_argument("--until", type=_until, metavar="WHEN", help="last task start; a bare date covers the whole day")
     bot = sub.add_parser("bot", add_help=False, help="run the Telegram bot (go2 bot [--config PATH]; docs/running.md)")
     bot.add_argument("bot_args", nargs=argparse.REMAINDER)
     return p
@@ -124,6 +144,19 @@ def cmd_reset_stub(cfg) -> int:
     process_lock.acquire(cfg.log.dir)
     stub.reset(cfg.stub.initial_posture, cfg.stub.state_file)
     print(f"Stub reset: {cfg.stub.initial_posture} ({cfg.stub.state_file}).")
+    return EXIT_OK
+
+
+def cmd_report(args: argparse.Namespace) -> int:
+    # An explicit folder needs no config, so a report never depends on the current config (docs/running.md).
+    folder = args.folder
+    if folder is None:
+        folder = load_config_and_env(args.config, _overrides(args)).log.dir / report.STUDY_FOLDER
+    try:
+        print(report.render(report.build(folder, args.since, args.until)))
+    except report.NoLogs as e:
+        print(e, file=sys.stderr)
+        return EXIT_FAIL
     return EXIT_OK
 
 
@@ -234,7 +267,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.reset_stub and args.command is not None:
         parser.error("--reset-stub takes no command")
     if not args.reset_stub and args.command is None:
-        parser.error("a command is required (run, batch, catalog, state) or --reset-stub")
+        parser.error("a command is required (run, batch, catalog, state, report) or --reset-stub")
     try:
         return _run_command(args)
     except StartupError as e:
@@ -243,6 +276,8 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _run_command(args: argparse.Namespace) -> int:
+    if args.command == "report":
+        return cmd_report(args)
     cfg = load_config_and_env(args.config, _overrides(args))
     if args.reset_stub:
         return cmd_reset_stub(cfg)
