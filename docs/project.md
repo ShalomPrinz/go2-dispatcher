@@ -44,6 +44,7 @@ The **planning horizon** (maximum steps per plan) is one config value. Horizon 1
 - **Two phases.** Phase one characterises the system objectively, in simulation and from run logs, before any human participants are involved. Phase two is the participant study.
 - **Granularity and horizon are independent variables.** Varying both at once makes effects impossible to attribute. The experiment design must decide how they are crossed (open, [roadmap](roadmap.md#open-questions)).
 - Experiments run only after the v2 verification layer is implemented ([roadmap](roadmap.md#v2-plan)). Everything that gates them, including the still-undesigned participant protocol, task set and trust measure, is listed in [roadmap.md](roadmap.md#before-experiments).
+- **Latency target: 4 s or less per LLM call**, set by the advisor. It is read as the median `total_ms` across all call types, with p90 reported beside it, because a median alone would hide a long worst case. `go2 report` computes it ([run-log.md](../dispatcher/docs/run-log.md#computing-the-study-metrics)).
 
 ### OpenClaw as a system-level baseline
 
@@ -52,6 +53,8 @@ OpenClaw (the runtime the predecessor used) is included as a **system-level** ba
 - The baseline is **OpenClaw 2**, set up and run by the student with this project's skills. The predecessor's original OpenClaw install is not used: OpenClaw has moved to version 2, and a baseline on the old version would not use the same skills. Setting it up comes after this system runs smoothly on the robot.
 - Assumption: every experimental task can run on both systems.
 - Open: whether OpenClaw runs under one granularity condition or all of them. Decide when designing the task set ([roadmap](roadmap.md#open-questions)).
+- **What is compared.** Only "first call" and "later calls" exist on both systems: OpenClaw has no plans, so the finer call types apply to this system only. One call here can plan several steps, while an agent runtime may call the model per step, so per-call latency alone misleads. The headline numbers are therefore per task: time to first motion and total model wait. Whether OpenClaw 2's logs give per-call latency and tokens is not yet verified; if they do not, a logging proxy in front of the model API captures both.
+- **Progress messages match.** The OpenClaw side shows Telegram progress at the same level of detail as this system ([running.md](running.md#progress-message)): plan, current step, outcome. Progress changes how long a wait feels, so a difference would skew the trust and interaction measures. If OpenClaw 2 cannot match it, the difference is reported as part of the comparison.
 - **Caveat for any write-up:** requiring an explicit plan changes model behaviour, and the two systems also differ in context design, prompt, compaction and loop. Differences are therefore attributed to the **system as a whole**, never to planning or to any single component.
 
 ### Not a research question
