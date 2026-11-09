@@ -16,7 +16,7 @@ Documents that cover the whole system or both services.
 
 | Document | Owns |
 |---|---|
-| [project.md](project.md) | What the project is and why it exists: research direction and study design, the advisor's requirements, OpenClaw as a system-level baseline and its caveat, what is explicitly not a research question, people and roles, current status. |
+| [project.md](project.md) | What the project is and why it exists: research direction and study design, the advisor's requirements, OpenClaw as a system-level baseline and its caveat, what the predecessor's OpenClaw logs show, preparing the OpenClaw 2 comparison, what is explicitly not a research question, people and roles, current status. |
 | [architecture.md](architecture.md) | Components and data flow, process model, repository layout, glossary, why a purpose-built dispatcher instead of OpenClaw (with what was lost and how it is covered), cross-cutting design decisions. |
 | [safety.md](safety.md) | Everything that limits or stops the robot: the stop path and stop word, step timeouts, task time limit, motion budget, single-instance lock, orphan handling, the e-stop, supervised-operation rules. |
 | [configuration.md](configuration.md) | Every config key (type, default, tunable or not), `.env` and secrets, precedence, CLI overrides, path resolution, validation rules. |

@@ -94,7 +94,7 @@ Not scheduled.
 | Question | Current v1 behaviour | Resolved by |
 |---|---|---|
 | Participant protocol: number of participants, session procedure, consent and ethics approval, participant safety around the robot beyond the [supervised-operation rules](safety.md#supervised-operation-rules). | Not designed | Experiment design with the advisor |
-| Task set: which tasks participants give, and whether each can run on both systems (the OpenClaw-baseline assumption, [project.md](project.md#openclaw-as-a-system-level-baseline)). | Not designed | Experiment design with the advisor |
+| Task set: which tasks participants give, and whether each can run on both systems (the OpenClaw-baseline assumption, [project.md](project.md#openclaw-as-a-system-level-baseline)). Wait steps ([candidate tasks](project.md#preparing-the-openclaw-2-comparison)) need a skill on both systems; `skills/catalog` has none today. | Not designed | Experiment design with the advisor |
 | How subjective trust and interaction quality are measured (questionnaire or other instrument). Dispatcher load is computed from the run log ([run-log.md](../dispatcher/docs/run-log.md#computing-the-study-metrics)). | Not designed | Experiment design with the advisor |
 | How are skill granularity and planning horizon crossed in the experiment? | — | Experiment design with the advisor |
 | Does the OpenClaw baseline run under one granularity condition or all of them? | — | Experiment design (task set) |
@@ -131,6 +131,6 @@ The gate for experiments with participants, collected from the sections above. E
 | Supervised robot checklist: posture thresholds (`body_height` or `mode`, with `rt/lowstate` joint angles recorded as fallback), settle waits, what `Move` does while sitting, kill-to-stop latency, obstacle distances (`range_obstacle`, item 10). | Supervised run on the robot; record results in [robot.md](../skills/docs/robot.md) |
 | Pin the Python patch version the real backend runs with (currently `>=3.10,<3.11`). | Lab machine setup ([setup.md](setup.md)) |
 | Manual Telegram test on a phone: busy reply and stop. Basic task and reply flow confirmed working. | Operator |
-| Analyse the old OpenClaw session logs: count compactions, retries and context size per call, to turn the measurement-validity argument ([architecture.md](architecture.md#why-a-purpose-built-dispatcher)) into data. | Obtain the logs from the predecessor's lab machine |
 | Choose the onboard computer that runs the whole system on the robot ([architecture.md](architecture.md#design-decisions)) and have it ordered. | The student chooses; the advisor orders through university purchasing |
 | Check whether the lab Wi-Fi allows Telegram and the LLM API. The university network is known to block Telegram; a lab hotspot is the stopgap. | The student |
+| Set up the [OpenClaw 2 baseline](project.md#preparing-the-openclaw-2-comparison), including per-task session policy, the error and resubmission rules, skills logging their own timing and outcome, and re-measuring compaction on version 2. | The student, after this system runs smoothly on the robot; whether the baseline is tuned and the session policy are confirmed with the advisor |

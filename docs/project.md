@@ -57,6 +57,44 @@ OpenClaw (the runtime the predecessor used) is included as a **system-level** ba
 - **Progress messages match.** The OpenClaw side shows Telegram progress at the same level of detail as this system ([running.md](running.md#progress-message)): plan, current step, outcome. Progress changes how long a wait feels, so a difference would skew the trust and interaction measures. If OpenClaw 2 cannot match it, the difference is reported as part of the comparison.
 - **Caveat for any write-up:** requiring an explicit plan changes model behaviour, and the two systems also differ in context design, prompt, compaction and loop. Differences are therefore attributed to the **system as a whole**, never to planning or to any single component.
 
+### What the predecessor's logs show
+
+Analysis of the predecessor's OpenClaw session logs: 23 sessions and 105 runs, all with a preceding OpenClaw version and its own four skills. Per-turn timing exists only for the 12 July-August sessions on `claude-sonnet-4-6`. There is no robot-state log, so "success" there means the run ended, not that the task worked. These numbers set expectations; they are not baseline results.
+
+| Measure (seconds) | n | Median | p90 | Max |
+|---|---|---|---|---|
+| LLM turn | 306 | 3.1 | 5.9 | 23.0 |
+| Task with 1 skill | 22 | 10.5 | 16.2 | 20.4 |
+| Task with 2-3 skills | 16 | 20.5 | 41.8 | 43.9 |
+| Task with 4+ skills | 10 | 71.7 | 115.7 | 125.8 |
+| First motion, from the Telegram message to the call being issued | 42 | 11.4 | 21.9 | 276 |
+
+- **LLM target.** 75% of LLM turns (230 of 306) and 48% of first-in-run turns (26 of 54) were under the 4 s per-call target.
+- **First motion.** From the Telegram message, the median is 5.0 s when turn 1 moves (n=11) and 11.6 s when turn 2 moves (n=27), usually after reading `SKILL.md`. From run start, the same medians are 3.4 s and 9.2 s, and the overall median is 8.0 s. The first run of a fresh session waits a median 10.7 s before the run starts, against 1.2 s later. Telegram time has 1 s resolution.
+- **Time split.** About 60% LLM and 40% tools (48 tasks). Median 3 turns per task, p90 9, maximum 21.
+- **Context.** 27-58k input tokens per call, about 85% of it fixed (inferred from the fresh-session floor), with 36 tools. This system uses 1.2-2.0k per call, measured on other models. Total input per task is a closer comparison than per call, since a task here also makes several calls: median 3.5-7.2k and maximum 25.7k here.
+- **Latency.** Turn latency follows output tokens (Spearman 0.63), not input tokens (0.11, over a narrow range). Input tokens grew with the session (0.85) while first-turn latency did not (-0.02). The smaller context here is therefore not expected to reduce latency by itself.
+- **Compaction and retries.** See [architecture.md](architecture.md#why-a-purpose-built-dispatcher). No overflow errors occurred. SDK-level retries are not logged, so they cannot be counted.
+- **Errors.** 13 of 101 non-heartbeat runs ended in an error or abort, mostly provider faults. Recovery was the operator resubmitting.
+- **Horizon.** One step at a time, and emergent: no instruction sets it. Of 474 turns, 364 made one call, 100 none and 10 several, none with parallel skills. Of 185 moves, 86 were followed directly by a detect. In August, 46 of 245 skill executions chained skills with `&&`, up to 8, with nothing validating the chain.
+- **Behaviour.** Unverified success claims, a search that oscillated for 33 turns until aborted, a short command that re-ran an earlier failed task, and the agent editing skill scripts. There is no stop tool and approaches had no obstacle check.
+
+### Preparing the OpenClaw 2 comparison
+
+What the logs imply for the baseline. Details of the harness are decided when it is set up; the task set is settled with the advisor ([roadmap](roadmap.md#open-questions)).
+
+- **Tune the baseline.** Reduced tools and inline skill docs, rather than the defaults, so the comparison is not against a strawman. The predecessor's `SKILL.md` read turn and full tool profile would otherwise count against OpenClaw for avoidable reasons. Report what was tuned.
+- **Pin and log the settings** that move the numbers: tool profile, thinking level, session reset, heartbeat, cache retention and exec `yieldMs` (at 10,000 ms, skills longer than that return control while still running). The predecessor set almost none of these.
+- **Session policy.** A fresh session per task adds startup delay; a shared session grows the context and allows earlier tasks to affect later ones. Choose one, state it, and measure its effect on first motion.
+- **Multi-skill tasks.** Task time grows fastest here, and the logs have only 10 such tasks, so the task set needs more. Candidates: find three distinct objects and then take a posture; search for a hidden object within a radius; find a person, approach, wait and return; a 360° scan. Wait steps need a skill on both sides.
+- **One clock on both systems.** The logs lack tool start events, physical motion, robot state, task outcome and retries. Skills write these themselves, so both systems are measured the same way, and a logging proxy covers retries.
+- **Horizon as a measure.** Log the steps committed per model call and the chain length, because OpenClaw's horizon is not fixed at one step. This remains descriptive ([not a research question](#not-a-research-question)).
+- **Error and resubmission rules, set before running.** Decide how provider errors count and whether a resubmitted task is one task or two, since merging runs inflates task time.
+- **Progress.** The predecessor's OpenClaw had no plan or step structure and a median of one logged outbound message per task, so matching this system takes explicit work.
+- **Wrong-context actions.** Count actions caused by earlier session content.
+- **Cache.** 22 of 39 first turns with the same prompt hash and a gap under 5 minutes still went cold, unexplained, with a penalty of about 1.3 s. Record cache hits per call on both systems.
+- **Re-measure compaction.** These figures come from an older version, so OpenClaw 2 may behave differently.
+
 ### Not a research question
 
 "Does explicit planning help?" is explicitly **not** a research question. No internal step-by-step baseline is planned, and the OpenClaw comparison cannot answer it either (see the caveat above).
