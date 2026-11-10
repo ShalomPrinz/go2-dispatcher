@@ -8,7 +8,8 @@ from __future__ import annotations
 import os
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from multiprocessing.connection import Client, Listener
 from typing import NamedTuple
 
@@ -60,11 +61,10 @@ class Served(NamedTuple):
     robot: Recorder
 
 
-@pytest.fixture
-def service(tmp_path):
-    """A store and a Motion over a Recorder, served on a socket by robot_service.serve; the motion clock is real."""
-    path = str(tmp_path / "r.sock")
-    store = StateStore(lambda msg: msg)
+@contextmanager
+def serving(path: str, store: StateStore) -> Iterator[Served]:
+    """``store`` and a Motion over a Recorder, served on a socket by robot_service.serve; the motion clock is
+    real."""
     robot = Recorder()
     motion = robot_service.Motion(robot, lambda s, abort: abort.wait(s), store, sim=False)
     motion.start()
@@ -79,8 +79,29 @@ def service(tmp_path):
             threading.Thread(target=robot_service.serve, args=(conn, store, "stub", motion), daemon=True).start()
 
     threading.Thread(target=accept, daemon=True).start()
-    yield Served(path, store, robot)
-    listener.close()
+    try:
+        yield Served(path, store, robot)
+    finally:
+        listener.close()
+
+
+@pytest.fixture
+def service(tmp_path):
+    with serving(str(tmp_path / "r.sock"), StateStore(lambda msg: msg)) as served:
+        yield served
+
+
+class Clock:
+    """A monotonic clock that moves only when the test advances it."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
 
 
 def put_later(store: StateStore, msg: RobotState, delay_s: float) -> None:
@@ -114,21 +135,23 @@ def test_read_next_waits_for_a_newer_message(service):
         assert stale.seq == 2
 
 
-def test_stream_sends_new_samples_and_link_changes(service, monkeypatch):
-    monkeypatch.setattr(state_store, "LINK_GAP_S", 0.1)
-    path, store, _ = service
-    store.put(state(0.30))
-    with RobotClient.connect(path) as client:
-        assert client.subscribe(0.02) == "up"
-        first = client.next_event(1.0)
-        assert isinstance(first, StateReply) and first.seq == 1
-        down = client.next_event(1.0)  # no new message: no sample, then the gap
-        assert isinstance(down, LinkEvent) and down.link == "down" and down.rx_mono == first.rx_mono
-        store.put(state(0.31))
-        up = client.next_event(1.0)
-        sample = client.next_event(1.0)
-        assert isinstance(up, LinkEvent) and up.link == "up"
-        assert isinstance(sample, StateReply) and sample.seq == 2
+def test_stream_sends_new_samples_and_link_changes(tmp_path):
+    """The store clock moves only when advanced, so the link changes exactly where the test says."""
+    clock = Clock()
+    with serving(str(tmp_path / "r.sock"), StateStore(lambda msg: msg, clock=clock)) as (path, store, _):
+        store.put(state(0.30))
+        with RobotClient.connect(path) as client:
+            assert client.subscribe(0.02) == "up"
+            first = client.next_event(1.0)
+            assert isinstance(first, StateReply) and first.seq == 1
+            clock.advance(state_store.LINK_GAP_S + 0.1)  # no new message: no sample, then the gap
+            down = client.next_event(1.0)
+            assert isinstance(down, LinkEvent) and down.link == "down" and down.rx_mono == first.rx_mono
+            store.put(state(0.31))
+            events = [client.next_event(1.0), client.next_event(1.0)]  # one stream tick may send them either way
+            ups = [e for e in events if isinstance(e, LinkEvent)]
+            samples = [e for e in events if isinstance(e, StateReply)]
+            assert [e.link for e in ups] == ["up"] and [e.seq for e in samples] == [2]
 
 
 def test_version_mismatch_is_refused_both_ways(service, tmp_path):

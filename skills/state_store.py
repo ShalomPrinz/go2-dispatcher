@@ -29,17 +29,19 @@ class Reading:
 
 class StateStore:
     """Holds the latest message only. put() is the subscriber callback: it stores the message, numbers it and
-    stamps its arrival; mapping to RobotState happens on read, outside the callback."""
+    stamps its arrival; mapping to RobotState happens on read, outside the callback. ``clock`` stamps arrivals
+    and measures age and link; waits for a message always use real time."""
 
-    def __init__(self, to_state: Callable[[Any], RobotState]) -> None:
+    def __init__(self, to_state: Callable[[Any], RobotState], clock: Callable[[], float] = time.monotonic) -> None:
         self._to_state = to_state
+        self._clock = clock
         self._cond = threading.Condition()
         self._latest: tuple[int, float, Any] | None = None  # (seq, rx_mono, msg)
 
     def put(self, msg: Any) -> None:
         with self._cond:
             seq = 1 if self._latest is None else self._latest[0] + 1
-            self._latest = (seq, time.monotonic(), msg)
+            self._latest = (seq, self._clock(), msg)
             self._cond.notify_all()
 
     @property
@@ -54,7 +56,7 @@ class StateStore:
             latest = self._latest
         if latest is None:
             return "down", None
-        return ("up" if time.monotonic() - latest[1] <= LINK_GAP_S else "down"), latest[1]
+        return ("up" if self._clock() - latest[1] <= LINK_GAP_S else "down"), latest[1]
 
     def read(self, min_seq: int | None = None, wait_s: float = 0.0) -> Reading | None:
         """Wait up to ``wait_s`` for a message with seq >= ``min_seq``, then read the latest message, which is
@@ -70,7 +72,7 @@ class StateStore:
         if latest is None:
             return None
         seq, rx_mono, msg = latest
-        now = time.monotonic()
+        now = self._clock()
         state = dataclasses.replace(
             self._to_state(msg), t=time.time(), seq=seq, age_ms=round((now - rx_mono) * 1000.0, 3)
         )
