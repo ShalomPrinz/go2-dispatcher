@@ -14,10 +14,12 @@ import pytest
 
 from dispatcher.context import PromptSurface
 from dispatcher.dispatcher import Dispatcher
+from dispatcher.executor import Executor
 from dispatcher.models import StopCause
 from dispatcher.registry import Registry
 from dispatcher.tests.helpers import FakeExecutor, ScriptedPlanner, exec_result, make_config, stop_move_result
 from dispatcher.transports import cli as cli_module
+from skills import stop_move as stop_move_utility
 from skills import stub
 from tests.helpers import REPO_ROOT
 
@@ -169,6 +171,40 @@ def test_batch_stops_after_a_task_whose_stop_failed(tmp_path, monkeypatch, capsy
         "Batch stopped at task 2: the stop command to the robot failed.",
         "Not run: task 3: turn right",
         "Not run: task 4: sit",
+    ]
+
+
+def test_batch_stops_after_a_failed_service_stop_ending_a_walk(tmp_path, monkeypatch, capsys):
+    """In process, real executor: stop_error fails the service's own StopMove; the patched fallback fails too."""
+    real_utility = Executor._run_utility
+    monkeypatch.setattr(
+        Executor,
+        "_run_utility",
+        lambda self, utility: (
+            (1, None, "StopMove failed", 1.0) if utility is stop_move_utility else real_utility(self, utility)
+        ),
+    )
+    tasks = tmp_path / "tasks.txt"
+    tasks.write_text("say hi\nwalk\nturn right\n", encoding="utf-8")
+    cfg = make_config(tmp_path, stub={"initial_posture": "standing", "faults": [{"step": 1, "kind": "stop_error"}]})
+    stub.reset(cfg.stub.initial_posture, cfg.stub.state_file)
+    registry = Registry.load(REPO_ROOT / "skills" / "catalog")
+    walk = {"skill": "walk", "params": {"direction": "forward", "distance_m": 0.1}}
+    script = [DONE, {"status": "PLAN", "steps": [walk, TURN]}]  # no further call after the failed stop
+    planner = ScriptedPlanner(script, PromptSurface.build(registry, cfg.loop.planning_horizon))
+    dispatcher = Dispatcher(cfg, registry, planner, Executor(cfg, cfg.base_dir))
+    monkeypatch.setattr(cli_module, "build_dispatcher", lambda *_args, **_kwargs: dispatcher)
+    monkeypatch.setattr(cli_module._Runner, "install", lambda _self: None)  # no process-wide signal or atexit hooks
+    try:
+        assert cli_module.cmd_batch(cfg, tasks) == 1
+    finally:
+        dispatcher.shutdown(0)
+    o = dispatcher.previous
+    assert o is not None and o.outcome == "STOP_FAILED" and len(planner.calls) == 2
+    assert o.last_step is not None and (o.last_step.ref.skill, o.last_step.outcome) == ("walk", "error")
+    assert capsys.readouterr().err.splitlines()[-2:] == [
+        "Batch stopped at task 2: the stop command to the robot failed.",
+        "Not run: task 3: turn right",
     ]
 
 

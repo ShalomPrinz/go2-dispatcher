@@ -105,6 +105,7 @@ class StopCause(str, Enum):
     INTERNAL_ERROR = "internal_error"
     STATE_UNAVAILABLE = "state_unavailable"  # the task-start state read failed; StopMove only
     ROBOT_SERVICE_LOST = "robot_service_lost"  # the robot service died or hung; fallback stop (docs/safety.md)
+    SERVICE_STOP_FAILED = "service_stop_failed"  # a StopMove the service sent on its own failed; fallback stop
 
     @property
     def task_outcome(self) -> TaskOutcomeCode:
@@ -113,8 +114,9 @@ class StopCause(str, Enum):
 
     @property
     def kill(self) -> StepKill:
-        """What a skill process killed for this cause reports (all but INTERNAL_ERROR, STATE_UNAVAILABLE and
-        ROBOT_SERVICE_LOST, which the executor reports as an ``error`` step)."""
+        """What a skill process killed for this cause reports (all but INTERNAL_ERROR, STATE_UNAVAILABLE,
+        ROBOT_SERVICE_LOST, which the executor reports as an ``error`` step, and SERVICE_STOP_FAILED, which kills
+        nothing)."""
         return _KILLS[self]
 
 

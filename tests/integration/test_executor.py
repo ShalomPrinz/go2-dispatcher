@@ -238,6 +238,19 @@ def test_service_hang_falls_back(executor, registry, cfg):
     assert executor.fresh_state().backend == "stub"
 
 
+def test_failed_service_stop_after_a_walk_runs_the_fallback(executor, registry, cfg):
+    """stop_error: the service's own StopMove ending the walk fails; the disarm reports it, the service is kept."""
+    stub.write_posture("standing", cfg.stub.state_file)
+    res = run(executor, registry, "walk", {"direction": "forward", "distance_m": 0.1}, fault="stop_error")
+    assert (res.outcome, res.error_code, res.service_lost) == ("error", "sdk_error", False)
+    smr = res.stop_move
+    assert smr is not None and smr.ok and smr.reason == "service_stop_failed" and smr.stop_path == "fallback"
+    assert smr.service_error is not None and smr.service_error.startswith("StopMove returned 99 (")
+    assert smr.stop_call_ms is not None and not smr.service_lost and smr.kill_to_stop_ms is None
+    assert executor.robot.pid is not None  # the service answered, so it is kept
+    assert stub.read_state(cfg.stub.state_file).command is None
+
+
 def test_step_does_not_start_a_dead_service(executor, registry):
     """A step never starts the service: it cannot be armed, so it counts as a loss and never runs."""
     res = executor.run(

@@ -316,9 +316,8 @@ class Executor:
         if stop is None and lost is not None:  # lost after the skill had exited: nothing was killed
             stop = self._fallback(StopCause.ROBOT_SERVICE_LOST, time.monotonic(), None, service_error=lost, lose=True)
             service_lost = True
-        elif stop is None and (lost := self._disarm()) is not None:
-            stop = self._fallback(StopCause.ROBOT_SERVICE_LOST, time.monotonic(), None, service_error=lost, lose=True)
-            service_lost = True
+        elif stop is None:  # no stop sent by the executor: the disarm reports the service's own failed StopMove
+            stop, service_lost = self._disarm()
         readers.join()
         duration_ms = _ms(t0)
 
@@ -498,14 +497,23 @@ class Executor:
             return _error_text(e)
         return None
 
-    def _disarm(self) -> str | None:
-        """End the step's lease; None on success, else why the service counts as lost."""
+    def _disarm(self) -> tuple[StopMoveResult | None, bool]:
+        """End the step's lease. Returns the stop path run if the service was lost or reports a failed StopMove of
+        its own (None if neither), and whether the service was lost (and killed)."""
+        t0 = time.monotonic()
         try:
             with self._control_lock:
-                self._control().disarm()
+                failed = self._control().disarm()
         except _SERVICE_ERRORS as e:
-            return _error_text(e)
-        return None
+            error = _error_text(e)
+            return self._fallback(
+                StopCause.ROBOT_SERVICE_LOST, time.monotonic(), None, service_error=error, lose=True
+            ), True
+        if failed is None:
+            return None, False
+        error = f"StopMove returned {failed.ret} ({failed.reason})"  # like a failed stop_sent: fallback, service kept
+        cause = StopCause.SERVICE_STOP_FAILED
+        return self._fallback(cause, t0, None, service_error=error, stop_call_ms=failed.stop_call_ms, lose=False), False
 
     def _close_control(self) -> None:
         with self._control_lock:

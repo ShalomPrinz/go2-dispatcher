@@ -95,12 +95,12 @@ All `StepResult` fields at the top level, with the step's identity nested under 
 
 All `StopMoveResult` fields, one run of the [stop path](../../docs/safety.md#the-stop-path):
 
-- `ok`, `reason` (`operator` / `task_time_limit` / `step_timeout` / `shutdown` / `internal_error` / `state_unavailable` / `robot_service_lost`).
+- `ok`, `reason` (`operator` / `task_time_limit` / `step_timeout` / `shutdown` / `internal_error` / `state_unavailable` / `robot_service_lost` / `service_stop_failed`). `service_stop_failed`: the `disarm` after a step the executor did not stop reported that a `StopMove` the robot service sent on its own failed, so the fallback ran ([loop-and-context.md](loop-and-context.md#stop-failed)).
 - `stop_path`: `service` (the robot service's `stop` answered `stop_sent` with code 0) or `fallback` (the fresh-process `stop_move` ran). Null only when the stop path itself raised (a test fake; the executor never raises).
 - `duration_ms`: the whole stop path, a failed service stop included. `kill_to_stop_ms`: measured by the dispatcher from the skill kill to the confirmed (or failed) stop; null when no step was killed.
-- `stop_call_ms`: the service's `StopMove` call time from `stop_sent`; null on a fallback unless the service answered with a non-zero code.
-- `service_error`: why the fallback ran (`ServiceUnavailable: no reply within 0.5s`, `StopMove returned 3104`, ...); null on the service path.
-- `service_lost`: true when the robot service was lost on this stop (hung, dead or no reply) and was SIGKILLed before the fallback; set on every loss path, whatever `reason` the stop was for (a loss during an operator or timeout stop keeps that `reason`). False on the service path and on a fallback after a non-zero `stop_sent`, where the service is kept.
+- `stop_call_ms`: the service's `StopMove` call time from `stop_sent`, or from the `disarm` reply's `stop_failed`; null on a fallback unless the service reported a failed `StopMove` (a non-zero `stop_sent`, or `stop_failed`).
+- `service_error`: why the fallback ran (`ServiceUnavailable: no reply within 0.5s`, `StopMove returned 3104`, ...); null on the service path. After a `stop_failed` it is `StopMove returned {ret} ({reason})`, with the service's reason for that `StopMove` (`move done`, `lease deadline`, `lease connection closed`, `disarmed`) and `ret` `None` if the call raised.
+- `service_lost`: true when the robot service was lost on this stop (hung, dead or no reply) and was SIGKILLed before the fallback; set on every loss path, whatever `reason` the stop was for (a loss during an operator or timeout stop keeps that `reason`). False on the service path and on a fallback after a non-zero `stop_sent` or a `stop_failed`, where the service is kept.
 - `state_after`: the state after the stop, read through the service on the service path and the utility's `state_after` on the fallback; null if the read failed.
 - Fallback only: `exit_code`, `response` (its `timing`), `stderr_tail`. If the utility process could not even be started, `ok` is false, `exit_code` and `response` are null, and `stderr_tail` holds `"<ExceptionType>: <message>"`.
 
@@ -163,7 +163,7 @@ Pick the folder first (`logs/anthropic/real/` for the study), then group its tas
 | Process overhead per step | `step_result.duration_ms − response.timing.total_ms` (interpreter start and teardown outside the skill's own timing) |
 | Stop latency | `stop_move.kill_to_stop_ms` (kill to confirmed stop) by `stop_move.stop_path`. Service path: `stop_call_ms` is the `StopMove()` call in the service. Fallback: `dds_init_ms` + `client_init_ms` + `stop_call_ms` from `stop_move.response.timing`, and `duration_ms` (failed service stop plus the whole utility process). Records without `stop_path` all ran the fresh-process stop and have no `kill_to_stop_ms` ([safety.md](../../docs/safety.md#measured-latency)) |
 | Robot service losses | `stop_move` with `service_lost == true` (`service_error` says why; `reason` is the stop's cause, which is `robot_service_lost` only when the loss itself triggered the stop); tasks ended by one: `outcome == "ROBOT_SERVICE_LOST"` |
-| Failed stops | `stop_move` with `ok == false`; `task_end.stop_move_failed`; tasks ended by one with the service alive: `outcome == "STOP_FAILED"` |
+| Failed stops | `stop_move` with `ok == false`; `task_end.stop_move_failed`; tasks ended by one with the service alive: `outcome == "STOP_FAILED"`. Failed `StopMove`s the robot service sent on its own: `stop_move` with `reason == "service_stop_failed"` (`ok` says whether the fallback then stopped the robot) |
 | Motion commanded | `step_start.dispatch.motion_cost`, `task_end.budget_used` |
 | Robot state | `step_result.response.state_before` / `state_after`; `stop_move.state_after` ([robot.md](../../skills/docs/robot.md#state-sampling)) |
 | Exact prompts | `task_start.system_text` / `catalog_text` / `tool_schema` + `llm_request.user_text` |

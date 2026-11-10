@@ -594,9 +594,20 @@ def test_stop_during_schema_retry_call(tmp_path, registry):
     assert r.executor.runs == []
 
 
-def test_failed_stop_with_the_service_alive_ends_the_task_with_no_further_call(tmp_path, registry):
-    timeout = exec_result("timeout", stop_move=stop_move_result(StopCause.STEP_TIMEOUT, ok=False))
-    executor = FakeExecutor([timeout])
+@pytest.mark.parametrize(
+    "step",
+    [
+        exec_result("timeout", stop_move=stop_move_result(StopCause.STEP_TIMEOUT, ok=False)),
+        exec_result(  # the service's own StopMove ending the walk failed, then the fallback too
+            "error",
+            error_code="sdk_error",
+            error_message="StopMove returned 99",
+            stop_move=stop_move_result(StopCause.SERVICE_STOP_FAILED, ok=False),
+        ),
+    ],
+)
+def test_failed_stop_with_the_service_alive_ends_the_task_with_no_further_call(tmp_path, registry, step):
+    executor = FakeExecutor([step])
     r = Rig(tmp_path, registry, [plan(walk(), turn())], executor=executor)
     o = r.run()
     assert (o.outcome, o.llm_calls, len(r.planner.calls), len(executor.runs)) == ("STOP_FAILED", 1, 1, 1)
