@@ -78,7 +78,7 @@ One task runs at a time. While it runs, any other message gets `Busy: a task is 
 
 Steps run only between LLM calls, never during one. When the dispatcher calls the model, the previous step has finished (its motion loop ended with `StopMove()`) or has been killed and stopped. A slow or failing LLM call never leaves the robot moving.
 
-**No LLM call without a confirmed stop, within a task.** After a stop the executor sends fails, the task ends with no further LLM call; a later task is not gated ([StopMove failure](#stopmove-failure)). This covers the executor's stops only: the `StopMove` that ends a `move` primitive reaches the dispatcher as an ordinary `sdk_error` step, and the one sent on `disarm` reports no code, so the model is still called after those ([roadmap.md](roadmap.md#open-questions)).
+**No LLM call without a confirmed stop, within a task.** After a stop the executor sends fails, the task ends with no further LLM call; a later task is not gated ([StopMove failure](#stopmove-failure)). This covers the executor's stops only. The robot service reports a failed `StopMove` it sent on its own (ending a `move` primitive, at the lease deadline, on the lease connection's EOF, on `disarm`) in the `disarmed` reply's `stop_failed`, as the lease's latest `StopMove` ([skills.md](../skills/docs/skills.md#robot-service)); the dispatcher does not act on it, so the model is still called after those ([roadmap.md](roadmap.md#open-questions)).
 
 ## Motion budget
 

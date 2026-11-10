@@ -1,5 +1,6 @@
 """The robot service as a process on the stub backend: skills sample state and move through it, a killed skill or
-a gone dispatcher stops the robot, the service faults, one service per socket (skills/docs/skills.md)."""
+a gone dispatcher stops the robot, the service faults, a failed StopMove reported by the disarm, one service per
+socket (skills/docs/skills.md)."""
 
 from __future__ import annotations
 
@@ -102,6 +103,22 @@ def test_service_crash_leaves_the_robot_moving_until_the_fallback_stop(tmp_path)
     resp = RESPONSE.validate_python(single_response(proc))
     assert resp.error is not None and resp.error.code == "robot_unavailable"
     assert command(tmp_path) == (1.0 * 0.3, 0.0, 0.0)  # worst case: the robot keeps its last velocity
+    stop = RESPONSE.validate_python(single_response(run_module("stop_move", {}, stub_env(tmp_path))))
+    assert stop.status == "ok" and command(tmp_path) is None
+
+
+def test_failed_stop_ending_a_walk_is_reported_by_the_disarm(tmp_path):
+    """stop_error: the walk's closing StopMove and the lease-end one fail, the robot keeps moving, the disarm tells."""
+    with robot.running(stub_env(tmp_path)) as svc:
+        proc = run_module(
+            "walk", {"direction": "forward", "distance_m": 0.1}, {**svc.arm(), "GO2_STUB_FAULT": "stop_error"}
+        )
+        failed = svc.control.disarm()
+    resp = RESPONSE.validate_python(single_response(proc))
+    assert resp.error is not None and (resp.error.code, resp.error.message) == ("sdk_error", "StopMove returned 99")
+    assert failed is not None and failed.ret == stub.STUB_ERR_INJECTED
+    assert failed.reason in ("lease connection closed", "disarmed")
+    assert command(tmp_path) is not None  # worst case: the robot keeps its last velocity
     stop = RESPONSE.validate_python(single_response(run_module("stop_move", {}, stub_env(tmp_path))))
     assert stop.status == "ok" and command(tmp_path) is None
 

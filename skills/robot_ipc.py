@@ -84,6 +84,15 @@ class MoveResult:
 
 
 @dataclass(frozen=True)
+class StopFailure:
+    """The lease's latest StopMove failed: why the service sent it, its code (None if it raised) and its time."""
+
+    reason: str
+    ret: int | None
+    stop_call_ms: float
+
+
+@dataclass(frozen=True)
 class StopSent:
     """The reply to ``stop``: StopMove's code (None if it raised) and the call's time in the service."""
 
@@ -248,9 +257,18 @@ class RobotClient:
         """Arm the next step: motion is accepted with ``token`` on one connection until ``timeout_s`` passes."""
         self._request(message("arm", token=token, timeout_s=timeout_s), "armed", REPLY_WAIT_S)
 
-    def disarm(self) -> None:
-        """End the lease; StopMove if it was used for motion."""
-        self._request(message("disarm"), "disarmed", REPLY_WAIT_S + SPORT_CLIENT_TIMEOUT_S)
+    def disarm(self) -> StopFailure | None:
+        """End the lease (StopMove if it was used for motion); the lease's latest StopMove if it failed, else None."""
+        reply = self._request(message("disarm"), "disarmed", REPLY_WAIT_S + SPORT_CLIENT_TIMEOUT_S)
+        failed = reply.get("stop_failed", {})
+        if failed is None:
+            return None
+        if not isinstance(failed, dict):
+            raise ServiceUnavailable(f"malformed reply: {reply!r}")
+        reason, ret, call_ms = failed.get("reason"), failed.get("ret"), failed.get("stop_call_ms")
+        if not isinstance(reason, str) or not (ret is None or _is_int(ret)) or not isinstance(call_ms, (int, float)):
+            raise ServiceUnavailable(f"malformed reply: {reply!r}")
+        return StopFailure(reason=reason, ret=ret, stop_call_ms=float(call_ms))
 
     def stop(self, wait_s: float) -> StopSent:
         """StopMove now through the service's sport client and end any lease; raises ServiceUnavailable if no

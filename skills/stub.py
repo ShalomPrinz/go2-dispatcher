@@ -32,9 +32,9 @@ DEFAULT_POSTURE: StubPosture = "standing"
 
 STUB_ERR_NOT_STANDING = 1
 STUB_ERR_INJECTED = 99
-FaultKind = Literal["error", "hang", "crash", "garbage", "service_hang", "service_crash"]
+FaultKind = Literal["error", "hang", "crash", "garbage", "service_hang", "service_crash", "stop_error"]
 FAULT_KINDS: tuple[FaultKind, ...] = get_args(FaultKind)
-SERVICE_FAULTS: tuple[FaultKind, ...] = ("service_hang", "service_crash")  # applied by the robot service
+SERVICE_FAULTS: tuple[FaultKind, ...] = ("service_hang", "service_crash", "stop_error")  # applied by the robot service
 CRASH_EXIT_CODE = 139
 GARBAGE_TEXT = "not json\n"
 HANG_POLL_S = 1.0

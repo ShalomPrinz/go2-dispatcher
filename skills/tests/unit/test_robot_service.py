@@ -1,7 +1,7 @@
 """The robot service protocol in process: hello, state reads with min_seq, the stream, version mismatch, the lock,
-and the lease: motion only for the armed step, and a StopMove on its deadline, a stop, or the loss of its
-connection or the control connection (skills/docs/skills.md). The service as a process is tested in
-tests/integration/test_robot_service.py."""
+and the lease: motion only for the armed step, a StopMove on its deadline, a stop, or the loss of its connection
+or the control connection, and the failed StopMove the disarm reports (skills/docs/skills.md). The service as a
+process is tested in tests/integration/test_robot_service.py."""
 
 from __future__ import annotations
 
@@ -25,10 +25,13 @@ def state(height: float) -> RobotState:
 
 
 class Recorder:
-    """A sport client that records its calls; every call returns 0."""
+    """A sport client that records its calls; StopMove returns (or raises) the next of ``stops``, then 0, after
+    ``stop_delay_s``; every other call returns 0."""
 
     def __init__(self) -> None:
         self.calls: list[str] = []
+        self.stops: list[int | Exception] = []
+        self.stop_delay_s = 0.0
 
     def Move(self, vx: float, vy: float, vyaw: float) -> int:
         self.calls.append("Move")
@@ -36,7 +39,11 @@ class Recorder:
 
     def StopMove(self) -> int:
         self.calls.append("StopMove")
-        return 0
+        time.sleep(self.stop_delay_s)
+        ret = self.stops.pop(0) if self.stops else 0
+        if isinstance(ret, Exception):
+            raise ret
+        return ret
 
     def StandDown(self) -> int:
         self.calls.append("StandDown")
@@ -290,3 +297,58 @@ def test_an_action_never_starts_after_a_stop_and_a_stop_during_it_is_resent():
     motion.halt("stop op")
     assert late.run(late)["error"]["code"] == robot_ipc.ERR_ABORTED
     assert "StandDown" not in robot.calls
+
+
+# --- the failed StopMove the disarm reports -----------------------------------------------
+
+
+def test_disarm_reports_the_failed_stop_ending_a_move(service):
+    """The move's closing StopMove and the lease-end StopMove after it both fail: the disarm reports the latest."""
+    path, _, robot = service
+    robot.stops = [5, 6]
+    with RobotClient.connect(path, control=True) as control:
+        control.arm("t", 30.0)
+        with RobotClient.connect(path) as skill:
+            assert skill.move(0.3, 0.0, 0.0, 0.2, token="t").stop_ret == 5
+        failed = control.disarm()
+        assert failed is not None and failed.ret == 6 and failed.stop_call_ms >= 0
+        assert failed.reason in ("lease connection closed", "disarmed")  # whichever ended the lease first
+        control.arm("t2", 30.0)  # a new lease starts with no record
+        assert control.disarm() is None
+
+
+def test_a_later_successful_stop_clears_the_record(service):
+    path, _, robot = service
+    robot.stops = [RuntimeError("sdk")]
+    with RobotClient.connect(path, control=True) as control:
+        control.arm("t", 30.0)
+        with RobotClient.connect(path) as skill:
+            assert skill.move(0.3, 0.0, 0.0, 0.2, token="t").stop_ret is None
+        assert control.disarm() is None  # the lease-end StopMove returned 0: the robot is stopped
+
+
+def test_disarm_reports_the_failed_stop_at_the_deadline(service):
+    path, _, robot = service
+    outcome: list = []
+    with RobotClient.connect(path, control=True) as control:
+        control.arm("t", 0.3)
+        robot.stops = [7]
+        moving_in_thread(path, "t", outcome).join(5.0)
+        failed = control.disarm()
+    assert isinstance(outcome[0], Refused) and outcome[0].code == robot_ipc.ERR_ABORTED
+    assert failed is not None and (failed.reason, failed.ret) == ("lease deadline", 7)
+
+
+def test_disarm_waits_for_the_stop_of_a_closed_lease_connection(service):
+    """The skill died and the service's StopMove is still running when the disarm arrives: it waits for it."""
+    path, _, robot = service
+    robot.stops, robot.stop_delay_s = [8], 0.3
+    with RobotClient.connect(path, control=True) as control:
+        control.arm("t", 30.0)
+        with Client(path, family=ipc.FAMILY) as skill:  # a skill killed mid-walk: no reply is read
+            skill.send_bytes(ipc.encode(robot_ipc.message("move", token="t", vx=0.3, vy=0.0, vyaw=0.0, duration_s=10)))
+            assert until(lambda: "Move" in robot.calls)
+        assert until(lambda: "StopMove" in robot.calls)
+        failed = control.disarm()
+    assert failed is not None and (failed.reason, failed.ret) == ("lease connection closed", 8)
+    assert failed.stop_call_ms >= 300.0

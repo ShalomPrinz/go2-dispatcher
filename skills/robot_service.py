@@ -19,7 +19,7 @@ import threading
 import time
 import traceback
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from multiprocessing.connection import Listener
 from types import FrameType
 from typing import Any, NoReturn, Protocol
@@ -125,7 +125,8 @@ class Job:
 
 class Motion:
     """The sport client, the lease and the motion loop thread. ``_lock`` guards the lease, the control
-    connection and the running job, and serialises every Move and every action's commit with the abort."""
+    connection, the running job and the StopMove record, and serialises every Move and every action's commit
+    with the abort."""
 
     def __init__(self, client: SportClient, wait: Wait, *, sim: bool) -> None:
         self._client = client
@@ -136,6 +137,10 @@ class Motion:
         self._control: ipc.Conn | None = None
         self._job: Job | None = None
         self._jobs: queue.Queue[Job] = queue.Queue()
+        self._stops_running = 0  # StopMoves decided and not yet returned
+        self._stops_done = threading.Condition(self._lock)
+        self._stop_failed: robot_ipc.StopFailure | None = None  # the lease's latest StopMove, if it failed
+        self._stop_error = False  # the sim's stop_error fault: every StopMove fails until the next arm
 
     def start(self) -> None:
         threading.Thread(target=self._loop, name="motion-loop", daemon=True).start()
@@ -145,14 +150,24 @@ class Motion:
 
     def stop_move(self, reason: str) -> tuple[int | None, float]:
         """StopMove now, from the calling thread; returns its code (None if it raised) and its time in ms."""
+        with self._lock:
+            self._stops_running += 1
+        return self._send_stop(reason)
+
+    def _send_stop(self, reason: str) -> tuple[int | None, float]:
+        """StopMove for a stop already counted in ``_stops_running``; records it and wakes a waiting disarm."""
         t = time.monotonic()
         try:
-            ret: int | None = self._client.StopMove()
+            ret: int | None = stub.STUB_ERR_INJECTED if self._stop_error else self._client.StopMove()
         except Exception:
             traceback.print_exc(file=sys.stderr)
             ret = None
         ms = round((time.monotonic() - t) * 1000.0, 3)
         print(f"robot service: StopMove ({reason}) returned {ret} in {ms} ms", file=sys.stderr, flush=True)
+        with self._lock:
+            self._stop_failed = None if ret == 0 else robot_ipc.StopFailure(reason=reason, ret=ret, stop_call_ms=ms)
+            self._stops_running -= 1
+            self._stops_done.notify_all()
         return ret, ms
 
     def _end_lease_locked(self, reason: str) -> bool:
@@ -169,7 +184,8 @@ class Motion:
         dispatcher gone."""
         with self._lock:
             self._end_lease_locked(reason)
-        return self.stop_move(reason)
+            self._stops_running += 1
+        return self._send_stop(reason)
 
     def _end_lease(self, reason: str, *, conn: ipc.Conn | None = None, lease: Lease | None = None) -> None:
         """End the lease (only if bound to ``conn``, or only if it is ``lease``, when given); StopMove if it was
@@ -183,8 +199,10 @@ class Motion:
             ):
                 return
             used = self._end_lease_locked(reason)
+            if used:
+                self._stops_running += 1  # counted under the lock, so a disarm waits for it
         if used:
-            self.stop_move(reason)
+            self._send_stop(reason)
 
     def shutdown(self) -> None:
         self._end_lease("service stopping")
@@ -214,12 +232,18 @@ class Motion:
             self._end_lease("lease connection closed", conn=conn)
 
     def arm(self, token: str, timeout_s: float) -> None:
+        with self._lock:
+            self._stop_failed, self._stop_error = None, False
         self._end_lease("re-armed")
         with self._lock:
             self._lease = Lease(token=token, deadline=time.monotonic() + timeout_s)
 
-    def disarm(self) -> None:
+    def disarm(self) -> robot_ipc.StopFailure | None:
+        """End the lease, wait for every StopMove already decided, and return the lease's latest if it failed."""
         self._end_lease("disarmed")
+        with self._lock:
+            self._stops_done.wait_for(lambda: self._stops_running == 0)
+            return self._stop_failed
 
     def _watch_deadline(self) -> None:
         while True:
@@ -271,7 +295,10 @@ class Motion:
         return robot_ipc.error_message(robot_ipc.ERR_ABORTED, f"the lease ended: {job.abort_reason}")
 
     def _fault(self, fault: str | None) -> None:
-        if fault is not None:
+        if fault == "stop_error":
+            with self._lock:
+                self._stop_error = True
+        elif fault is not None:
             stub.apply_service_fault(fault)
 
     def move(self, vx: float, vy: float, vyaw: float, duration_s: float, fault: str | None) -> Callable[[Job], dict]:
@@ -452,8 +479,8 @@ def _handle(conn: ipc.Conn, request: dict, store: StateStore, backend_name: str,
         if not motion.is_control(conn):
             raise ValueError(f"{op} is accepted only on the control connection")
         if op == "disarm":
-            motion.disarm()
-            return robot_ipc.message("disarmed")
+            failed = motion.disarm()
+            return robot_ipc.message("disarmed", stop_failed=None if failed is None else asdict(failed))
         token = request.get("token")
         if not isinstance(token, str) or not token:
             raise ValueError(f"token must be a non-empty string, got {token!r}")
