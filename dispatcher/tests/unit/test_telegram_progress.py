@@ -12,11 +12,11 @@ import pytest
 from dispatcher import prompts
 from dispatcher.context import PromptSurface
 from dispatcher.dispatcher import Dispatcher
-from dispatcher.models import Plan, PlanStep
+from dispatcher.models import ObstacleDistances, Plan, PlanStep, RobotState
 from dispatcher.registry import Registry
 from dispatcher.tests.helpers import FakeExecutor, ScriptedPlanner, exec_result, fake_context, make_config, replies
 from dispatcher.transports.telegram_bot import on_text
-from dispatcher.transports.telegram_progress import TelegramProgress
+from dispatcher.transports.telegram_progress import TelegramProgress, robot_line
 from tests.helpers import REPO_ROOT
 
 USER = 42
@@ -104,3 +104,44 @@ def test_failed_edit_is_logged_and_task_still_replies(cfg, registry, capsys):
     assert got[0] == prompts.WORKING and got[1].startswith("DONE: Turned left.")
     assert working.edit_text.await_count >= 1
     assert "Telegram progress update failed: RuntimeError" in capsys.readouterr().err
+
+
+def test_robot_line():
+    walking = RobotState(
+        t=0.0,
+        backend="real",
+        posture="standing",
+        velocity=[0.3, 0.4, 0.0],
+        yaw_speed=0.2,
+        obstacle_m=ObstacleDistances(front=1.234, left=0.8),
+    )
+    assert robot_line("up", walking, 0.12) == (
+        "Robot: link up | standing | 0.50 m/s, turn 11 deg/s | obstacles m F 1.2 B - L 0.8 R - | 0.1 s ago"
+    )
+    assert robot_line("down", walking, 3.21).startswith("Robot: LINK DOWN | standing |")
+    assert robot_line("down", walking, 3.21).endswith("| 3.2 s ago")
+    bare = RobotState(t=0.0, backend="stub", posture="sitting")
+    assert robot_line("up", bare, 0.0) == "Robot: link up | sitting | speed n/a | obstacles n/a | 0.0 s ago"
+    assert robot_line("up", None, None) == "Robot: link up | no state yet"
+
+
+def test_robot_line_follows_the_stream_and_leaves_at_task_end(registry):
+    async def edit(text):
+        pass
+
+    async def main():
+        progress = TelegramProgress(registry, clock=lambda: 10.5)
+        progress.robot_link("up", None)  # no session yet: dropped
+        assert progress.open(edit)
+        progress.robot_link("up", None)
+        progress.robot_sample(RobotState(t=0.0, backend="stub", posture="standing"), "up", 10.0)
+        progress.robot_link("down", 10.0)
+        live = progress.text()
+        progress.task_end(None, rejections=0, horizon_rejections=0, usage_totals={}, budget=None)  # type: ignore[arg-type]
+        progress.robot_sample(RobotState(t=0.0, backend="stub", posture="standing"), "up", 10.4)  # after the end
+        await progress.close()
+        return live, progress.text()
+
+    live, final = asyncio.run(main())
+    assert live == prompts.WORKING + "\nRobot: LINK DOWN | standing | speed n/a | obstacles n/a | 0.5 s ago"
+    assert final == prompts.WORKING

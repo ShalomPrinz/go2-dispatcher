@@ -155,6 +155,7 @@ Plan:
 1. turn(direction=left, angle_deg=90)
 ✓ turn(direction=left, angle_deg=90) -> ok (0.3s)
 Plan: DONE: I turned left 90 degrees.
+Robot: link up | standing | 0.00 m/s, turn 0 deg/s | obstacles m F 1.2 B - L 0.8 R - | 0.1 s ago
 ```
 
 | Event | Line |
@@ -166,10 +167,30 @@ Plan: DONE: I turned left 90 degrees.
 | step result | `✓ {step}` or `✗ {step}`, the step rendered as in the LLM context, then ` ({seconds:.1f}s)` if it was dispatched |
 | stop request | `■ Stop requested ({source})` (`telegram` or `shutdown`) |
 | StopMove | `■ StopMove sent ({seconds:.1f}s)` or `■ StopMove FAILED ({seconds:.1f}s)` |
+| state stream | one robot line, always last ([below](#robot-line)) |
 
 Left out: token counts, `Thought for …` timing, infrastructure retries, rejected plans, internal errors and the posture line. They are in the run log. The texts are fixed (`PROGRESS_*` in `dispatcher/prompts.py`) and identical across conditions. They are not part of the prompt surface, so they do not change the registry hash. If the text grows past 4000 characters, the oldest lines are replaced by `({n} earlier lines omitted)`.
 
 The message is edited at most once per second (`EDIT_INTERVAL_S` in `dispatcher/transports/telegram_progress.py`, tunable); events in between are merged into the next edit. When the task ends, the last state is sent, then the outcome text follows as a new message. A failed edit prints `Warning: Telegram progress update failed: {ExceptionType}.` to stderr and is skipped; the next event tries again, and the task is not affected. The progress is `dispatcher/transports/telegram_progress.py`, the bot's run-log observer ([run-log.md](../dispatcher/docs/run-log.md#observers)). Its record methods only change the text and wake a sender on the bot's event loop. They never wait for Telegram, so sending does not slow the loop or the stop path and is not part of any measured LLM or step latency.
+
+#### Robot line
+
+While the task's [state stream](#robot-service) runs, the last line of the progress message shows the robot's latest state:
+
+```
+Robot: link up | standing | 0.42 m/s, turn 12 deg/s | obstacles m F 1.2 B - L 0.8 R 2.0 | 0.1 s ago
+Robot: LINK DOWN | standing | 0.42 m/s, turn 12 deg/s | obstacles m F 1.2 B - L 0.8 R 2.0 | 3.2 s ago
+```
+
+| Part | Content |
+|---|---|
+| link | `link up`, or `LINK DOWN` when the service sees no state messages; the rest is then the last sample before the gap |
+| posture | `RobotState.posture` |
+| motion | ground speed `hypot(vx, vy)` in m/s, 2 decimals, and `yaw_speed` in deg/s, whole degrees; `speed n/a` without `velocity` |
+| obstacles | nearest obstacle per direction from `obstacle_m` (front, back, left, right), metres to 0.1; `-` for a direction without a reading, `obstacles n/a` without `obstacle_m` ([robot.md](../skills/docs/robot.md)) |
+| age | seconds since the sample arrived in the service, at the time of the edit |
+
+Before the first sample it reads `Robot: link up | no state yet`. The line is rendered by `robot_line` in `dispatcher/transports/telegram_progress.py`. It is not a `PROGRESS_*` fixed text: it is never compared across runs and never reaches the model. The progress keeps only the latest sample and link. While the line is shown, the message is edited every `EDIT_INTERVAL_S` even without a new record, so the age keeps counting during a link gap. At `task_end` the line is removed and later samples are dropped, so the final text holds only the task's lines, with no state frozen at an arbitrary moment. There is no line between tasks, and none when the task has no log file (no stream then).
 
 ### Outcome text
 
@@ -208,7 +229,7 @@ Skills read robot state through a long-running robot service, the only long-live
 - **Control connection.** Once the service is ready, the dispatcher opens its one control connection (`Executor.start_robot`; a failure is a start-up error) and keeps it open. Each step is armed on it with a lease token passed to the skill in `GO2_LEASE_TOKEN` and disarmed when the step ends; stops go through it ([safety.md](safety.md#the-stop-path)). Closing it makes the service send `StopMove`.
 - **Lost mid-task.** A service that crashes or stops answering while a task runs is SIGKILLed, the robot is stopped by the fallback `stop_move`, and the task ends `ROBOT_SERVICE_LOST` ([safety.md](safety.md#robot-service-lost)). The service stays down until the next task's state read. The log line is `dispatcher: robot service lost; killed it`, then `... exited with code C; restarting` at that read.
 - **State at task start.** Before every task's first planning call the dispatcher reads the latest state through the service (one socket round trip). A service that has exited since, or was lost in the previous task, is started once more first, and the control connection is opened again for the first step; that wait (up to 10 s) happens before the task's log opens. If the service cannot be started or reached, has had no state message, or reports the link down, the task ends `STATE_UNAVAILABLE` before any LLM call, with the operator message `Stopped: the robot state could not be read ({reason}).` and the reason in `task_start.state_error` ([run-log.md](../dispatcher/docs/run-log.md#task_start)). The next task tries again.
-- **State stream.** While a task runs, the dispatcher subscribes to the service and writes the task's `state_stream.jsonl` ([run-log.md](../dispatcher/docs/run-log.md#state_streamjsonl)). One task uses one service process, so the stream covers the task, and a service loss ends both. A stream that fails alone, with the service fine, ends only the stream.
+- **State stream.** While a task runs, the dispatcher subscribes to the service and writes the task's `state_stream.jsonl` ([run-log.md](../dispatcher/docs/run-log.md#state_streamjsonl)), and hands each written sample and link change to the task observer (the bot's [robot line](#robot-line)). One task uses one service process, so the stream covers the task, and a service loss ends both. A stream that fails alone, with the service fine, ends only the stream.
 - **Stop.** `Dispatcher.shutdown()` closes the control connection and stops it on every exit, as for the vision service: `SIGTERM`, then `SIGKILL` after `STOP_GRACE_S` (2 s). If the dispatcher is killed, the closed control connection makes the service stop the robot, and its orphan watchdog ends it.
 - **Log.** The service's stderr goes to `{log.dir}/robot_service.log`, with one line per dispatcher lifecycle event (`dispatcher: robot service started (pid N)`, `... exited with code C; restarting`, `... stopped (exit code C)`), emptied at the first start of each dispatcher process, as for the vision service.
 
@@ -254,6 +275,7 @@ and exit code 2. This stops two processes from driving one robot, overwriting th
 - **Two thin transports over one dispatcher.** The CLI and the bot only parse input, report the task and handle signals; everything else is shared, so CLI runs and Telegram runs produce the same logs. The Telegram integration replaces OpenClaw's channels ([architecture.md](architecture.md#why-a-purpose-built-dispatcher)).
 - **The live trace is the CLI's only task output.** The trace already ends with the outcome, step counts, tokens and duration, and shows the operator message once (in the `DONE` or `ABORT` plan line, otherwise just before the summary), so printing the outcome text after it repeated the same task. Rejected: keeping the outcome text on stdout for scripting; the run log JSONL is the machine-readable record of every task ([run-log.md](../dispatcher/docs/run-log.md)). The bot keeps the outcome text, because its progress message leaves out the counts and the step list.
 - **The bot shows progress in one message, edited in place, and sends the outcome as a new message.** Without progress the operator saw nothing for the 15 to 60 s of a model call. One edited message gives one notification per task (the new outcome message gives a second one, at the end). Telegram limits a chat to about 1 message per second, so edits are merged to at most one per `EDIT_INTERVAL_S` (tunable). The record methods only update the text and the sending runs on the event loop, so Telegram never delays the loop, the stop path or the measured latencies. A failed edit is printed and skipped, so Telegram trouble never fails a task. The message carries only what the operator acts on: token counts, timings, retries, rejected plans and internal errors are diagnostics, noise on a phone, and already in the run log. Rejected: one message per step, which gives a notification per step and runs into the rate limit on short steps; a separate event bus, because the run-log observer already gives the typed records the CLI trace uses.
+- **Telegram telemetry reuses the per-task state stream and the progress edit rate.** The stream writer hands each downsampled sample and link change to the observer, and the progress keeps only the latest for its robot line, refreshed with each edit. One subscription per task serves both the log and the operator, and the line lives exactly as long as the stream. Rejected: a separate telemetry message, which doubles edit traffic against Telegram's per-chat rate limit; a second service subscription for the bot; an idle `/state` command, which no current use needs.
 - **`batch` stops at the first `ROBOT_SERVICE_LOST`.** A repeatedly crashing service would otherwise keep spending LLM calls and moving the robot, one line at a time. It exits 1, as `run` does for a task that does not end `DONE`. Rejected: running on, relying on the next task's restart.
 - **`batch` stops after any task whose stop failed, whatever its outcome** (user decision). The next line would call the model with the robot possibly moving, and no operator reads the warning between lines ([safety.md](safety.md#design-decisions)). It exits 1 with the same stderr shape. Rejected: stopping only at `STOP_FAILED` and `ROBOT_SERVICE_LOST`; running on.
 - **`batch` carries the previous task across lines**, because that is how the robot behaves between messages: it remembers. Experiments may need independent tasks later ([roadmap.md](roadmap.md#future-ideas)).

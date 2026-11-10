@@ -19,12 +19,15 @@ from pydantic import BaseModel
 from .config import Config, Provider
 
 if TYPE_CHECKING:
+    from skills.state_store import Link
+
     from .budget import MotionBudget
     from .context import PromptSurface, RequestReason, ReturnReason
     from .llm import LLMResult, PlanCheck
     from .models import (
         Plan,
         Posture,
+        RobotState,
         StartState,
         StepDispatch,
         StepRef,
@@ -283,9 +286,8 @@ class RunLog:
         )
 
 
-class TaskObserver(Protocol):
-    """One method per record type, called with the same arguments as ``RunLog``. Observers such as the CLI
-    console trace receive the records through ``TeeLog`` (dispatcher/docs/run-log.md)."""
+class TaskRecords(Protocol):
+    """One method per record type, called with the same arguments as ``RunLog`` (dispatcher/docs/run-log.md)."""
 
     def task_start(
         self,
@@ -328,7 +330,16 @@ class TaskObserver(Protocol):
     ) -> None: ...
 
 
-class TaskLog(TaskObserver, Protocol):
+class TaskObserver(TaskRecords, Protocol):
+    """The records through ``TeeLog``, plus the task's state stream: each downsampled sample and each link change,
+    called on the stream thread. Observers such as the CLI console trace (dispatcher/docs/run-log.md)."""
+
+    def robot_sample(self, state: RobotState, link: Link, rx_mono: float | None) -> None: ...
+
+    def robot_link(self, link: Link, rx_mono: float | None) -> None: ...
+
+
+class TaskLog(TaskRecords, Protocol):
     """What the loop writes for one task: ``RunLog`` once the file is open, ``NullLog`` before that or if opening
     failed, either wrapped in a ``TeeLog`` when an observer is set. ``path`` is None when there is no file, so no
     index row is written (dispatcher/docs/run-log.md)."""

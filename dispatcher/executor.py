@@ -13,7 +13,7 @@ import threading
 import time
 from pathlib import Path
 from types import ModuleType
-from typing import Literal, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
@@ -32,6 +32,9 @@ from .robot import RobotService, StateStream
 from .robot import log_path as robot_log_path
 from .vision import VisionService
 from .vision import log_path as vision_log_path
+
+if TYPE_CHECKING:
+    from .runlog import TaskObserver
 
 POLL_INTERVAL_S = 0.05  # wait-loop poll period (docs/safety.md)
 READER_JOIN_TIMEOUT_S = 2.0  # join timeout per reader thread (docs/safety.md)
@@ -86,8 +89,9 @@ class SkillExecutor(Protocol):
         ``models.StateReadError``."""
         ...
 
-    def state_stream(self, path: Path, t_start: float) -> StreamHandle:
-        """Start writing the robot service's state stream to ``path`` until the handle is closed."""
+    def state_stream(self, path: Path, t_start: float, observer: TaskObserver | None = None) -> StreamHandle:
+        """Start writing the robot service's state stream to ``path``, and handing it to ``observer``, until the
+        handle is closed."""
         ...
 
     def close(self) -> None: ...
@@ -528,8 +532,8 @@ class Executor:
             self._close_control()
         return self.robot.read_state()
 
-    def state_stream(self, path: Path, t_start: float) -> StateStream:
-        return StateStream(self.robot.socket_path, path, t_start)
+    def state_stream(self, path: Path, t_start: float, observer: TaskObserver | None = None) -> StateStream:
+        return StateStream(self.robot.socket_path, path, t_start, observer)
 
     def close(self) -> None:
         """Close the control connection, stop the vision and robot services (docs/running.md); idempotent."""

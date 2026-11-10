@@ -194,7 +194,7 @@ class Dispatcher:
                     if start.error is not None:  # no plan without a fresh state (dispatcher/docs/loop-and-context.md)
                         self._state_unavailable(start.error)
                     if t.log.path is not None:
-                        stream = self.executor.state_stream(stream_path(t.log.path), t.t_start)
+                        stream = self.executor.state_stream(stream_path(t.log.path), t.t_start, self.observer)
                     self._loop(t)
                 except _TaskEnded as ended:  # the one place a task ends (dispatcher/docs/loop-and-context.md)
                     end = ended.ending

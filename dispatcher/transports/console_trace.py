@@ -12,12 +12,15 @@ from typing import TYPE_CHECKING, Any, TextIO
 from ..context import format_call, render_step
 
 if TYPE_CHECKING:
+    from skills.state_store import Link
+
     from ..budget import MotionBudget
     from ..context import RequestReason, ReturnReason
     from ..llm import LLMResult, PlanCheck
     from ..models import (
         Plan,
         Posture,
+        RobotState,
         StartState,
         StepDispatch,
         StepRef,
@@ -210,3 +213,9 @@ class ConsoleTrace:
             summary = self._style(result.message, BOLD, color) + "\n" + summary
         self._shown_message = None
         self._close(summary)
+
+    def robot_sample(self, state: RobotState, link: Link, rx_mono: float | None) -> None:
+        pass  # the CLI shows no live robot state; the stream is in state_stream.jsonl
+
+    def robot_link(self, link: Link, rx_mono: float | None) -> None:
+        pass
