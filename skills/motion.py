@@ -4,11 +4,12 @@ touch DDS. Standard library and skills only."""
 
 from __future__ import annotations
 
+import math
 import time
 from typing import NamedTuple
 
 from skills import backend, robot_ipc, runner, stub
-from skills.robot_ipc import Refused, ServiceUnavailable
+from skills.robot_ipc import MoveTarget, Refused, ServiceUnavailable
 from skills.schema import ErrorCode
 
 PROCESS_OVERHEAD_S = 5.0  # process start + robot service connect + two state samples (tunable)
@@ -45,11 +46,13 @@ def _refused(e: Refused | ServiceUnavailable, obs: dict, timing: dict) -> runner
     return runner.SkillOutcome.error(code, message, observations=obs, timing=timing)
 
 
-def move(velocity: Velocity, duration_s: float) -> runner.SkillOutcome:
-    """Ask the robot service to command ``velocity`` for ``duration_s`` at its CMD_PERIOD_S, then StopMove.
+def move(velocity: Velocity, duration_s: float, target: MoveTarget | None = None) -> runner.SkillOutcome:
+    """Ask the robot service to command ``velocity`` for ``duration_s`` at its CMD_PERIOD_S, then StopMove; with
+    ``target``, the service stops once it is reached and ``duration_s`` is the cap.
 
-    Observations: ``duration_s`` (Moves sent x period) and ``sdk_ret`` (the failing Move's code, else the
-    StopMove's)."""
+    Observations: ``duration_s`` (Moves sent x period), ``sdk_ret`` (the failing Move's code, else the
+    StopMove's) and, with a target, ``closed_loop`` (False if the service fell back to open loop) and
+    ``turned_deg`` (the measured yaw change at the stop, unsigned degrees; None after a fallback)."""
     fault = _fault()
     if fault == "error":
         obs = {"duration_s": 0.0, "sdk_ret": stub.STUB_ERR_INJECTED}
@@ -60,17 +63,24 @@ def move(velocity: Velocity, duration_s: float) -> runner.SkillOutcome:
     t = time.monotonic()
     try:
         client = robot_ipc.session.client()
-        result = client.move(*velocity, duration_s, token=robot_ipc.lease_token(), **extra)
+        result = client.move(*velocity, duration_s, token=robot_ipc.lease_token(), target=target, **extra)
     except (Refused, ServiceUnavailable) as e:
         return _refused(e, {}, {"exec_ms": runner.ms_since(t)})
     timing = {"exec_ms": runner.ms_since(t)}
+    turned = {}
+    if target is not None:
+        yaw = result.yaw_rad
+        turned = {
+            "closed_loop": yaw is not None,
+            "turned_deg": None if yaw is None else round(math.degrees(abs(yaw)), 1),
+        }
     if result.move_ret != 0:
         msg = f"Move returned {result.move_ret}"
         if result.stop_ret != 0:
             msg += f"; StopMove returned {result.stop_ret}"
-        obs = {"duration_s": result.duration_s, "sdk_ret": result.move_ret}
+        obs = {"duration_s": result.duration_s, "sdk_ret": result.move_ret, **turned}
         return runner.SkillOutcome.error(ErrorCode.SDK_ERROR, msg, observations=obs, timing=timing)
-    obs = {"duration_s": result.duration_s, "sdk_ret": result.stop_ret}
+    obs = {"duration_s": result.duration_s, "sdk_ret": result.stop_ret, **turned}
     if result.stop_ret != 0:
         return runner.SkillOutcome.error(
             ErrorCode.SDK_ERROR, f"StopMove returned {result.stop_ret}", observations=obs, timing=timing

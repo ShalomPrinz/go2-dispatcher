@@ -147,7 +147,16 @@ def test_walk_observations(svc):
 
 def test_turn_observations(svc):
     resp = run_ok("turn", {"direction": "right", "angle_deg": 90}, svc.arm())
-    assert resp.observations == {"direction": "right", "angle_deg": 90.0, "duration_s": 1.8, "sdk_ret": 0}
+    # stopped by the measured yaw, not the cap: 16 commands of 0.1 rad pass 90 deg minus the margin
+    obs = {
+        "direction": "right",
+        "angle_deg": 90.0,
+        "duration_s": 1.6,
+        "sdk_ret": 0,
+        "closed_loop": True,
+        "turned_deg": 91.7,
+    }
+    assert resp.observations == obs
 
 
 # --- stub behaviour -----------------------------------------------------------------
@@ -189,9 +198,7 @@ def test_detect_follows_the_pose(tmp_path):
     with robot.running(world) as svc, vision.running(svc.env) as env:
         assert run_ok("detect_object", {"target": "chair"}, env).observations["object_found"] is False
         turned = run_ok("turn", {"direction": "left", "angle_deg": 90}, svc.arm(env)).state_after
-        assert turned is not None and turned.imu_rpy == pytest.approx(
-            [0.0, 0.0, 1.8]
-        )  # 18 commands of 0.1 rad, lead included
+        assert turned is not None and turned.imu_rpy == pytest.approx([0.0, 0.0, 1.6])  # 16 commands of 0.1 rad
         resp = run_ok("detect_object", {"target": "  Chair "}, env)
     obs = resp.observations
     assert set(obs) == {"target", "object_found", "position", "closeness", "confidence"}

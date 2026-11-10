@@ -21,8 +21,8 @@ turn: Turn in place to the left or right by an angle, then stop.
   - angle_deg (optional, default 45): number from 5 to 180 degrees. Angle to turn.
   Use when: Changing the robot's heading, for example to face something or to look around.
   Requires: The robot is standing. Fails while sitting.
-  Effect: Turns in place at 1.0 rad/s by the given angle, then stops. The position does not change.
-  Limits: Open-loop: the robot turns for the time the angle should take; the angle actually turned is not measured.
+  Effect: Turns in place at 1.0 rad/s until the measured heading has changed by the given angle, then stops. The position does not change.
+  Limits: turned_deg reports the angle measured at the stop, which may differ from angle_deg by a few degrees, or be smaller if the turn hit its time limit. If the heading cannot be measured, the turn runs for the time the angle should take: closed_loop is false and turned_deg is null.
 walk: Walk in a straight line forward, backward, or sideways by a distance, then stop.
   - direction (required): one of forward, backward, left, right. Direction of travel relative to the robot's current heading.
   - distance_m (optional, default 0.9): number from 0.1 to 3 metres. Distance to travel.

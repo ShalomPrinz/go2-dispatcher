@@ -66,7 +66,7 @@ def service(tmp_path):
     path = str(tmp_path / "r.sock")
     store = StateStore(lambda msg: msg)
     robot = Recorder()
-    motion = robot_service.Motion(robot, lambda s, abort: abort.wait(s), sim=False)
+    motion = robot_service.Motion(robot, lambda s, abort: abort.wait(s), store, sim=False)
     motion.start()
     listener = Listener(path, family=ipc.FAMILY)
 
@@ -287,7 +287,7 @@ def test_an_action_never_starts_after_a_stop_and_a_stop_during_it_is_resent():
             return 0
 
     robot = StopDuringStretch()
-    motion = robot_service.Motion(robot, lambda s, abort: abort.wait(s), sim=False)
+    motion = robot_service.Motion(robot, lambda s, abort: abort.wait(s), StateStore(lambda m: m), sim=False)
     job = robot_service.Job(run=motion.action("Stretch", None))
     motion._job = job
     assert job.run(job)["error"]["code"] == robot_ipc.ERR_ABORTED

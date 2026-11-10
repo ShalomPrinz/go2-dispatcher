@@ -74,13 +74,24 @@ def state_message(op: str, reading: Reading | None) -> dict:
 
 
 @dataclass(frozen=True)
+class MoveTarget:
+    """A ``move``'s stop condition, read from the state each tick: the yaw change in radians, signed (CCW +).
+    ``lead_s``: the start-ramp time added when no fresh yaw is readable at the start and the move runs open loop."""
+
+    yaw_rad: float
+    lead_s: float
+
+
+@dataclass(frozen=True)
 class MoveResult:
-    """A finished ``move``: commanded seconds (Moves sent x period), the failing Move's code (0 if none failed)
-    and the closing StopMove's code (None if it raised)."""
+    """A finished ``move``: commanded seconds (Moves sent x period), the failing Move's code (0 if none failed),
+    the closing StopMove's code (None if it raised) and, with a target, the measured yaw change at the stop (None
+    when the move fell back to open loop)."""
 
     duration_s: float
     move_ret: int
     stop_ret: int | None
+    yaw_rad: float | None = None
 
 
 @dataclass(frozen=True)
@@ -285,20 +296,43 @@ class RobotClient:
     # --- motion primitives (a skill, with the lease token) -------------------------------
 
     def move(
-        self, vx: float, vy: float, vyaw: float, duration_s: float, *, token: str | None, **extra: Any
+        self,
+        vx: float,
+        vy: float,
+        vyaw: float,
+        duration_s: float,
+        *,
+        token: str | None,
+        target: MoveTarget | None = None,
+        **extra: Any,
     ) -> MoveResult:
-        """Move at body-frame (vx, vy, vyaw) for ``duration_s``, then StopMove, in the service's motion loop.
-        Raises Refused (no lease, aborted, SDK exception) or ServiceUnavailable."""
-        request = message("move", token=token, vx=vx, vy=vy, vyaw=vyaw, duration_s=duration_s, **extra)
+        """Move at body-frame (vx, vy, vyaw) for ``duration_s``, then StopMove, in the service's motion loop; with
+        ``target``, StopMove once it is reached, ``duration_s`` being the cap. Raises Refused (no lease, aborted,
+        SDK exception) or ServiceUnavailable."""
+        fields = {"target": asdict(target)} if target is not None else {}
+        request = message("move", token=token, vx=vx, vy=vy, vyaw=vyaw, duration_s=duration_s, **fields, **extra)
         reply = self._request(request, "move", duration_s + SPORT_CLIENT_TIMEOUT_S + REPLY_WAIT_S)
         duration, move_ret, stop_ret = reply.get("duration_s"), reply.get("move_ret"), reply.get("stop_ret")
+        measured = reply.get("measured")
+        yaw = measured.get("yaw_rad") if isinstance(measured, dict) else None
         if (
             not isinstance(duration, (int, float))
             or not _is_int(move_ret)
             or not (stop_ret is None or _is_int(stop_ret))
+            or (target is None) != (measured is None)
+            or (
+                measured is not None
+                and yaw is not None
+                and (isinstance(yaw, bool) or not isinstance(yaw, (int, float)))
+            )
         ):
             raise ServiceUnavailable(f"malformed reply: {reply!r}")
-        return MoveResult(duration_s=float(duration), move_ret=move_ret, stop_ret=stop_ret)
+        return MoveResult(
+            duration_s=float(duration),
+            move_ret=move_ret,
+            stop_ret=stop_ret,
+            yaw_rad=None if yaw is None else float(yaw),
+        )
 
     def action(self, name: str, *, token: str | None, **extra: Any) -> int:
         """Run one sport client action (``ACTIONS``) in the service; returns its code. Raises as move()."""

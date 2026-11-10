@@ -26,7 +26,7 @@ def max_params(name: str) -> dict:
 # Commanded motion time plus settle wait, from the skills' own constants.
 MOTION_S = {
     "walk": lambda p: p["distance_m"] / walk.VELOCITY_MPS,
-    "turn": lambda p: math.radians(p["angle_deg"]) / turn.YAW_RATE_RPS,
+    "turn": lambda p: math.radians(p["angle_deg"]) / turn.YAW_RATE_RPS * turn.CAP_FACTOR + turn.CAP_S,
     "sit": lambda p: sit.SETTLE_S,
     "stretch": lambda p: stretch.SETTLE_S,
     "detect_object": lambda p: 0.0,

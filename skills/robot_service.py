@@ -35,6 +35,8 @@ STOP_GRACE_S = 2.0  # SIGTERM to SIGKILL (tunable)
 SIM_PERIOD_S = 0.02  # the sim publishes the stub state at 50 Hz, the rate assumed for the robot (tunable)
 LEASE_POLL_S = 0.02  # how often the lease deadline is checked (tunable)
 EOF_POLL_S = 0.02  # how often a skill connection is checked for EOF while its primitive runs (tunable)
+YAW_STOP_MARGIN_RAD = math.radians(3.0)  # a yaw target stops this early, for the coast (tunable, skills/docs/robot.md)
+MAX_STATE_AGE_S = 0.3  # a targeted move stops on older state (tunable, skills/docs/skills.md)
 SOCKET_MODE = 0o600
 EXIT_CONFIG_ERROR = 2
 EXIT_LOCKED = 3
@@ -64,12 +66,16 @@ def _same(state: RobotState) -> RobotState:
     return state
 
 
+def _publish_sim(store: StateStore) -> None:
+    try:
+        store.put(stub.sample_state())
+    except Exception:  # a bad state file or objects env: no message, as on a lost link
+        traceback.print_exc(file=sys.stderr)
+
+
 def _simulate(store: StateStore) -> None:
     while True:
-        try:
-            store.put(stub.sample_state())
-        except Exception:  # a bad state file or objects env: no message, as on a lost link
-            traceback.print_exc(file=sys.stderr)
+        _publish_sim(store)
         time.sleep(SIM_PERIOD_S)
 
 
@@ -123,14 +129,44 @@ class Job:
     reply: dict | None = None
 
 
+class NoState(Exception):
+    """No state message with imu_rpy, or one older than MAX_STATE_AGE_S."""
+
+
+class YawTracker:
+    """The yaw change since the first read, from ``imu_rpy[2]`` in the store: per-read deltas wrapped to
+    (-pi, pi] and summed, so crossing +-pi counts as the short way round. Raises NoState on a read."""
+
+    def __init__(self, store: StateStore) -> None:
+        self._store = store
+        self._last = self._yaw()
+        self.change = 0.0
+
+    def _yaw(self) -> float:
+        reading = self._store.read()
+        if reading is None or reading.state.imu_rpy is None:
+            raise NoState("no state message with imu_rpy")
+        if (reading.state.age_ms or 0.0) > MAX_STATE_AGE_S * 1000.0:
+            raise NoState(f"the latest state is {reading.state.age_ms:.0f} ms old")
+        return reading.state.imu_rpy[2]
+
+    def update(self) -> float:
+        yaw = self._yaw()
+        delta = math.remainder(yaw - self._last, math.tau)
+        self.change += math.pi if delta == -math.pi else delta
+        self._last = yaw
+        return self.change
+
+
 class Motion:
     """The sport client, the lease and the motion loop thread. ``_lock`` guards the lease, the control
     connection, the running job and the StopMove record, and serialises every Move and every action's commit
     with the abort."""
 
-    def __init__(self, client: SportClient, wait: Wait, *, sim: bool) -> None:
+    def __init__(self, client: SportClient, wait: Wait, store: StateStore, *, sim: bool) -> None:
         self._client = client
         self._wait = wait
+        self._store = store
         self._sim = sim
         self._lock = threading.Lock()
         self._lease: Lease | None = None
@@ -301,13 +337,33 @@ class Motion:
         elif fault is not None:
             stub.apply_service_fault(fault)
 
-    def move(self, vx: float, vy: float, vyaw: float, duration_s: float, fault: str | None) -> Callable[[Job], dict]:
-        """The move primitive: Move every CMD_PERIOD_S for ``duration_s``, then StopMove."""
+    def move(
+        self,
+        vx: float,
+        vy: float,
+        vyaw: float,
+        duration_s: float,
+        target: robot_ipc.MoveTarget | None,
+        fault: str | None,
+    ) -> Callable[[Job], dict]:
+        """The move primitive: Move every CMD_PERIOD_S for ``duration_s``, then StopMove. With ``target``,
+        ``duration_s`` is the cap: StopMove once the measured yaw change is within YAW_STOP_MARGIN_RAD of it; without
+        fresh yaw, finish open loop at |vyaw| (skills/docs/skills.md)."""
         period = robot_ipc.CMD_PERIOD_S
+        cap = max(1, round(duration_s / period))
+
+        def ticks(seconds: float) -> int:
+            return round(max(0.0, seconds) / period)
 
         def run(job: Job) -> dict:
-            sent, move_ret = 0, 0
-            for _ in range(max(1, round(duration_s / period))):
+            sent, move_ret, limit, yaw = 0, 0, cap, None
+            if target is not None:
+                try:
+                    yaw = YawTracker(self._store)
+                except NoState as e:
+                    print(f"robot service: open-loop move, {e}", file=sys.stderr, flush=True)
+                    limit = min(cap, max(1, ticks(abs(target.yaw_rad) / abs(vyaw) + target.lead_s)))
+            while sent < limit:
                 with self._lock:
                     if job.abort.is_set():
                         break
@@ -319,10 +375,22 @@ class Motion:
                 if sent == 1:
                     self._fault(fault)  # mid-walk: the robot has a velocity command
                 self._wait(period, job.abort)
+                if target is None or yaw is None:
+                    continue
+                try:
+                    if abs(yaw.update()) >= abs(target.yaw_rad) - YAW_STOP_MARGIN_RAD:
+                        break
+                except NoState as e:  # finish the rest on time; the robot is already turning
+                    print(f"robot service: open-loop move from {yaw.change:.3f} rad, {e}", file=sys.stderr, flush=True)
+                    limit = min(cap, sent + ticks((abs(target.yaw_rad) - abs(yaw.change)) / abs(vyaw)))
+                    yaw = None
             if job.abort.is_set():
                 return self._aborted(job)  # whoever ended the lease sent the StopMove
             stop_ret, _ = self.stop_move("move done" if move_ret == 0 else "Move failed")
-            return robot_ipc.message("move", duration_s=round(sent * period, 3), move_ret=move_ret, stop_ret=stop_ret)
+            measured = None if target is None else {"yaw_rad": None if yaw is None else round(yaw.change, 4)}
+            return robot_ipc.message(
+                "move", duration_s=round(sent * period, 3), move_ret=move_ret, stop_ret=stop_ret, measured=measured
+            )
 
         return run
 
@@ -358,19 +426,24 @@ class Refusal(Exception):
         self.closes = code in robot_ipc.CLOSING_ERRORS
 
 
-def start_motion(name: str) -> Motion:
+def start_motion(name: str, store: StateStore) -> Motion:
     """The service's one sport client: real: SportClient (after the state subscription's DDS init); sim:
-    stub.SimRobot over the stub state file, with the stub time scale."""
+    stub.SimRobot over the stub state file, with the stub time scale, publishing a state after each motion step."""
     if name == "real":
         from skills import real
 
         def wait(seconds: float, abort: threading.Event) -> None:
             abort.wait(seconds)
 
-        motion = Motion(real.get_sport_client(), wait, sim=False)
+        motion = Motion(real.get_sport_client(), wait, store, sim=False)
     else:
         sim = stub.SimRobot()
-        motion = Motion(sim, sim.wait, sim=True)
+
+        def sim_wait(seconds: float, abort: threading.Event) -> None:
+            sim.wait(seconds, abort)
+            _publish_sim(store)  # the pose moved: a fresh message, as the robot sends several per tick
+
+        motion = Motion(sim, sim_wait, store, sim=True)
     motion.start()
     return motion
 
@@ -405,6 +478,15 @@ def _timeout(request: dict, key: str) -> float:
     if value > robot_ipc.MAX_TIMEOUT_S:
         raise ValueError(f"{key} must be at most {robot_ipc.MAX_TIMEOUT_S:g}, got {value!r}")
     return value
+
+
+def _target(request: dict) -> robot_ipc.MoveTarget | None:
+    target = request.get("target")
+    if target is None:
+        return None
+    if not isinstance(target, dict) or set(target) != {"yaw_rad", "lead_s"}:
+        raise ValueError(f"target must be an object with yaw_rad and lead_s, got {target!r}")
+    return robot_ipc.MoveTarget(yaw_rad=_finite(target, "yaw_rad"), lead_s=_number(target, "lead_s"))
 
 
 def _service_fault(request: dict, motion: Motion) -> str | None:
@@ -489,7 +571,10 @@ def _handle(conn: ipc.Conn, request: dict, store: StateStore, backend_name: str,
         return robot_ipc.message("armed", token=token, timeout_s=timeout_s)
     if op == "move":
         vx, vy, vyaw = (_finite(request, k) for k in ("vx", "vy", "vyaw"))
-        run = motion.move(vx, vy, vyaw, _timeout(request, "duration_s"), _service_fault(request, motion))
+        duration_s, target = _timeout(request, "duration_s"), _target(request)
+        if target is not None and vyaw == 0:
+            raise ValueError("a yaw target needs a non-zero vyaw")
+        run = motion.move(vx, vy, vyaw, duration_s, target, _service_fault(request, motion))
         return run_primitive(conn, motion, request, run)
     if op == "action":
         name = request.get("name")
@@ -554,7 +639,7 @@ def main() -> None:
         _fail(f"another robot service holds {lock}", EXIT_LOCKED)
     try:
         store, _source = start_source(name)
-        motion = start_motion(name)
+        motion = start_motion(name, store)
     except backend.BackendNotConfigured as e:
         _fail(str(e), EXIT_CONFIG_ERROR)
     process.start_orphan_watchdog(on_orphan=lambda: motion.halt("dispatcher gone"))

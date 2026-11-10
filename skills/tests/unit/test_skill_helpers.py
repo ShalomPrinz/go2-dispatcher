@@ -30,7 +30,7 @@ def test_parse_params_rejects(argv):
 def test_policy_resolves_constants_and_functions():
     p = {"direction": "forward", "distance_m": 1.5}
     assert walk.POLICY.timeout_s(p) == 10.0 + 1.5 * (1.5 / walk.VELOCITY_MPS + walk.LEAD_S)
-    turn_s = math.radians(90) / turn.YAW_RATE_RPS + turn.LEAD_S
+    turn_s = math.radians(90) / turn.YAW_RATE_RPS * turn.CAP_FACTOR + turn.CAP_S
     assert turn.POLICY.timeout_s({"direction": "left", "angle_deg": 90}) == 10.0 + 1.5 * turn_s
     assert walk.POLICY.motion_cost(p) == MotionCost(distance_m=1.5)
     assert sit.POLICY.timeout_s({}) == sit.TIMEOUT_S
