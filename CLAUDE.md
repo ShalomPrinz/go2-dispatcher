@@ -39,7 +39,7 @@ Package commands (golden files, fault injection, opt-in tests) live in the folde
 - The stub is the default backend. Development, tests and demos use the stub.
 - Agents never use `--backend real` or set `robot.backend = "real"`, and never run `--run-robot` tests; those are supervised human checks. `--run-live` and `go2 run` call the paid API: only when a brief asks.
 - No secrets in code, config files under version control, or logs. The API key and Telegram token live only in `.env` ([docs/configuration.md](docs/configuration.md)).
-- Fixed texts in `prompts.py` and `SKILL.md` files change the registry hash and the golden files; changing them makes runs incomparable ([skills/docs/skills.md](skills/docs/skills.md)).
+- Fixed texts in `prompts.py` and `SKILL.md` files change the golden files, and the system text and `SKILL.md` files also change the registry hash; changing them makes runs incomparable ([skills/docs/skills.md](skills/docs/skills.md)).
 
 ## Engineering rules
 
