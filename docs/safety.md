@@ -58,7 +58,9 @@ Residual risk: between the crash and the fallback `StopMove` (detection up to ab
 
 If the service stop fails and the fallback `stop_move` process cannot be started, times out, exits without a valid response, or reports a non-zero SDK code, `stop_move_failed` is set on the task and the operator message ends with the warning above. The `stop_move` record holds the details ([run-log.md](../dispatcher/docs/run-log.md#stop_move)). There is no automatic retry; a person must stop the robot.
 
-A failed stop ends the task with no further LLM call. A killed step whose stop failed while the service stays alive, such as a step timeout, ends the task `STOP_FAILED`. A step that a stop, the time limit or shutdown interrupted keeps its outcome, and a lost service keeps `ROBOT_SERVICE_LOST`; both carry the warning. `go2 batch` stops at the first `STOP_FAILED` ([running.md](running.md#output)).
+A failed stop ends the task with no further LLM call within that task. A killed step whose stop failed while the service stays alive, such as a step timeout, ends the task `STOP_FAILED`. A step that a stop, the time limit or shutdown interrupted keeps its outcome, and a lost service keeps `ROBOT_SERVICE_LOST`; both carry the warning. `go2 batch` stops after any task whose stop failed, whatever its outcome ([running.md](running.md#output)).
+
+A later task is not gated: the next Telegram message or a new `go2 run` starts a task and calls the model as usual. The warning on the final message is the only safeguard across tasks; the operator stops the robot before sending the next task.
 
 ### Between kill and StopMove
 
@@ -76,7 +78,7 @@ One task runs at a time. While it runs, any other message gets `Busy: a task is 
 
 Steps run only between LLM calls, never during one. When the dispatcher calls the model, the previous step has finished (its motion loop ended with `StopMove()`) or has been killed and stopped. A slow or failing LLM call never leaves the robot moving.
 
-**No LLM call without a confirmed stop.** After a stop the executor sends fails, the task ends and the model is not called again ([StopMove failure](#stopmove-failure)). This covers the executor's stops only: the `StopMove` that ends a `move` primitive reaches the dispatcher as an ordinary `sdk_error` step, and the one sent on `disarm` reports no code, so the model is still called after those ([roadmap.md](roadmap.md#open-questions)).
+**No LLM call without a confirmed stop, within a task.** After a stop the executor sends fails, the task ends with no further LLM call; a later task is not gated ([StopMove failure](#stopmove-failure)). This covers the executor's stops only: the `StopMove` that ends a `move` primitive reaches the dispatcher as an ordinary `sdk_error` step, and the one sent on `disarm` reports no code, so the model is still called after those ([roadmap.md](roadmap.md#open-questions)).
 
 ## Motion budget
 
@@ -121,7 +123,9 @@ If the dispatcher host loses power or the network drops, none of this helps, and
 - **The robot service stops the robot if the dispatcher dies**, on EOF of the control connection and through its orphan watchdog; skills exit through the same watchdog.
 - **One dispatcher process per machine (file lock)**, so two processes can never drive one robot, overwrite the stub state, or interleave `index.jsonl`.
 - **The robot is stationary during LLM calls**, so a slow or failing LLM call never leaves the robot moving.
-- **A failed stop ends the task with no LLM call; with the service alive the outcome is `STOP_FAILED`.** The robot may still be moving, the model cannot fix that, and a person must act. Rejected: reusing `ROBOT_SERVICE_LOST` (the service is alive, so the study would miscount service losses); keeping only the warning on the final message (an LLM call with the robot possibly moving).
+- **A failed stop ends the task with no further LLM call in that task; with the service alive the outcome is `STOP_FAILED`.** The robot may still be moving, the model cannot fix that, and a person must act. Rejected: reusing `ROBOT_SERVICE_LOST` (the service is alive, so the study would miscount service losses); keeping only the warning on the final message (an LLM call with the robot possibly moving).
+- **After a failed stop, the next task is not gated; the warning on the final message is the only safeguard across tasks** (user decision). The operator stays responsible for stopping the robot before the next task, and there is no gate code to maintain. Rejected: a task-start motion check (the fresh state read shows a velocity, the dispatcher stops the robot and ends the task); a persistent latch the operator must clear before the next task runs.
+- **`go2 batch` stops after any task whose stop failed, whatever its outcome** (user decision). No operator reads the warning between batch lines, so the next line would call the model with the robot possibly moving. The check is `stop_move_failed` on the task outcome, which covers `STOP_FAILED`, `TIME_LIMIT_EXCEEDED`, `STATE_UNAVAILABLE`, `INTERNAL_ERROR` and the others alike ([running.md](running.md#output)). Rejected: stopping only at `STOP_FAILED` and `ROBOT_SERVICE_LOST`.
 - **Agent limits are permission rules, not only CLAUDE.md prose**, because instructions are context, not enforcement. Bash argument patterns can be bypassed (`sh -c`, a changed config file); a PreToolUse guard hook is pending ([roadmap.md](roadmap.md#future-ideas)).
 - **A physical stop within reach whenever the system runs on the onboard computer** (the robot's remote or a separate stop button). The operator sends `stop` over Wi-Fi, and if the Wi-Fi drops it no longer reaches the dispatcher, while a running skill may keep the robot moving until its motion loop ends.
 - **The physical/remote e-stop remains the final safety measure.** The software stops are best effort, and every one depends on the robot link: with the link down no software stop reaches the robot and only the e-stop stops it ([known issues](../skills/docs/robot.md#known-issues)). Their latency is measured only for the first successful calls ([measured latency](#measured-latency)).

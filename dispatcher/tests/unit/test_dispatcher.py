@@ -601,7 +601,7 @@ def test_failed_stop_with_the_service_alive_ends_the_task_with_no_further_call(t
     o = r.run()
     assert (o.outcome, o.llm_calls, len(r.planner.calls), len(executor.runs)) == ("STOP_FAILED", 1, 1, 1)
     assert o.stop_move_failed is True
-    assert o.message == "Stopped: the robot may still be moving. A person must stop it." + prompts.STOP_MOVE_WARNING
+    assert o.message == "Stopped: the robot may still be moving." + prompts.STOP_MOVE_WARNING  # one warning
     assert [rec["type"] for rec in records(o)][-3:] == ["step_result", "stop_move", "task_end"]
 
 

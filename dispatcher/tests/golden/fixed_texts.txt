@@ -59,10 +59,10 @@ Stopped: the robot control service was lost (overloaded).
 Stopped: the robot control service was lost (overloaded). WARNING: the stop command to the robot failed. Stop the robot manually.
 
 === operator_message STOP_FAILED ===
-Stopped: the robot may still be moving. A person must stop it.
+Stopped: the robot may still be moving.
 
 === operator_message STOP_FAILED stop_move_failed ===
-Stopped: the robot may still be moving. A person must stop it. WARNING: the stop command to the robot failed. Stop the robot manually.
+Stopped: the robot may still be moving. WARNING: the stop command to the robot failed. Stop the robot manually.
 
 === operator_message INTERNAL_ERROR ===
 Stopped: internal error (KeyError). See run log abc123.

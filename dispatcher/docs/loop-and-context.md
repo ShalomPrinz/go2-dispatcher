@@ -136,7 +136,7 @@ A loss during a step that a stop, the time limit or shutdown interrupted ends th
 
 ### Stop failed
 
-There is no LLM call without a confirmed stop. When a step comes back with a `stop_move` that is not `ok` and the service was not lost, the step and the stop are recorded and the dispatcher ends the task `STOP_FAILED` ([safety.md](../../docs/safety.md#stopmove-failure)). The step still counts as a failure, but this ending comes before the failure budget check. An `interrupted` step keeps its outcome (`STOPPED`, `TIME_LIMIT_EXCEEDED`) and a lost service keeps `ROBOT_SERVICE_LOST`; both already end the task, and their message ends with `prompts.STOP_MOVE_WARNING`.
+Within a task there is no LLM call without a confirmed stop. When a step comes back with a `stop_move` that is not `ok` and the service was not lost, the step and the stop are recorded and the dispatcher ends the task `STOP_FAILED` ([safety.md](../../docs/safety.md#stopmove-failure)). The step still counts as a failure, but this ending comes before the failure budget check. An `interrupted` step keeps its outcome (`STOPPED`, `TIME_LIMIT_EXCEEDED`) and a lost service keeps `ROBOT_SERVICE_LOST`; both already end the task, and their message ends with `prompts.STOP_MOVE_WARNING`. The next task is not gated; the warning is the safeguard ([safety.md](../../docs/safety.md#stopmove-failure)).
 
 ## Budgets and limits
 
@@ -169,12 +169,12 @@ All values are starting values and *tunable* ([configuration.md](../../docs/conf
 | `LLM_ERROR` | LLM unreachable after infrastructure retries, or a non-retryable API error |
 | `STATE_UNAVAILABLE` | the task-start state read through the robot service failed; no LLM call was made |
 | `ROBOT_SERVICE_LOST` | the robot service was lost during a step ([above](#robot-service-lost)) |
-| `STOP_FAILED` | the stop of a killed step failed with the service alive; no further LLM call was made ([above](#stop-failed)) |
+| `STOP_FAILED` | the stop of a killed step failed with the service alive; no further LLM call was made in this task ([above](#stop-failed)) |
 | `INTERNAL_ERROR` | unhandled exception in the dispatcher |
 
 `models.StopCause` maps each interrupt cause to its outcome (`operator` and `shutdown` → `STOPPED`, `task_time_limit` → `TIME_LIMIT_EXCEEDED`) and to what a killed step reports; its values are the logged `reason` and `cause` strings.
 
-The other outcomes get a fixed operator message from `prompts.operator_message`, filled from `prompts.OutcomeFacts` (exact texts in `dispatcher/tests/golden/fixed_texts.txt`). `LLM_ERROR` names the error class and HTTP status (for example `RateLimitError 429`); `STATE_UNAVAILABLE` names why the read failed; `ROBOT_SERVICE_LOST` says whether the fallback stop was confirmed (`prompts.SERVICE_LOST_*`); `STOP_FAILED` tells a person to stop the robot; `FAILURE_BUDGET_EXHAUSTED` names the last failure's skill and message (its outcome if it has none); `INTERNAL_ERROR` names the exception type and run id. If any `StopMove` failed during the task, the message ends with `prompts.STOP_MOVE_WARNING`. How transports show them is in [running.md](../../docs/running.md).
+The other outcomes get a fixed operator message from `prompts.operator_message`, filled from `prompts.OutcomeFacts` (exact texts in `dispatcher/tests/golden/fixed_texts.txt`). `LLM_ERROR` names the error class and HTTP status (for example `RateLimitError 429`); `STATE_UNAVAILABLE` names why the read failed; `ROBOT_SERVICE_LOST` says whether the fallback stop was confirmed (`prompts.SERVICE_LOST_*`); `STOP_FAILED` says the robot may still be moving and relies on the warning below to tell the operator to stop it; `FAILURE_BUDGET_EXHAUSTED` names the last failure's skill and message (its outcome if it has none); `INTERNAL_ERROR` names the exception type and run id. If any `StopMove` failed during the task, the message ends with `prompts.STOP_MOVE_WARNING`. How transports show them is in [running.md](../../docs/running.md).
 
 ## Context layout
 

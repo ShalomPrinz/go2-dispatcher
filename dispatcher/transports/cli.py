@@ -35,10 +35,8 @@ COMMENT_PREFIX = "#"
 TOOL_SCHEMA_HEADER = "## Tool schema"
 REGISTRY_HASH_LINE = "Registry hash: {hash}"
 BATCH_TASK_LINE = "Task {i}: {task}"
-BATCH_STOP_LINES = {  # outcomes that end a batch (docs/running.md)
-    "ROBOT_SERVICE_LOST": "Batch stopped at task {i}: the robot service was lost.",
-    "STOP_FAILED": "Batch stopped at task {i}: the stop command to the robot failed.",
-}
+BATCH_STOP_FAILED_LINE = "Batch stopped at task {i}: the stop command to the robot failed."  # docs/running.md
+BATCH_SERVICE_LOST_LINE = "Batch stopped at task {i}: the robot service was lost."
 BATCH_NOT_RUN_LINE = "Not run: task {i}: {task}"
 
 
@@ -227,6 +225,15 @@ def read_tasks(path: Path) -> list[str]:
     return [ln.strip() for ln in lines if ln.strip() and not ln.strip().startswith(COMMENT_PREFIX)]
 
 
+def _batch_stop_line(outcome: TaskOutcome) -> str | None:
+    """The stderr line that ends a batch after ``outcome``, or None to run the next line."""
+    if outcome.stop_move_failed:
+        return BATCH_STOP_FAILED_LINE
+    if outcome.outcome == "ROBOT_SERVICE_LOST":
+        return BATCH_SERVICE_LOST_LINE
+    return None
+
+
 def cmd_batch(cfg, tasks_file: Path) -> int:
     try:
         tasks = read_tasks(tasks_file)
@@ -243,7 +250,7 @@ def cmd_batch(cfg, tasks_file: Path) -> int:
         outcome = runner.run(task)
         if runner.stop_requested:
             return EXIT_SIGINT
-        stop_line = BATCH_STOP_LINES.get(outcome.outcome)
+        stop_line = _batch_stop_line(outcome)
         if stop_line is not None:
             print(stop_line.format(i=i), file=sys.stderr)
             for j, rest in enumerate(tasks[i:], i + 1):

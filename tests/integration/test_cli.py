@@ -137,18 +137,32 @@ def test_batch_stops_at_the_first_robot_service_lost(cfg_path, tmp_path):
     ]
 
 
-def test_batch_stops_at_the_first_stop_failed(tmp_path, monkeypatch, capsys):
+@pytest.mark.parametrize(
+    ("failed", "outcome"),
+    [
+        (exec_result("timeout", stop_move=stop_move_result(StopCause.STEP_TIMEOUT, ok=False)), "STOP_FAILED"),
+        (
+            exec_result(
+                "interrupted",
+                interrupt_cause=StopCause.TASK_TIME_LIMIT,
+                stop_move=stop_move_result(StopCause.TASK_TIME_LIMIT, ok=False),
+            ),
+            "TIME_LIMIT_EXCEEDED",
+        ),
+    ],
+)
+def test_batch_stops_after_a_task_whose_stop_failed(tmp_path, monkeypatch, capsys, failed, outcome):
     """In process: the stub's StopMove never fails, so a fake executor scripts the failed stop."""
     tasks = tmp_path / "tasks.txt"
     tasks.write_text("turn left\nwalk\nturn right\nsit\n", encoding="utf-8")
     cfg = make_config(tmp_path)
     registry = Registry.load(REPO_ROOT / "skills" / "catalog")
     planner = ScriptedPlanner([PLAN_TURN, DONE, PLAN_TURN], PromptSurface.build(registry, cfg.loop.planning_horizon))
-    timeout = exec_result("timeout", stop_move=stop_move_result(StopCause.STEP_TIMEOUT, ok=False))
-    dispatcher = Dispatcher(cfg, registry, planner, FakeExecutor([exec_result(skill="turn"), timeout]))
+    dispatcher = Dispatcher(cfg, registry, planner, FakeExecutor([exec_result(skill="turn"), failed]))
     monkeypatch.setattr(cli_module, "build_dispatcher", lambda *_args, **_kwargs: dispatcher)
     monkeypatch.setattr(cli_module._Runner, "install", lambda _self: None)  # no process-wide signal or atexit hooks
     assert cli_module.cmd_batch(cfg, tasks) == 1
+    assert dispatcher.previous is not None and dispatcher.previous.outcome == outcome
     captured = capsys.readouterr()
     assert captured.out.splitlines() == ["Task 1: turn left", "", "Task 2: walk"]
     assert captured.err.splitlines()[-3:] == [
