@@ -352,15 +352,23 @@ def test_a_later_successful_stop_clears_the_record(service):
         assert control.disarm() is None  # the lease-end StopMove returned 0: the robot is stopped
 
 
-def test_disarm_reports_the_failed_stop_at_the_deadline(service):
-    path, _, robot = service
-    outcome: list = []
-    with RobotClient.connect(path, control=True) as control:
-        control.arm("t", 0.3)
-        robot.stops = [7]
-        moving_in_thread(path, "t", outcome).join(5.0)
-        failed = control.disarm()
-    assert isinstance(outcome[0], Refused) and outcome[0].code == robot_ipc.ERR_ABORTED
+def test_disarm_reports_the_failed_stop_at_the_deadline():
+    """The motion clock moves only when advanced and the test runs the deadline check itself."""
+    clock, robot = Clock(), Recorder()
+    motion = robot_service.Motion(
+        robot, lambda s, abort: abort.wait(s), StateStore(lambda m: m), sim=False, clock=clock
+    )
+    threading.Thread(target=motion._loop, daemon=True).start()
+    conn = cast(ipc.Conn, object())  # a lease binds to its connection by identity
+    motion.arm("t", 0.3)
+    robot.stops = [7]
+    job = motion.submit(conn, "t", motion.move(0.3, 0.0, 0.0, 10.0, None, None))
+    assert until(lambda: "Move" in robot.calls, wait_s=10.0)
+    clock.advance(0.3)
+    assert motion.end_expired_lease()
+    assert job.done.wait(5.0) and job.reply is not None
+    failed = motion.disarm()
+    assert job.reply["error"]["code"] == robot_ipc.ERR_ABORTED
     assert failed is not None and (failed.reason, failed.ret) == ("lease deadline", 7)
 
 
