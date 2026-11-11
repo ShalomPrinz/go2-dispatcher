@@ -2,6 +2,8 @@
 name: sit
 entrypoint: skills.sit
 description: Lower the robot's body to the ground (sit or lie down).
+expect:
+  posture: sitting
 ---
 
 ## Use when

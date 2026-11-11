@@ -22,6 +22,9 @@ from pydantic import (
     model_validator,
 )
 
+from skills.robot_ipc import YAW_SIGN
+from skills.schema import Posture
+
 SKILL_FILE = "SKILL.md"
 FRONTMATTER_DELIMITER = "---"
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -105,12 +108,73 @@ class ParamSpec(_Strict):
             raise ValueError(f"default {d!r} is not a valid {self.type}")
 
 
+class YawDelta(_Strict):
+    """The signed yaw change over the step (CCW +) matches ``YAW_SIGN[direction_param] * param`` in degrees,
+    within ``tolerance_deg``."""
+
+    param: Name
+    direction_param: Name
+    tolerance_deg: float = Field(gt=0, allow_inf_nan=False)
+
+
+class Expectation(_Strict):
+    """Goal expectation for a step; every key given must hold (skills/docs/skills.md).
+
+    ``self_reported`` stands alone: the skill's own response is the outcome, no state is checked."""
+
+    posture: Literal["standing", "sitting"] | None = None
+    mode: int | None = Field(default=None, ge=0)
+    yaw_delta: YawDelta | None = None
+    self_reported: Literal[True] | None = None
+
+    @field_validator("posture", "mode", "yaw_delta", "self_reported", mode="before")
+    @classmethod
+    def _no_null(cls, v: Any, info: ValidationInfo) -> Any:
+        if v is None:
+            raise ValueError(f"'{info.field_name}' must not be null")
+        return v
+
+    @model_validator(mode="after")
+    def _check(self) -> Expectation:
+        keys = self.model_fields_set
+        if not keys:
+            raise ValueError("expect needs at least one of posture, mode, yaw_delta, self_reported")
+        if self.self_reported and len(keys) > 1:
+            raise ValueError("self_reported must be the only key")
+        return self
+
+
+class Precondition(_Strict):
+    """Checked before dispatch: the current posture must be one of ``posture`` (skills/docs/skills.md)."""
+
+    posture: tuple[Posture, ...] = Field(strict=False)  # YAML gives a list
+
+    @field_validator("posture", mode="before")
+    @classmethod
+    def _list(cls, v: Any) -> Any:
+        if not isinstance(v, (list, tuple)) or not v:
+            raise ValueError("posture must be a non-empty list")
+        if not all(isinstance(p, str) for p in v):
+            raise ValueError("posture values must be strings")
+        if len(set(v)) != len(v):
+            raise ValueError("posture values must be unique")
+        return v
+
+
 class SkillFrontmatter(_Strict):
     name: Name
     entrypoint: NonEmptyStr
     description: NonEmptyStr
     params: dict[Name, ParamSpec] = {}  # frontmatter order
-    expect: Any = None  # accepted and ignored (docs/roadmap.md)
+    expect: Expectation | None = None  # absent: the step is unverified; not in the catalog
+    requires: Precondition | None = None  # absent: no precondition; not in the catalog
+
+    @field_validator("expect", "requires", mode="before")
+    @classmethod
+    def _no_null(cls, v: Any, info: ValidationInfo) -> Any:
+        if v is None:
+            raise ValueError(f"'{info.field_name}' must not be null")
+        return v
 
     @field_validator("description")
     @classmethod
@@ -118,6 +182,23 @@ class SkillFrontmatter(_Strict):
         if "\n" in v.strip():
             raise ValueError("description must be a single line")
         return v
+
+    @model_validator(mode="after")
+    def _yaw_params(self) -> SkillFrontmatter:
+        # the yaw delta names a number param in degrees and an enum param covered by YAW_SIGN
+        if self.expect is None or self.expect.yaw_delta is None:
+            return self
+        yd = self.expect.yaw_delta
+        spec = self.params.get(yd.param)
+        if spec is None or spec.type != "number" or spec.unit != "degrees":
+            raise ValueError(f"expect.yaw_delta.param '{yd.param}' is not a number param with unit degrees")
+        spec = self.params.get(yd.direction_param)
+        if spec is None or spec.type != "enum" or not set(spec.values or ()) <= YAW_SIGN.keys():
+            signs = ", ".join(YAW_SIGN)
+            raise ValueError(
+                f"expect.yaw_delta.direction_param '{yd.direction_param}' is not an enum param with values in {signs}"
+            )
+        return self
 
 
 class SkillSection(_Strict):

@@ -9,7 +9,14 @@ from pathlib import Path
 import pytest
 
 from skills import turn, walk
-from skills.manifest import BODY_MAX_CHARS, SECTION_HEADINGS, SkillFileError, parse_skill_file
+from skills.manifest import (
+    BODY_MAX_CHARS,
+    SECTION_HEADINGS,
+    Expectation,
+    SkillFileError,
+    YawDelta,
+    parse_skill_file,
+)
 
 CATALOG = Path(__file__).resolve().parents[2] / "catalog"
 HEAD = "name: demo\nentrypoint: skills.demo\ndescription: A demo skill.\n"
@@ -31,8 +38,55 @@ def assert_error(path: Path, match: str | None = None) -> None:
         assert match in str(ei.value)
 
 
-def test_expect_key_accepted(tmp_path):
-    assert parse_skill_file(write(tmp_path, "expect: {anything: [1, 2]}\n")).name == "demo"
+ANGLE = (
+    "params:\n  a:\n    type: number\n    unit: degrees\n    description: A.\n"
+    "  d:\n    type: enum\n    values: [left, right]\n    description: D.\n"
+)
+
+
+def test_expect_and_requires_parse(tmp_path):
+    fm = (
+        ANGLE
+        + "expect:\n  posture: standing\n  mode: 0\n  yaw_delta: {param: a, direction_param: d, tolerance_deg: 10}\n"
+    )
+    f = parse_skill_file(write(tmp_path, fm + "requires:\n  posture: [standing, unknown]\n"))
+    assert f.expect == Expectation(
+        posture="standing", mode=0, yaw_delta=YawDelta(param="a", direction_param="d", tolerance_deg=10)
+    )
+    assert f.requires is not None and f.requires.posture == ("standing", "unknown")
+    assert parse_skill_file(write(tmp_path, "expect: {self_reported: true}\n")).expect == Expectation(
+        self_reported=True
+    )
+    bare = parse_skill_file(write(tmp_path, ""))
+    assert bare.expect is None and bare.requires is None  # absent: unverified, no precondition
+
+
+@pytest.mark.parametrize(
+    ("frontmatter", "match"),
+    [
+        ("expect: {}\n", "at least one"),
+        ("expect: {posture: unknown}\n", "expect.posture"),  # not a goal
+        ("expect: {mode: true}\n", "expect.mode"),  # strict: a bool is not a mode
+        ("expect: {body_height: 0.2}\n", "unknown key"),
+        ("expect: {self_reported: true, mode: 0}\n", "self_reported must be the only key"),
+        ("expect: {self_reported: false}\n", "expect.self_reported"),
+        ("expect:\n", "must not be null"),
+        (ANGLE + "expect: {yaw_delta: {param: a, direction_param: d, tolerance_deg: 0}}\n", "tolerance_deg"),
+        (ANGLE + "expect: {yaw_delta: {param: b, direction_param: d, tolerance_deg: 5}}\n", "'b' is not a number"),
+        (ANGLE + "expect: {yaw_delta: {param: a, tolerance_deg: 5}}\n", "direction_param"),
+        (ANGLE + "expect: {yaw_delta: {param: a, direction_param: a, tolerance_deg: 5}}\n", "'a' is not an enum"),
+        (
+            ANGLE.replace("right", "up") + "expect: {yaw_delta: {param: a, direction_param: d, tolerance_deg: 5}}\n",
+            "'d' is not an enum",
+        ),
+        ("requires: {posture: []}\n", "non-empty"),
+        ("requires: {posture: [standing, standing]}\n", "unique"),
+        ("requires: {posture: [[standing]]}\n", "must be strings"),
+        ("requires: {posture: [lying]}\n", "requires.posture"),
+    ],
+)
+def test_invalid_expect_or_requires(tmp_path, frontmatter, match):
+    assert_error(write(tmp_path, frontmatter), match)
 
 
 @pytest.mark.parametrize(

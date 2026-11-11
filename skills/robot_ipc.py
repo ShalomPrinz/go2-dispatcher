@@ -73,6 +73,9 @@ def state_message(op: str, reading: Reading | None) -> dict:
     return message(op, state=asdict(reading.state), rx_mono=reading.rx_mono, link=reading.link)
 
 
+YAW_SIGN = {"left": 1, "right": -1}  # turn direction to the sign of yaw_rad and vyaw (CCW +)
+
+
 @dataclass(frozen=True)
 class MoveTarget:
     """A ``move``'s stop condition, read from the state each tick: the yaw change in radians, signed (CCW +).

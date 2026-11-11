@@ -14,6 +14,13 @@ params:
     default: 45
     unit: degrees
     description: Angle to turn.
+expect:
+  yaw_delta:
+    param: angle_deg
+    direction_param: direction
+    tolerance_deg: 10
+requires:
+  posture: [standing]
 ---
 
 ## Use when

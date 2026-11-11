@@ -14,6 +14,8 @@ params:
     default: 0.9
     unit: metres
     description: Distance to travel.
+requires:
+  posture: [standing]
 ---
 
 ## Use when

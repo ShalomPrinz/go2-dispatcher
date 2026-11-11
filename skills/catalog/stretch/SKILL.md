@@ -2,6 +2,11 @@
 name: stretch
 entrypoint: skills.stretch
 description: Perform the robot's built-in stretch routine.
+expect:
+  posture: standing
+  mode: 0
+requires:
+  posture: [standing]
 ---
 
 ## Use when
