@@ -64,6 +64,7 @@ def test_turn_then_detect(tmp_path, registry):
         d.shutdown(0)
     assert o.outcome == "DONE", o.message
     assert [s.outcome for s in o.steps] == ["ok", "ok"]
+    assert [s.verification for s in o.steps] == ["verified", "verified"]  # yaw delta; self-reported
     assert o.steps[1].response is not None
     assert o.steps[1].response.observations["object_found"] is True
 
@@ -189,17 +190,59 @@ def test_failed_stop_with_the_service_alive_ends_the_task(tmp_path, registry, mo
 
 
 def test_service_gone_before_a_step_ends_the_task_without_a_restart(tmp_path, registry):
-    """The step cannot be armed and never starts; the service stays down until the next task."""
+    """The pre-step read finds the service dead and does not start it; the step never runs."""
     items = [Plan(status="PLAN", steps=[TURN])]
     d, planner, _ = build(tmp_path, registry, items)
     planner.on_call = lambda _call: _kill_service(d)
     try:
         o = d.run_task("turn", source="test")
-        assert o.outcome == "ROBOT_SERVICE_LOST" and o.llm_calls == 1, o.message
-        assert [(s.outcome, s.error_code, s.pid) for s in o.steps] == [("error", "robot_service_lost", None)]
+        assert o.outcome == "ROBOT_SERVICE_LOST" and o.llm_calls == 1 and o.steps == [], o.message
+        assert o.message == "Stopped: the robot control service was lost (the fallback stop was confirmed)."
+        stops = [r for r in read_jsonl(o.log_path) if r["type"] == "stop_move"]
+        assert [(r["reason"], r["stop_path"], r["service_lost"]) for r in stops] == [
+            ("robot_service_lost", "fallback", True)
+        ]
         assert _service(d).pid is None
     finally:
         d.shutdown(0)
+
+
+def test_precondition_ends_the_task_before_dispatch(tmp_path, registry):
+    """walk has no expectation, sit is verified, and a walk while sitting is never dispatched."""
+    sit, walk = (
+        PlanStep(skill="sit", params={}),
+        PlanStep(skill="walk", params={"direction": "forward", "distance_m": 0.3}),
+    )
+    d, _, _ = build(tmp_path, registry, [Plan(status="PLAN", steps=[walk, sit, walk])])
+    try:
+        o = d.run_task("walk, sit, walk", source="test")
+    finally:
+        d.shutdown(0)
+    assert o.outcome == "PRECONDITION_FAILED", o.message
+    assert o.message == "Stopped: walk needs the robot to be standing, but its posture is sitting."
+    assert [(s.ref.skill, s.verification) for s in o.steps] == [("walk", "unverified"), ("sit", "verified")]
+    [rec] = [r for r in read_jsonl(o.log_path) if r["type"] == "precondition_failed"]
+    assert (rec["ref"]["plan_step"], rec["requires"], rec["state"]["posture"]) == (3, ["standing"], "sitting")
+    assert o.failures == 0 and o.final_posture == "sitting"
+
+
+@pytest.mark.parametrize(
+    ("kind", "outcome", "faults"),
+    [("fallen", "ok", ["fallen", "fault_mode"]), ("stuck", "ok", []), ("rejected", "error", ["command_rejected"])],
+)
+def test_robot_fault_fails_the_step(tmp_path, registry, kind, outcome, faults):
+    """A fault forces failed; a stuck turn fails its yaw expectation; the plan goes on as before."""
+    items = [Plan(status="PLAN", steps=[TURN]), Plan(status="DONE")]
+    d, _, _ = build(tmp_path, registry, items, stub={"faults": [{"step": 1, "kind": kind}]})
+    try:
+        o = d.run_task("turn", source="test")
+    finally:
+        d.shutdown(0)
+    assert o.outcome == "DONE", o.message
+    [step] = o.steps
+    assert (step.outcome, step.verification, step.faults) == (outcome, "failed", faults)
+    [rec] = [r for r in read_jsonl(o.log_path) if r["type"] == "step_result"]
+    assert (rec["verification"], rec["faults"]) == ("failed", faults)
 
 
 def test_service_lost_between_tasks_restarts_at_the_next_task(tmp_path, registry):

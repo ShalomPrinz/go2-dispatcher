@@ -478,7 +478,7 @@ def test_first_plan_sees_fresh_state(tmp_path, registry):
     r = Rig(tmp_path, registry, [plan(PlanStep(skill="sit", params={})), done()], executor=executor)
     o = r.run()
     assert "Posture: sitting" in r.user(0)  # Rig starts the dispatcher standing
-    assert executor.fresh_reads == 1  # the replan after the step uses its state_after
+    assert executor.fresh_reads == [True, False]  # task start, then pre-step; the replan uses the step's state_after
     start = records(o, "task_start")[0]
     assert (start["robot_io"], start["state_error"]) == ("service", None)
     [stream] = executor.streams
@@ -709,7 +709,7 @@ def test_service_loss_ends_the_task_with_no_further_call(tmp_path, registry, sto
     o = r.run()
     assert (o.outcome, o.llm_calls, o.message) == ("ROBOT_SERVICE_LOST", 1, message)
     assert o.stop_move_failed is not stop_ok
-    assert executor.fresh_reads == 1 and len(executor.runs) == 1  # the task-start read only; the turn never ran
+    assert executor.fresh_reads == [True, False] and len(executor.runs) == 1  # the turn never ran, nor its read
     assert [rec["type"] for rec in records(o)][-3:] == ["step_result", "stop_move", "task_end"]
 
 

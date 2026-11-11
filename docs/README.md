@@ -22,7 +22,7 @@ Documents that cover the whole system or both services.
 | [configuration.md](configuration.md) | Every config key (type, default, tunable or not), `.env` and secrets, precedence, CLI overrides, path resolution, validation rules. |
 | [setup.md](setup.md) | Installing on a development machine and on the lab machine (uv, robot and vision extras, CycloneDDS troubleshooting, network interface, YOLO weights), Python version, verifying an install. |
 | [running.md](running.md) | Operating the system: CLI commands and exit codes, `batch` files, Ctrl+C, Telegram setup, commands and replies, stub vs real backend, switching skill sets. |
-| [roadmap.md](roadmap.md) | What comes next: the v2 plan (verification layer, verdicts, verifiability per skill, preconditions, escalation, `ASK`, existing seams), future ideas, open questions (including experiment design), the gate before experiments, and pending human work with owners. |
+| [roadmap.md](roadmap.md) | What comes next: the v2 plan (pending verification work, escalation, `ASK`, existing seams), future ideas, open questions (including experiment design), the gate before experiments, and pending human work with owners. |
 | [references.md](references.md) | External documentation and papers, each with one line on why it matters to the project. |
 
 ### Dispatcher (`dispatcher/docs/`)
@@ -31,7 +31,7 @@ The `dispatcher` package: the loop, the LLM layer and the run log.
 
 | Document | Owns |
 |---|---|
-| [loop-and-context.md](../dispatcher/docs/loop-and-context.md) | The dispatcher loop: the `submit_plan` plan contract, plan validation and the whole-plan pre-check, return reasons, what counts as a failure and as an LLM call, budgets, task outcome codes and their operator messages, the fixed-slot context layout and every fixed text the model sees. |
+| [loop-and-context.md](../dispatcher/docs/loop-and-context.md) | The dispatcher loop: the `submit_plan` plan contract, plan validation and the whole-plan pre-check, return reasons, what counts as a failure and as an LLM call, budgets, preconditions, step verdicts (fault detection and goal verification), task outcome codes and their operator messages, the fixed-slot context layout and every fixed text the model sees. |
 | [llm.md](../dispatcher/docs/llm.md) | The LLM layer: provider and model choice, Sonnet 5.5 parameter constraints and the request we send (auto tool choice, non-strict tools, minimal thinking via `between_tools`, no temperature, `max_tokens`), schema retry, horizon rejection (not truncation) and its monitoring rule, infrastructure retries, live-API verification status. |
 | [run-log.md](../dispatcher/docs/run-log.md) | The run log as the study dataset: files, envelope, every record type, `index.jsonl`, and how to compute each study metric from the log. |
 

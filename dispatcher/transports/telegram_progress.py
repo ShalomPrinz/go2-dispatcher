@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from ..models import (
         Plan,
         Posture,
+        PreconditionFailure,
         RobotState,
         StartState,
         StepDispatch,
@@ -292,6 +293,9 @@ class TelegramProgress:
             return
         line = step_line(sr, self._registry) + prompts.PROGRESS_DURATION.format(seconds=_secs(sr.duration_ms))
         self._update(add=[line])
+
+    def precondition_failed(self, failure: PreconditionFailure) -> None:
+        pass  # the outcome text names the category; the detail is in the run log
 
     def stop_requested(self, source: str, during: str) -> None:
         self._update(add=[prompts.PROGRESS_STOP_REQUESTED.format(source=h(source))])

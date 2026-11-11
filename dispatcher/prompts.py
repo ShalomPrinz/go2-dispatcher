@@ -14,7 +14,7 @@ from .budget import (
 )
 
 if TYPE_CHECKING:
-    from .models import StepResult, TaskOutcomeCode  # models imports this module for the kill messages
+    from .models import PreconditionFailure, StepResult, TaskOutcomeCode  # models imports this module
 
 __all__ = [
     "SYSTEM_TEMPLATE",
@@ -272,6 +272,7 @@ OPERATOR_MESSAGES: dict[str, str] = {
     "LLM_INVALID": "Stopped: the model returned an invalid plan twice.",
     "LLM_ERROR": "Stopped: the model could not be reached ({detail}).",
     "STATE_UNAVAILABLE": "Stopped: the robot state could not be read ({detail}).",
+    "PRECONDITION_FAILED": "Stopped: {skill} needs the robot to be {required}, but its posture is {posture}.",
     "ROBOT_SERVICE_LOST": "Stopped: the robot control service was lost ({detail}).",
     "STOP_FAILED": "Stopped: the robot may still be moving.",  # the always-set warning names the action
     "INTERNAL_ERROR": "Stopped: internal error ({exception_type}). See run log {run_id}.",
@@ -295,6 +296,7 @@ class OutcomeFacts:
     message: str | None = None  # DONE / ABORTED: the model's message
     detail: str = ""  # LLM_ERROR, STATE_UNAVAILABLE, ROBOT_SERVICE_LOST
     exception_type: str = "Exception"  # INTERNAL_ERROR
+    precondition: PreconditionFailure | None = None  # PRECONDITION_FAILED
 
 
 def _operator_args(outcome: TaskOutcomeCode, facts: OutcomeFacts) -> dict[str, Any]:
@@ -315,6 +317,10 @@ def _operator_args(outcome: TaskOutcomeCode, facts: OutcomeFacts) -> dict[str, A
         return {"n": facts.max_llm_calls}
     if outcome in ("LLM_ERROR", "STATE_UNAVAILABLE", "ROBOT_SERVICE_LOST"):
         return {"detail": facts.detail}
+    if outcome == "PRECONDITION_FAILED":
+        pf = facts.precondition
+        assert pf is not None  # the loop sets it with this outcome
+        return {"skill": pf.ref.skill, "required": " or ".join(pf.requires), "posture": pf.posture}
     if outcome == "INTERNAL_ERROR":
         return {"exception_type": facts.exception_type, "run_id": facts.run_id}
     return {}
@@ -358,6 +364,7 @@ TELEGRAM_OUTCOMES: dict[str, str] = {
     "LLM_INVALID": "❌ <b>Stopped</b>: the model produced a malformed plan twice.",
     "LLM_ERROR": "❌ <b>Stopped</b>: the model could not be reached.",
     "STATE_UNAVAILABLE": "❌ <b>Stopped</b>: the robot state could not be read.",
+    "PRECONDITION_FAILED": "❌ <b>Stopped</b>: a step was not possible in the robot's current posture.",
     "ROBOT_SERVICE_LOST": "❌ <b>Stopped</b>: the robot control service was lost.",
     "STOP_FAILED": "❌ <b>Stopped</b>: the robot may still be moving.",
     "INTERNAL_ERROR": "❌ <b>Stopped</b>: internal error. See run log {run_id}.",

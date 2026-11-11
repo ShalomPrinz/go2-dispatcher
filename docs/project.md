@@ -43,7 +43,7 @@ The **planning horizon** (maximum steps per plan) is one config value. Horizon 1
 
 - **Two phases.** Phase one characterises the system objectively, in simulation and from run logs, before any human participants are involved. Phase two is the participant study.
 - **Granularity and horizon are independent variables.** Varying both at once makes effects impossible to attribute. The experiment design must decide how they are crossed (open, [roadmap](roadmap.md#open-questions)).
-- Experiments run only after the v2 verification layer is implemented ([roadmap](roadmap.md#v2-plan)). Everything that gates them, including the still-undesigned participant protocol, task set and trust measure, is listed in [roadmap.md](roadmap.md#before-experiments).
+- Experiments run only after the v2 plan is implemented, including escalation on a `failed` verdict ([roadmap](roadmap.md#v2-plan)). Everything that gates them, including the still-undesigned participant protocol, task set and trust measure, is listed in [roadmap.md](roadmap.md#before-experiments).
 - **Latency target: 4 s or less per LLM call**, set by the advisor. It is read as the median `total_ms` across all call types, with p90 reported beside it, because a median alone would hide a long worst case. `go2 report` computes it ([run-log.md](../dispatcher/docs/run-log.md#computing-the-study-metrics)).
 
 ### OpenClaw as a system-level baseline
@@ -114,4 +114,4 @@ What the logs imply for the baseline. Details of the harness are decided when it
 - **The real backend has run on the robot** in supervised runs with OpenRouter free models (logs in `logs/openrouter/real/`). Robot-side values not yet measured by a run stay open in the supervised checklist in [robot.md](../skills/docs/robot.md).
 - **The Claude request has not been verified against the live API** (Sonnet 5.5 with `thinking: between_tools` and auto tool choice); the OpenRouter request has. See [llm.md](../dispatcher/docs/llm.md).
 - All numeric limits are starting values to be tuned from logs and robot runs.
-- Next: latency, measured with Claude; then the v2 verification layer and experiment design. See [roadmap.md](roadmap.md).
+- Next: latency, measured with Claude; then the rest of the v2 plan (escalation) and experiment design. See [roadmap.md](roadmap.md).

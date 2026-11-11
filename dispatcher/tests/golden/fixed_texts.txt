@@ -52,6 +52,12 @@ Stopped: the robot state could not be read (overloaded).
 === operator_message STATE_UNAVAILABLE stop_move_failed ===
 Stopped: the robot state could not be read (overloaded). WARNING: the stop command to the robot failed. Stop the robot manually.
 
+=== operator_message PRECONDITION_FAILED ===
+Stopped: walk needs the robot to be standing, but its posture is sitting.
+
+=== operator_message PRECONDITION_FAILED stop_move_failed ===
+Stopped: walk needs the robot to be standing, but its posture is sitting. WARNING: the stop command to the robot failed. Stop the robot manually.
+
 === operator_message ROBOT_SERVICE_LOST ===
 Stopped: the robot control service was lost (overloaded).
 
@@ -117,6 +123,9 @@ Call submit_plan again with a corrected plan.
 
 === TELEGRAM_OUTCOMES STATE_UNAVAILABLE ===
 ❌ <b>Stopped</b>: the robot state could not be read.
+
+=== TELEGRAM_OUTCOMES PRECONDITION_FAILED ===
+❌ <b>Stopped</b>: a step was not possible in the robot's current posture.
 
 === TELEGRAM_OUTCOMES ROBOT_SERVICE_LOST ===
 ❌ <b>Stopped</b>: the robot control service was lost.

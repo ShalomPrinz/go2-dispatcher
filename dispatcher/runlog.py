@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from .models import (
         Plan,
         Posture,
+        PreconditionFailure,
         RobotState,
         StartState,
         StepDispatch,
@@ -250,6 +251,9 @@ class RunLog:
             "step_result", **sr.model_dump(mode="json"), budget_used=budget.used(), failures=failures, posture=posture
         )
 
+    def precondition_failed(self, failure: PreconditionFailure) -> None:
+        self._write("precondition_failed", **failure.model_dump(mode="json"))
+
     def stop_requested(self, source: str, during: str) -> None:
         self._write("stop_requested", source=source, during=during)
 
@@ -318,6 +322,8 @@ class TaskRecords(Protocol):
     def step_start(self, ref: StepRef, dispatch: StepDispatch) -> None: ...
 
     def step_result(self, sr: StepResult, *, budget: MotionBudget, failures: int, posture: Posture) -> None: ...
+
+    def precondition_failed(self, failure: PreconditionFailure) -> None: ...
 
     def stop_requested(self, source: str, during: str) -> None: ...
 
@@ -398,6 +404,9 @@ class NullLog:
         pass
 
     def step_result(self, sr: StepResult, *, budget: MotionBudget, failures: int, posture: Posture) -> None:
+        pass
+
+    def precondition_failed(self, failure: PreconditionFailure) -> None:
         pass
 
     def stop_requested(self, source: str, during: str) -> None:
@@ -492,6 +501,10 @@ class TeeLog:
     def step_result(self, sr: StepResult, *, budget: MotionBudget, failures: int, posture: Posture) -> None:
         self._log.step_result(sr, budget=budget, failures=failures, posture=posture)
         self._notify(lambda o: o.step_result(sr, budget=budget, failures=failures, posture=posture))
+
+    def precondition_failed(self, failure: PreconditionFailure) -> None:
+        self._log.precondition_failed(failure)
+        self._notify(lambda o: o.precondition_failed(failure))
 
     def stop_requested(self, source: str, during: str) -> None:
         self._log.stop_requested(source, during)

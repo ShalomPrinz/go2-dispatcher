@@ -84,9 +84,10 @@ class SkillExecutor(Protocol):
         """The stop path: the service's ``stop``, else the fallback ``stop_move`` process; never raises."""
         ...
 
-    def fresh_state(self) -> RobotState:
-        """The latest state through the robot service, starting a dead service first; raises
-        ``models.StateReadError``."""
+    def fresh_state(self, *, start: bool = True) -> RobotState:
+        """The latest state through the robot service, starting a dead service first unless ``start`` is false
+        (a pre-step read never starts it); raises ``models.StateReadError``, ``models.RobotServiceLostError`` when
+        ``start`` is false and the service is dead or unreachable."""
         ...
 
     def state_stream(self, path: Path, t_start: float, observer: TaskObserver | None = None) -> StreamHandle:
@@ -527,10 +528,10 @@ class Executor:
 
     # --- robot service (docs/running.md) ----------------------------------------------------------
 
-    def fresh_state(self) -> RobotState:
-        if self.robot.pid is None:  # a dead service's connection is useless; the next arm opens a new one
+    def fresh_state(self, *, start: bool = True) -> RobotState:
+        if start and self.robot.pid is None:  # a dead service's connection is useless; the next arm opens a new one
             self._close_control()
-        return self.robot.read_state()
+        return self.robot.read_state(start=start)
 
     def state_stream(self, path: Path, t_start: float, observer: TaskObserver | None = None) -> StateStream:
         return StateStream(self.robot.socket_path, path, t_start, observer)

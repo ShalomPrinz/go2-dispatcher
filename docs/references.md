@@ -25,4 +25,4 @@ External sources the project depends on or builds on.
 ## Papers
 
 - **OpenGo** — A parameterised skill library on a real Go2. Found medium granularity (fixed functions, LLM-tuned parameters) to be the best trade-off; the motivation for the main study's granularity conditions ([project.md](project.md#main-study)).
-- **DoReMi** — Detecting and recovering from misalignment between plan and execution; the conceptual basis for the v2 verification layer ([roadmap.md](roadmap.md#verification-layer)).
+- **DoReMi** — Detecting and recovering from misalignment between plan and execution; the conceptual basis for the dispatcher's verification layer ([loop-and-context.md](../dispatcher/docs/loop-and-context.md#verification)).

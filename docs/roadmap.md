@@ -8,45 +8,10 @@ Agreed direction with the advisor. The study's experiments run only after v2 is 
 
 ### Verification layer
 
-Lives inside the dispatcher and checks each step against the robot's sampled state. It has two separate components, because one is universal and the other is not:
+Implemented: every dispatched step gets a verdict from fault detection and goal verification, and a step whose precondition is not met is not dispatched ([loop-and-context.md](../dispatcher/docs/loop-and-context.md#verification)). Conceptual basis: DoReMi ([references.md](references.md)). Still pending:
 
-- **Fault detection**: did the robot enter a bad state? Fallen (IMU roll/pitch), stuck or faulted (foot force, `mode`), command rejected (SDK return code). Universal; needs no knowledge of what the step was meant to do.
-- **Goal verification**: did the skill achieve what was asked? Skill-dependent; needs an expectation and a measurement.
-
-Conceptual basis: DoReMi, detecting and recovering from plan–execution misalignment ([references.md](references.md)).
-
-### Verdicts
-
-Each step gets one of four verdicts:
-
-| Verdict | Meaning |
-|---|---|
-| `verified` | The measured outcome matches the expectation. |
-| `failed` | The measured outcome contradicts the expectation, or a fault was detected. |
-| `unverified` | Nothing measurable exists for this skill. |
-| `unavailable` | The state read failed. |
-
-Four rather than two, so that "could not check" is never reported as "worked".
-
-### Verifiability per skill
-
-Assuming no usable position estimate:
-
-| Skill | Verifiable | How |
-|---|---|---|
-| `sit`, `stretch` | yes | `mode`, body height |
-| `turn` | yes | IMU yaw delta; drift is negligible over a few seconds |
-| `walk` | no | needs a position estimate |
-| `detect_object` | trivially | self-reporting |
-
-**Dependency on odometry.** The robot provides odometry relative to its power-on pose ([robot.md](../skills/docs/robot.md#open-robot-side-questions)). Which source carries it (`SportModeState.position` on `rt/sportmodestate`, or `rt/utlidar/robot_odom` / `rt/utlidar/robot_pose`) and its accuracy and drift are open ([pending work](#pending-human-work)). v1 already logs `position` and `velocity` from `rt/sportmodestate` in every state sample. If the estimate is accurate enough, `walk` becomes verifiable from the position delta over the step (with a drift tolerance; the power-on origin does not matter) and a geofence becomes possible. Keep this distinction:
-
-- the robot's **own measurement-based estimator** is acceptable as a verification source;
-- **dead reckoning from commanded velocity** is not, because it restates the walk skill's own assumption (walk is open-loop: it commands a speed for a time).
-
-### Preconditions
-
-Before a step is dispatched, check that the skill is valid from the current state (for example, no walking while sitting). A violation is rejected with the observed state, before the robot moves.
+- **`walk` verification, dependent on odometry.** The robot provides odometry relative to its power-on pose ([robot.md](../skills/docs/robot.md#open-robot-side-questions)). Which source carries it (`SportModeState.position` on `rt/sportmodestate`, or `rt/utlidar/robot_odom` / `rt/utlidar/robot_pose`) and its accuracy and drift are open ([pending work](#pending-human-work)). If the estimate is accurate enough, `walk` gets a position-delta expectation (with a drift tolerance; the power-on origin does not matter), which would also catch a stuck walk, and a geofence becomes possible. Keep this distinction: the robot's **own measurement-based estimator** is acceptable as a verification source; **dead reckoning from commanded velocity** is not, because it restates the walk skill's own assumption (walk is open-loop: it commands a speed for a time). Owner: dispatcher and skills, after checklist item 2.
+- **Fault thresholds on the robot.** `FALLEN_TILT_RAD` and `FAULT_MODES` are assumed signatures (*unverified*); the first fall in a run log, or Unitree's documentation of `mode`, settles them ([robot.md](../skills/docs/robot.md#open-robot-side-questions), checklist item 9).
 
 ### Escalation
 
@@ -60,12 +25,12 @@ A dedicated status for clarifying questions (for example "go to the chair" when 
 
 Kept on purpose; do not remove them as dead code.
 
-- `StepResult.verification`, always `"unverified"` in v1.
+- `StepResult.verification` and `faults`: the verdict is recorded only, ready for escalation to act on.
 - `state_before` / `state_after` on every skill response and `state_after` on every `StopMove`, including the robot's own `position` estimate when published.
-- Typed `expect` and `requires` keys in `SKILL.md` frontmatter, declared for every v1 skill and not rendered into the catalog; nothing evaluates them yet ([skills.md](../skills/docs/skills.md#expectations-and-preconditions)).
+- Typed `expect` and `requires` keys in `SKILL.md` frontmatter, declared for every v1 skill and not rendered into the catalog; the dispatcher evaluates them for verdicts and preconditions ([skills.md](../skills/docs/skills.md#expectations-and-preconditions)).
 - A single posture rule, `derive_posture()` in `skills/real.py`.
 - Plan status normalised in one place (`Plan._normalise_status` in `models.py`), so adding `ASK` is local.
-- Stub robot faults (`fallen`, `stuck`, `rejected`) with the real sample's fields, to test fault detection offline ([skills.md](../skills/docs/skills.md#robot-faults)).
+- Stub robot faults (`fallen`, `stuck`, `rejected`) with the real sample's fields, which the fault-detection tests use ([skills.md](../skills/docs/skills.md#robot-faults)).
 - `skills.dir` is configurable, so other granularity tiers can be loaded.
 
 ## Future ideas

@@ -11,7 +11,15 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from skills.manifest import SKILL_FILE, ParamSpec, SkillFileError, SkillSection, parse_skill_file
+from skills.manifest import (
+    SKILL_FILE,
+    Expectation,
+    ParamSpec,
+    Precondition,
+    SkillFileError,
+    SkillSection,
+    parse_skill_file,
+)
 from skills.policy import SkillPolicy
 
 from .models import RegistryError
@@ -27,6 +35,8 @@ class SkillDescriptor:
     params: dict[str, ParamSpec]  # frontmatter order
     sections: tuple[SkillSection, ...]  # SKILL.md body, template order
     policy: SkillPolicy
+    expect: Expectation | None = None  # goal verification; None: unverified (dispatcher/docs/loop-and-context.md)
+    requires: Precondition | None = None  # checked before dispatch; None: no precondition
 
 
 # --- loading ---------------------------------------------------------------------
@@ -61,6 +71,8 @@ def _load_skill(folder: Path) -> SkillDescriptor:
         params=dict(fm.params),
         sections=fm.sections,
         policy=policy,
+        expect=fm.expect,
+        requires=fm.requires,
     )
 
 

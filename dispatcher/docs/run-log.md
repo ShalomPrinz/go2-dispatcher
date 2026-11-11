@@ -24,7 +24,7 @@ Each line is written and flushed while a lock is held, so a crash leaves a usabl
 
 ## Record order
 
-A task's file starts with `task_start` and ends with `task_end`. In between, for each LLM call: `llm_request`, any `llm_retry`, then `llm_response` (followed by `plan` or `plan_invalid`) or `llm_error` / `llm_interrupted`. For each step of a valid plan: `step_start` and `step_result` for a dispatched step, only `step_result` for a step rejected by the pre-check, and a `stop_move` after the `step_result` of a killed step. `stop_requested` can appear anywhere (it is written from the transport thread). A stop or time limit that arrives while no step runs adds a `stop_move` just before `task_end`. An internal error adds `exception` and a `stop_move`. A failed task-start state read adds only a `stop_move` before `task_end`.
+A task's file starts with `task_start` and ends with `task_end`. In between, for each LLM call: `llm_request`, any `llm_retry`, then `llm_response` (followed by `plan` or `plan_invalid`) or `llm_error` / `llm_interrupted`. For each step of a valid plan: `step_start` and `step_result` for a dispatched step, only `step_result` for a step rejected by the pre-check, and a `stop_move` after the `step_result` of a killed step. `stop_requested` can appear anywhere (it is written from the transport thread). A stop or time limit that arrives while no step runs adds a `stop_move` just before `task_end`. An internal error adds `exception` and a `stop_move`. A failed task-start state read adds only a `stop_move` before `task_end`. A failed pre-step state read adds a `stop_move` before `task_end`, with no `step_start` for that step (reason `robot_service_lost` when the service was dead or unreachable, else `state_unavailable`); a precondition violation adds `precondition_failed` before `task_end`, also with no `step_start`.
 
 ## Envelope
 
@@ -85,7 +85,11 @@ An invalid reply: `call_index`, `tool_input`, `rejection_kind` (`horizon` / `sch
 
 ### `step_result`
 
-All `StepResult` fields at the top level, with the step's identity nested under `ref` and the dispatch fields under `dispatch`: `ref` (an object with `call_index`, `plan_step`, `skill`, `params`: filled and normalised for a dispatched step or a motion-budget rejection, raw as received for a bounds rejection), `dispatch` (an object with `index` (task-wide dispatched count), `timeout_s`, `motion_cost`, `fault`; null for a rejected step), `outcome`, `error_code`, `error_message`, `response` (full `SkillResponse` with `state_before` / `state_after` / `timing`), `duration_ms`, `exit_code`, `pid`, `stderr_tail`, `verification` (always `"unverified"`). It also adds `budget_used`, `failures` and `posture` **after** this step has been counted. It is written for both dispatched and rejected steps.
+All `StepResult` fields at the top level, with the step's identity nested under `ref` and the dispatch fields under `dispatch`: `ref` (an object with `call_index`, `plan_step`, `skill`, `params`: filled and normalised for a dispatched step or a motion-budget rejection, raw as received for a bounds rejection), `dispatch` (an object with `index` (task-wide dispatched count), `timeout_s`, `motion_cost`, `fault`; null for a rejected step), `outcome`, `error_code`, `error_message`, `response` (full `SkillResponse` with `state_before` / `state_after` / `timing`), `duration_ms`, `exit_code`, `pid`, `stderr_tail`, `verification` (`verified` / `failed` / `unverified` / `unavailable`, null for a step that was not dispatched; [loop-and-context.md](loop-and-context.md#verification)), `faults` (the faults detected in the response: `fallen`, `fault_mode`, `command_rejected`; empty when none, and always empty for a step that was not dispatched). It also adds `budget_used`, `failures` and `posture` **after** this step has been counted. It is written for both dispatched and rejected steps.
+
+### `precondition_failed`
+
+A step not dispatched because the robot's state did not meet the skill's `requires` ([loop-and-context.md](loop-and-context.md#preconditions)): `ref` (the step's `StepRef`, params filled), `requires` (the allowed postures), `state` (the full `RobotState` of the pre-step read the check used; its `posture` is the observed one). The task then ends `PRECONDITION_FAILED`. The step gets no `step_result` and no dispatch index.
 
 ### `stop_requested`
 
@@ -95,7 +99,7 @@ All `StepResult` fields at the top level, with the step's identity nested under 
 
 All `StopMoveResult` fields, one run of the [stop path](../../docs/safety.md#the-stop-path):
 
-- `ok`, `reason` (`operator` / `task_time_limit` / `step_timeout` / `shutdown` / `internal_error` / `state_unavailable` / `robot_service_lost` / `service_stop_failed`). `service_stop_failed`: the `disarm` after a step the executor did not stop reported that a `StopMove` the robot service sent on its own failed, so the fallback ran ([loop-and-context.md](loop-and-context.md#stop-failed)).
+- `ok`, `reason` (`operator` / `task_time_limit` / `step_timeout` / `shutdown` / `internal_error` / `state_unavailable` / `robot_service_lost` / `service_stop_failed`). `state_unavailable`: a task-start state read failed, or a pre-step read found no state message or the link down. `robot_service_lost` also covers a pre-step read that found the service dead or unreachable. `service_stop_failed`: the `disarm` after a step the executor did not stop reported that a `StopMove` the robot service sent on its own failed, so the fallback ran ([loop-and-context.md](loop-and-context.md#stop-failed)).
 - `stop_path`: `service` (the robot service's `stop` answered `stop_sent` with code 0) or `fallback` (the fresh-process `stop_move` ran). Null only when the stop path itself raised (a test fake; the executor never raises).
 - `duration_ms`: the whole stop path, a failed service stop included. `kill_to_stop_ms`: measured by the dispatcher from the skill kill to the confirmed (or failed) stop; null when no step was killed.
 - `stop_call_ms`: the service's `StopMove` call time from `stop_sent`, or from the `disarm` reply's `stop_failed`; null on a fallback unless the service reported a failed `StopMove` (a non-zero `stop_sent`, or `stop_failed`).
@@ -170,7 +174,9 @@ Pick the folder first (`logs/anthropic/real/` for the study), then group its tas
 | Robot state | `step_result.response.state_before` / `state_after`; `stop_move.state_after` ([robot.md](../../skills/docs/robot.md#state-sampling)) |
 | Exact prompts | `task_start.system_text` / `catalog_text` / `tool_schema` + `llm_request.user_text` |
 | Session continuity | `session_id` links tasks of one process; `task_start.previous_task` shows what carried over |
-| State at task start | `task_start.posture`, `state_age_ms`; failed reads: `task_end.outcome == "STATE_UNAVAILABLE"` and `task_start.state_error` |
+| State at task start | `task_start.posture`, `state_age_ms`; failed reads: `task_end.outcome == "STATE_UNAVAILABLE"` and `task_start.state_error` (a pre-step read without a usable state has `state_error` null and a `stop_move` with reason `state_unavailable`) |
+| Step verdicts | `step_result.verification` by `ref.skill`; why a step `failed`: `faults` (empty when the goal check failed). Null on rejected steps. Verdicts are recorded only and never change the outcome ([loop-and-context.md](loop-and-context.md#verification)) |
+| Precondition violations | `outcome == "PRECONDITION_FAILED"`; the step, its `requires` and the observed state in the `precondition_failed` record |
 | Robot state over time | the task's `state_stream.jsonl`: samples at 10 Hz and link gaps |
 
 ### Latency report: `go2 report`
@@ -222,4 +228,6 @@ A task is measured only when its log has `task_start`, `task_end`, at least one 
 - **Infrastructure retries are logged separately and never counted as LLM calls or replans**, so provider trouble does not contaminate the replanning metric.
 - **`robot_io` is a field set by the code, not a config key.** The robot service is the only state path, so there is nothing to configure; the field marks the records for analysis, which must not mix them with records written with per-process DDS. Existing logs are not rewritten: a missing field identifies them.
 - **The state stream is a separate file per task, not records in the task log.** At 10 Hz it would outnumber every other record many times over and interleave with them from a second thread; a sibling file keeps the task log's record contract and `seq` unchanged and can be skipped by analysis that does not need it. Rejected: one stream file per session (harder to cut per task); the full message rate (five times the lines for no study metric that needs it).
-- **Full robot state is logged, not just posture**, as the data for setting v2 verification thresholds ([roadmap.md](../../docs/roadmap.md#v2-plan)).
+- **Full robot state is logged, not just posture**, as the data for setting and checking the verification thresholds ([loop-and-context.md](loop-and-context.md#verification)).
+- **A precondition violation is its own record, not a `step_result`.** The step never ran, has no dispatch index and is no failure; a `step_result` would need a new outcome and would enter the step counts, the context history and the Telegram step list. The record carries the full pre-step state, so the observed posture can be checked against the raw fields. Rejected: putting the state on `task_end`, which mixes a per-step fact into the task summary.
+- **`faults` is logged beside `verification`.** The verdict alone cannot tell a fall from a missed goal, and the study needs both rates. Rejected: a verdict per component, which doubles the fields for a split that `faults` already gives.

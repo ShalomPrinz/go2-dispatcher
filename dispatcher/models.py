@@ -41,6 +41,10 @@ class StateReadError(Exception):
     """A state read through the robot service failed; the text says why, without a traceback."""
 
 
+class RobotServiceLostError(StateReadError):
+    """A pre-step read found the robot service dead or unreachable; the task ends ROBOT_SERVICE_LOST."""
+
+
 class BusyError(Exception):
     """run_task called while a task is running."""
 
@@ -103,7 +107,7 @@ class StopCause(str, Enum):
     TASK_TIME_LIMIT = "task_time_limit"
     STEP_TIMEOUT = "step_timeout"
     INTERNAL_ERROR = "internal_error"
-    STATE_UNAVAILABLE = "state_unavailable"  # the task-start state read failed; StopMove only
+    STATE_UNAVAILABLE = "state_unavailable"  # a task-start or pre-step state read failed; StopMove only
     ROBOT_SERVICE_LOST = "robot_service_lost"  # the robot service died or hung; fallback stop (docs/safety.md)
     SERVICE_STOP_FAILED = "service_stop_failed"  # a StopMove the service sent on its own failed; fallback stop
 
@@ -178,6 +182,10 @@ class StepRef(_Model):
     params: dict[str, Any]  # filled + normalised; raw as received for a bounds rejection
 
 
+Verdict = Literal["verified", "failed", "unverified", "unavailable"]
+Fault = Literal["fallen", "fault_mode", "command_rejected"]
+
+
 class StepResult(_Model):
     ref: StepRef
     dispatch: StepDispatch | None = None  # None if not dispatched (rejected)
@@ -189,7 +197,8 @@ class StepResult(_Model):
     exit_code: int | None = None
     pid: int | None = None  # LOG ONLY
     stderr_tail: str | None = None  # last 2000 chars; LOG ONLY, never in context
-    verification: Literal["unverified"] = "unverified"
+    verification: Verdict | None = None  # None: not dispatched (dispatcher/docs/loop-and-context.md)
+    faults: list[Fault] = []  # faults detected in the step's response; any forces verification "failed"
 
 
 # --- Task outcome and summary (dispatcher/docs/loop-and-context.md) -------------------------------------
@@ -204,6 +213,7 @@ TaskOutcomeCode = Literal[
     "LLM_INVALID",
     "LLM_ERROR",
     "STATE_UNAVAILABLE",
+    "PRECONDITION_FAILED",
     "ROBOT_SERVICE_LOST",
     "STOP_FAILED",
     "INTERNAL_ERROR",
@@ -241,3 +251,16 @@ class StartState(_Model):
 
     age_ms: float | None  # age of the state message at the read; None when the read failed
     error: str | None = None  # why the read failed; the task then ends STATE_UNAVAILABLE
+
+
+class PreconditionFailure(_Model):
+    """A step not dispatched because the robot's state did not meet its ``requires``
+    (dispatcher/docs/loop-and-context.md)."""
+
+    ref: StepRef
+    requires: list[Posture]  # the skill's allowed postures
+    state: RobotState  # the pre-step read the check used
+
+    @property
+    def posture(self) -> Posture:
+        return self.state.posture

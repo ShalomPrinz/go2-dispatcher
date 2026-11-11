@@ -9,7 +9,7 @@ from dataclasses import replace
 import pytest
 
 from dispatcher import prompts
-from dispatcher.models import StepRef, StepResult, TaskOutcomeCode
+from dispatcher.models import PreconditionFailure, RobotState, StepRef, StepResult, TaskOutcomeCode
 from tests.helpers import REPO_ROOT
 
 GOLDEN = REPO_ROOT / "dispatcher" / "tests" / "golden" / "fixed_texts.txt"
@@ -27,6 +27,11 @@ FACTS = prompts.OutcomeFacts(
     ),
     detail="overloaded",
     exception_type="KeyError",
+    precondition=PreconditionFailure(
+        ref=StepRef(call_index=1, plan_step=2, skill="walk", params={}),
+        requires=["standing"],
+        state=RobotState(t=0.0, backend="stub", posture="sitting"),
+    ),
 )
 OUTCOME_FACTS = {
     code: replace(FACTS, message={"DONE": "Walked 1 m.", "ABORTED": "Which chair?"}.get(code)) for code in ALL_OUTCOMES

@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from ..models import (
         Plan,
         Posture,
+        PreconditionFailure,
         RobotState,
         StartState,
         StepDispatch,
@@ -182,6 +183,11 @@ class ConsoleTrace:
         if sr.dispatch is not None:
             line += self._style(f" ({_secs(sr.duration_ms)})", DIM)
         self._close(line)
+
+    def precondition_failed(self, failure: PreconditionFailure) -> None:
+        call = format_call(failure.ref.skill, failure.ref.params, self._registry)
+        needs = " or ".join(failure.requires)
+        self._close(self._style(f"✗ {call} not run: needs {needs}, posture is {failure.posture}", RED))
 
     def stop_requested(self, source: str, during: str) -> None:
         self._close(

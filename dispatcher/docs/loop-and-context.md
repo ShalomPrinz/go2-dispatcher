@@ -15,7 +15,10 @@ task text
           │                         pre-check (bounds on every step, motion budget up to stop_at)
           │                           rejected → failure +1 ────────────┤
           │                                                             ▼
-          │                         run steps 1..stop_at, one subprocess each
+          │                         run steps 1..stop_at: fresh state read, precondition, one subprocess each
+          │                           read fails → StopMove → STATE_UNAVAILABLE (service dead → ROBOT_SERVICE_LOST)
+          │                           precondition not met → PRECONDITION_FAILED (step not dispatched)
+          │                           each dispatched step gets a verdict (recorded only)
           │                           step fails → failure +1, rest abandoned
           │                           interrupted → STOPPED / TIME_LIMIT_EXCEEDED
           │                           robot service lost → fallback stop → ROBOT_SERVICE_LOST
@@ -28,7 +31,8 @@ task text
 3. An invalid reply gets exactly one schema retry ([llm.md](llm.md#schema-retry)).
 4. `DONE` and `ABORT` end the task with the model's `message` (`DONE` without one gets `prompts.DONE_DEFAULT_MESSAGE`).
 5. `PLAN`: `stop_at = replan_after or len(steps)`. The whole plan is pre-checked ([below](#whole-plan-pre-check)). A rejected plan runs nothing: one failure is counted and the model is called again with reason `failure`.
-6. Steps `1..stop_at` run in order. Before each step, stop and deadline are checked; the step's motion cost is charged; the skill subprocess starts ([skills.md](../../skills/docs/skills.md)). Before a `detect_object` step the executor first makes sure the vision service runs and waits for it to be ready; that wait counts against the task time limit, not the step timeout ([running.md](../../docs/running.md#vision-service)). A robot service lost during a step ends the task `ROBOT_SERVICE_LOST` with no further call ([below](#robot-service-lost)). A step whose stop failed with the service alive ends it `STOP_FAILED`, also with no further call: the stop of a killed step, or the fallback stop after the robot service reports that a `StopMove` it sent on its own failed ([below](#stop-failed)).
+6. Steps `1..stop_at` run in order. Before each step, stop and deadline are checked; then a fresh state is read through the robot service and the step's precondition is checked on it ([below](#preconditions)); then the step's motion cost is charged; the skill subprocess starts ([skills.md](../../skills/docs/skills.md)). Before a `detect_object` step the executor first makes sure the vision service runs and waits for it to be ready; that wait counts against the task time limit, not the step timeout ([running.md](../../docs/running.md#vision-service)). A robot service lost during a step ends the task `ROBOT_SERVICE_LOST` with no further call ([below](#robot-service-lost)). A step whose stop failed with the service alive ends it `STOP_FAILED`, also with no further call: the stop of a killed step, or the fallback stop after the robot service reports that a `StopMove` it sent on its own failed ([below](#stop-failed)).
+   Every dispatched step gets a verdict from its own state samples ([below](#verification)). The verdict is recorded only: a `failed` verdict does not change the step outcome, the failure count or the return reason.
 7. After the plan:
    - a step failed → reason `failure`; the steps after it are listed as `[abandoned]`;
    - `stop_at < len(steps)` → reason `checkpoint`; the steps after `stop_at` are listed as `[pending]`;
@@ -91,6 +95,41 @@ The filled, normalised params are what is dispatched, logged and shown in the co
 
 A rejection is recorded as one step result with no dispatch index, counts as one failure, and leads to a `failure` call. After a rejection, **every** step of the plan is listed as `[abandoned]` under Remaining plan, including the rejected one. Rejected steps are never charged to the motion budget. What the budget means and why it exists: [safety.md](../../docs/safety.md#motion-budget).
 
+## Preconditions
+
+Before each step the loop reads a fresh state through the robot service (`Executor.fresh_state(start=False)`, the same read as at task start, but it never starts a dead service). The read becomes the last known state. Then the skill's `requires` (`SKILL.md` frontmatter, [skills.md](../../skills/docs/skills.md#expectations-and-preconditions)) is checked: the current posture must be one of `requires.posture`; a skill without `requires` is not checked.
+
+- **Service dead or unreachable** (not running, or no answer): handled like a robot service lost during a step ([below](#robot-service-lost)): the fallback `StopMove` (reason `robot_service_lost`, with `service_lost` set) and the task ends `ROBOT_SERVICE_LOST`. The step is not dispatched.
+- **Read fails otherwise** (no state message, link down): the loop sends `StopMove` (reason `state_unavailable`) and ends the task `STATE_UNAVAILABLE`, as for a failed task-start read. The step is not dispatched.
+- **Precondition not met**: the step is not dispatched, the rest of the plan is abandoned, a `precondition_failed` record with the observed state is written ([run-log.md](run-log.md#precondition_failed)) and the task ends `PRECONDITION_FAILED`, with no further LLM call and no `StopMove` (the previous step already ended its own motion). It is not a step result and not a failure: `task_end.failures` and `rejections` do not count it.
+
+The model reads the preconditions from each skill's `Requires` body section; `requires` is the check the dispatcher enforces.
+
+## Verification
+
+Every dispatched step gets a verdict in `StepResult.verification` (`dispatcher/verification.py`), built from two separate checks on the step's own response: fault detection and goal verification. A step that was not dispatched (pre-check rejection) has `verification = null`.
+
+| Verdict | Meaning |
+|---|---|
+| `verified` | No fault, and the measured outcome matches the skill's `expect`. |
+| `failed` | A fault was detected, or the measured outcome contradicts `expect` (for `self_reported`, the skill returned `status = error`). |
+| `unverified` | The skill declares no `expect` (`walk`), and fault detection found nothing. |
+| `unavailable` | A state the check needs is missing: no response, no `state_after` (fault detection needs it for every skill), or no `state_before` / field for the expectation. |
+
+"Could not check" is never `verified`.
+
+**Fault detection** is universal: it needs no knowledge of the step. Each detected fault is listed in `StepResult.faults`, and any fault forces `failed`.
+
+| Fault | Signal | Threshold (*tunable*, *unverified* on the robot) |
+|---|---|---|
+| `fallen` | `state_after.imu_rpy` roll or pitch | \|roll\| or \|pitch\| > `FALLEN_TILT_RAD` = 0.5 rad (about 29°) |
+| `fault_mode` | `state_after.mode` | in `FAULT_MODES` = {7} (damping in Unitree's sport mode list) |
+| `command_rejected` | the skill's error code | `sdk_error`: an SDK call returned non-zero ([skills.md](../../skills/docs/skills.md#error-codes)) |
+
+The values are module constants in `dispatcher/verification.py`, next to the rule that reads them, like the posture-rule bounds in `skills/real.py`. 0.5 rad is about 3.5 times the largest roll or pitch in the robot's standing samples (0.14 rad) and well short of a fall on the side (π/2); mode 7 is the stub's assumed fall signature ([robot.md](../../skills/docs/robot.md#open-robot-side-questions)). Foot force is not used: `rt/sportmodestate` reports it as zeros on this robot. A stuck robot has no universal signature in `state_after` (the command is stopped by then): a stuck `turn` fails its yaw expectation, a stuck `walk` stays `unverified`.
+
+**Goal verification** is per skill, from `expect` ([skills.md](../../skills/docs/skills.md#expectations-and-preconditions)), measured on the step's `state_before` and `state_after`; every key given must hold. `posture` compares `state_after.posture` (`unknown` with no `body_height` is `unavailable`, any other mismatch `failed`); `mode` compares `state_after.mode`; `yaw_delta` compares the signed yaw change with `YAW_SIGN[direction] × angle` within the tolerance, wrapped to ±180°; `self_reported` follows the skill's `status`. Any key `failed` gives `failed`; else any key `unavailable` gives `unavailable`. `walk` stays `unverified`: there is no odometry source yet and dead reckoning from the commanded velocity is never a measurement ([roadmap.md](../../docs/roadmap.md#v2-plan)).
+
 ## Step outcomes
 
 Every recorded step has one outcome:
@@ -130,7 +169,7 @@ The loop carries the reason together with the Remaining plan and the notice valu
 
 The executor reports a step during which the [robot service](../../docs/running.md#robot-service) was lost (`ExecResult.service_lost`) after it has SIGKILLed the service and the skill process group and run the fallback `stop_move` ([safety.md](../../docs/safety.md#robot-service-lost)). This includes a step that could not be armed and never started. The step is recorded with its outcome (a failure, usually `error`), then the stop. The dispatcher then ends the task `ROBOT_SERVICE_LOST`, with no further LLM call. The operator message says whether the fallback stop was confirmed.
 
-The service stays down until the next task's [fresh state read](../../docs/running.md#robot-service) starts it; a failed start ends that next task `STATE_UNAVAILABLE`. A step never starts the service (`Executor.run` only arms it), so one task uses one service process, from the read to `task_end`.
+The service stays down until the next task's [fresh state read](../../docs/running.md#robot-service) starts it; a failed start ends that next task `STATE_UNAVAILABLE`. A step never starts the service (`Executor.run` only arms it, and the pre-step read is made with `start=False`), so one task uses one service process, from the read to `task_end`. A service that dies between steps is seen by the next pre-step read, which ends the task `ROBOT_SERVICE_LOST` the same way, with the fallback `StopMove` ([above](#preconditions)).
 
 A loss during a step that a stop, the time limit or shutdown interrupted ends the task with that outcome instead; only the stop path changes. A stop that arrives after the loss was detected does not change the outcome: the fallback stop already covers it, and the `stop_requested` record shows it.
 
@@ -169,14 +208,15 @@ All values are starting values and *tunable* ([configuration.md](../../docs/conf
 | `CALL_BUDGET_EXHAUSTED` | `max_llm_calls` reached |
 | `LLM_INVALID` | a reply and its schema retry were both invalid |
 | `LLM_ERROR` | LLM unreachable after infrastructure retries, or a non-retryable API error |
-| `STATE_UNAVAILABLE` | the task-start state read through the robot service failed; no LLM call was made |
-| `ROBOT_SERVICE_LOST` | the robot service was lost during a step ([above](#robot-service-lost)) |
+| `STATE_UNAVAILABLE` | the task-start state read through the robot service failed, and no LLM call was made; or a pre-step read found no state message or the link down, and the step was not dispatched ([above](#preconditions)) |
+| `PRECONDITION_FAILED` | the robot's posture from the pre-step read did not meet the next step's `requires`; the step was not dispatched and no further LLM call was made ([above](#preconditions)) |
+| `ROBOT_SERVICE_LOST` | the robot service was lost during a step, or a pre-step read found it dead or unreachable ([above](#robot-service-lost)) |
 | `STOP_FAILED` | a step's stop failed with the service alive (the stop of a killed step, or the fallback after the service reported a failed `StopMove` of its own); no further LLM call was made in this task ([above](#stop-failed)) |
 | `INTERNAL_ERROR` | unhandled exception in the dispatcher |
 
 `models.StopCause` maps each interrupt cause to its outcome (`operator` and `shutdown` → `STOPPED`, `task_time_limit` → `TIME_LIMIT_EXCEEDED`) and to what a killed step reports; its values are the logged `reason` and `cause` strings.
 
-The other outcomes get a fixed operator message from `prompts.operator_message`, filled from `prompts.OutcomeFacts` (exact texts in `dispatcher/tests/golden/fixed_texts.txt`). `LLM_ERROR` names the error class and HTTP status (for example `RateLimitError 429`); `STATE_UNAVAILABLE` names why the read failed; `ROBOT_SERVICE_LOST` says whether the fallback stop was confirmed (`prompts.SERVICE_LOST_*`); `STOP_FAILED` says the robot may still be moving and relies on the warning below to tell the operator to stop it; `FAILURE_BUDGET_EXHAUSTED` names the last failure's skill and message (its outcome if it has none); `INTERNAL_ERROR` names the exception type and run id. If any `StopMove` failed during the task, the message ends with `prompts.STOP_MOVE_WARNING`. How transports show them is in [running.md](../../docs/running.md).
+The other outcomes get a fixed operator message from `prompts.operator_message`, filled from `prompts.OutcomeFacts` (exact texts in `dispatcher/tests/golden/fixed_texts.txt`). `LLM_ERROR` names the error class and HTTP status (for example `RateLimitError 429`); `STATE_UNAVAILABLE` names why the read failed; `PRECONDITION_FAILED` names the skill, its allowed postures and the observed posture (from `OutcomeFacts.precondition`); `ROBOT_SERVICE_LOST` says whether the fallback stop was confirmed (`prompts.SERVICE_LOST_*`); `STOP_FAILED` says the robot may still be moving and relies on the warning below to tell the operator to stop it; `FAILURE_BUDGET_EXHAUSTED` names the last failure's skill and message (its outcome if it has none); `INTERNAL_ERROR` names the exception type and run id. If any `StopMove` failed during the task, the message ends with `prompts.STOP_MOVE_WARNING`. How transports show them is in [running.md](../../docs/running.md).
 
 ## Context layout
 
@@ -277,6 +317,13 @@ A failed step is still charged to the motion budget: the budget is charged at di
 - **Notices are fixed texts that tell the model directly what to do** ("failure f of N … revise or ABORT"). Directive text steers behaviour, so the wording must be identical across experimental conditions. The current wording is a draft to be frozen before experiments ([roadmap.md](../../docs/roadmap.md#open-questions)).
 - **A previous-task slot carries continuity between messages** (the robot remembers its posture). Posture and obstacle distances are stated from sampled state, never inferred from the last skill, because a skill can fail or be killed mid-motion.
 - **Each task's first plan requires a fresh state read at task start; a failed read ends the task `STATE_UNAVAILABLE` before any LLM call.** Between tasks the robot can be moved by hand or by remote, and the obstacle distances the model plans walks against go stale; the previous task's last state can be minutes old. A read through the robot service is a socket round trip to a message already in memory, so it costs nothing next to an LLM call. Replanning rounds keep the latest `state_after`, which is already fresh. The read takes the latest message, not the first one after the request: at the assumed 50 Hz it is at most tens of ms old, and its age is logged. `STATE_UNAVAILABLE` is its own outcome because neither the model (`LLM_ERROR`) nor a dispatcher bug (`INTERNAL_ERROR`) caused it. Rejected: carrying the state over between tasks with no read (stale first plans); falling back to the carried-over state when the read fails, because the skills sample `state_before` and `state_after` through the same service, so every step would then fail its state read too, and planning on minutes-old obstacle distances is what the fresh read exists to prevent.
+- **Verification has two separate components, fault detection and goal verification, combined into one verdict.** Fault detection is universal (fallen, faulted `mode`, command rejected) and needs no knowledge of the step, so it covers every skill, including those with nothing to measure; goal verification needs a per-skill expectation and a measurement, so it lives with the skill's `expect`. A detected fault forces `failed` whatever the goal check says (a fallen robot reads `sitting` under the posture rule). Four verdicts, not two, so that "could not check" (`unavailable`) and "nothing to measure" (`unverified`) are never reported as "worked". Rejected: one per-skill check that also looks for faults, which would repeat the fault rules in every expectation. Conceptual basis: DoReMi ([references.md](../../docs/references.md)).
+- **A `failed` verdict is recorded only.** The plan continues as before; abandoning the plan and replanning on a `failed` verdict is the separate Escalation item ([roadmap.md](../../docs/roadmap.md#escalation)), so the verdicts can first be checked against real runs before they steer the loop.
+- **Fault thresholds are module constants, not config.** They are robot facts read by one rule, like the posture-rule bounds, not experiment conditions; the run log's `git_commit` identifies them. Rejected: config keys, which would invite per-run changes to values that must be the same in every condition.
+- **Every step reads a fresh state before it is dispatched.** The precondition must be checked against the robot as it is now: between steps the robot can be moved by hand or fall, and a killed or failed step can leave no `state_after`. The read is a socket round trip to a message already in memory. Rejected: reusing the previous step's `state_after`, which can be missing (killed step), is as old as the step's settle time, and misses changes between steps.
+- **A failed pre-step read ends the task before the step (fail closed): `ROBOT_SERVICE_LOST` when the service is dead or unreachable, `STATE_UNAVAILABLE` when it answers without a usable state (no message, link down).** Either way the skill's own state samples would fail too and the step would run blind, so it is not dispatched and a `StopMove` is sent. A dead service is a service loss whenever it is found, so it gets the same outcome, fallback stop and `service_lost` marking as a loss during a step, and the study counts all losses in one place; `STATE_UNAVAILABLE` keeps meaning that the robot's state could not be read. Rejected: dispatching the step anyway, or skipping the precondition, which trades the check for motion without state; `STATE_UNAVAILABLE` for a dead service, which hides service losses in the state-read count.
+- **The pre-step read never starts a dead service.** One task uses one service process; a restart inside a task would run the rest of the task on a new process with the state stream already ended. Rejected: the task-start behaviour (start once first), which would hide a service loss between steps.
+- **A precondition violation ends the task with its own outcome, `PRECONDITION_FAILED`.** The model planned a step the robot cannot take from its observed state; the dispatcher stops before the robot moves, and the outcome carries the observed state. It is not counted as a failure, so it stays apart from skill errors in the study data. Rejected: recording it as a `rejected` step result and calling the model again, which is escalation behaviour and kept separate ([roadmap.md](../../docs/roadmap.md#escalation)).
 - **Every robot service loss ends the task, with no replan.** The model cannot fix an infrastructure fault, so the call would be wasted spend; ending the task also keeps crashes visible during development and keeps infrastructure noise out of the replan metrics in the study data. The interrupted step still counts as a failure. Rejected: replanning after a confirmed stop and a fresh read (the costs above).
 - **The service restarts at the next task's fresh read, not at the loss, and a step never starts it.** The task-start read already starts a dead service and already turns a failed start into `STATE_UNAVAILABLE`, so no other restart path is needed, and one task uses one service process. Rejected: restarting right after the loss (saves about 1 s on the next prompt, adds code and a failure mode between tasks); a step's `arm` starting a dead service (a restart inside a task, with the state stream already ended).
 - **`ROBOT_SERVICE_LOST` is its own outcome, not `STATE_UNAVAILABLE`.** `STATE_UNAVAILABLE` means the task never started planning because the task-start read failed; `ROBOT_SERVICE_LOST` means the control service died during a task that was already moving the robot, which is a safety event the study counts separately (with `stop_move.service_error` saying why). Its detail says whether the fallback stop was confirmed. Rejected: reusing `STATE_UNAVAILABLE` with a detail, which fits only the failed-read case and hides service losses in the task-start failure count.

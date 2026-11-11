@@ -19,7 +19,7 @@ from skills import robot_service
 from skills.env import robot_lock_path
 from skills.robot_ipc import LinkEvent, RobotClient, ServiceUnavailable
 
-from .models import RobotServiceError, RobotState, StateReadError
+from .models import RobotServiceError, RobotServiceLostError, RobotState, StateReadError
 
 if TYPE_CHECKING:
     from .runlog import TaskObserver
@@ -165,15 +165,20 @@ class RobotService:
                 self._proc = None
             self._spawn_locked()
 
-    def read_state(self) -> RobotState:
-        """The latest state through the service, starting a dead service once first. Raises StateReadError if
-        the service cannot be started or reached, has had no message, or reports the link down."""
+    def read_state(self, *, start: bool = True) -> RobotState:
+        """The latest state through the service, starting a dead service once first unless ``start`` is false.
+        Raises StateReadError if the service cannot be started or reached, has had no message, or reports the
+        link down; RobotServiceLostError (a StateReadError) if ``start`` is false and it is dead or unreachable."""
+        if not start and self.pid is None:
+            raise RobotServiceLostError("the robot service is not running")
         try:
-            self._ensure_running()
+            if start:
+                self._ensure_running()
             with RobotClient.connect(self.socket_path) as client:
                 reply = client.state()
         except (RobotServiceError, ServiceUnavailable) as e:
-            raise StateReadError(f"{type(e).__name__}: {e}") from None
+            error = RobotServiceLostError if not start else StateReadError  # a dead service at a pre-step read
+            raise error(f"{type(e).__name__}: {e}") from None
         if reply.state is None:
             raise StateReadError("the robot service has had no state message")
         if reply.link == "down":

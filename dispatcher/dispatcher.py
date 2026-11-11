@@ -26,6 +26,8 @@ from .models import (
     LLMUnavailable,
     Plan,
     Posture,
+    PreconditionFailure,
+    RobotServiceLostError,
     RobotState,
     StartState,
     StateReadError,
@@ -40,6 +42,7 @@ from .models import (
 )
 from .registry import Registry
 from .runlog import NullLog, RunLogFactory, SessionInfo, TaskLog, TaskObserver, TeeLog, notify, stream_path
+from .verification import verify
 
 __all__ = ["Dispatcher"]
 
@@ -92,6 +95,7 @@ class _Ending:
     detail: str = ""
     exception_type: str = "Exception"
     stop_move: StopMoveResult | None = None
+    precondition: PreconditionFailure | None = None  # PRECONDITION_FAILED
 
 
 class _TaskEnded(Exception):
@@ -205,6 +209,7 @@ class Dispatcher:
                         detail=end.detail,
                         exception_type=end.exception_type,
                         stop_move=end.stop_move,
+                        precondition=end.precondition,
                     )
             except Exception as e:  # noqa: BLE001 - every unhandled error ends the task (dispatcher/docs/loop-and-context.md)
                 return self._internal_error(t, e)
@@ -373,10 +378,19 @@ class Dispatcher:
         raise _TaskEnded(_Ending(cause.task_outcome, stop_move=smr)) from None
 
     def _state_unavailable(self, error: str) -> NoReturn:
-        """End the task for a failed task-start read: the state is unknown, so send StopMove, then raise."""
+        """End the task for a failed task-start or pre-step read: the state is unknown, so send StopMove, then
+        raise."""
         self._set_phase("ending")
         smr = self.executor.stop_move(StopCause.STATE_UNAVAILABLE)
         raise _TaskEnded(_Ending("STATE_UNAVAILABLE", detail=error, stop_move=smr)) from None
+
+    def _service_lost(self) -> NoReturn:
+        """End the task for a robot service found dead before a step: the fallback stop, as after a loss during a
+        step (dispatcher/docs/loop-and-context.md)."""
+        self._set_phase("ending")
+        smr = self.executor.stop_move(StopCause.ROBOT_SERVICE_LOST)
+        detail = prompts.SERVICE_LOST_STOP_CONFIRMED if smr.ok else prompts.SERVICE_LOST_STOP_FAILED
+        raise _TaskEnded(_Ending("ROBOT_SERVICE_LOST", detail=detail, stop_move=smr)) from None
 
     def _end(
         self,
@@ -387,6 +401,7 @@ class Dispatcher:
         detail: str = "",
         exception_type: str = "Exception",
         stop_move: StopMoveResult | None = None,
+        precondition: PreconditionFailure | None = None,
     ) -> TaskOutcome:
         self._set_phase("ending")
         if stop_move is not None:
@@ -403,6 +418,7 @@ class Dispatcher:
             message=message,
             detail=detail,
             exception_type=exception_type,
+            precondition=precondition,
         )
         text = prompts.operator_message(outcome, facts, stop_move_failed=t.stop_move_failed)
         duration_ms = (self.clock() - t.t_start) * 1000.0
@@ -521,12 +537,30 @@ class Dispatcher:
         for i, step in enumerate(plan.steps[:stop_at], start=1):
             self._check_interrupts(t)
             ref = StepRef(call_index=t.llm_calls, plan_step=i, skill=step.skill, params=pre.filled[i - 1])
+            self._check_precondition(t, ref)
             sr = self._run_step(t, ref)
             if sr.outcome in FAILURE_OUTCOMES:
                 return Feedback.failure(plan.steps, sr, t.failures, ran=i)
         if stop_at < len(plan.steps):
             return Feedback.checkpoint(plan.steps, stop_at)
         return Feedback.plan_complete()
+
+    def _check_precondition(self, t: _Task, ref: StepRef) -> None:
+        """Read a fresh state and check the step's ``requires`` on it; raises ``_TaskEnded`` if the read fails
+        or the check does not hold (dispatcher/docs/loop-and-context.md)."""
+        try:
+            t.state = self.executor.fresh_state(start=False)  # a step never starts the robot service
+        except RobotServiceLostError:
+            t.state = None
+            self._service_lost()
+        except StateReadError as e:
+            t.state = None
+            self._state_unavailable(str(e))
+        requires = self.registry[ref.skill].requires
+        if requires is not None and t.state.posture not in requires.posture:
+            failure = PreconditionFailure(ref=ref, requires=list(requires.posture), state=t.state)
+            t.log.precondition_failed(failure)
+            raise _TaskEnded(_Ending("PRECONDITION_FAILED", precondition=failure))
 
     def _run_step(self, t: _Task, ref: StepRef) -> StepResult:
         """Dispatch the step ``ref`` names. Returns its recorded result, or raises ``_TaskEnded``."""
@@ -557,7 +591,8 @@ class Dispatcher:
 
         exec_fields = {k: v for k, v in ex if k not in ("interrupt_cause", "stop_move", "service_lost")}  # 1:1
         exec_fields["error_message"] = cut_message(ex.error_message) if ex.error_message else None
-        sr = StepResult(ref=ref, dispatch=dispatch, **exec_fields)
+        check = verify(desc.expect, params, ex.response)
+        sr = StepResult(ref=ref, dispatch=dispatch, verification=check.verdict, faults=check.faults, **exec_fields)
         self._record(t, sr, ex.stop_move)
 
         if sr.outcome == "interrupted":
