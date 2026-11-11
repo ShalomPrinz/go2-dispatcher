@@ -138,7 +138,7 @@ async def on_text(user: Any, message: Any, context: Any) -> None:
     working = await _reply(message, prompts.WORKING)  # the first progress message, edited in place (docs/running.md)
     progress = _progress(context)
 
-    async def new_message(text: str) -> Edit:  # the progress message of a later plan round
+    async def new_message(text: str) -> Edit:  # the progress message of a later model call
         return _editor(await _reply(message, text))
 
     if progress is not None and not progress.open(_editor(working), new_message):

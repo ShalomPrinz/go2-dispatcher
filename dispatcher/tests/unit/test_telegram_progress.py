@@ -1,4 +1,4 @@
-"""Telegram live progress: one message per plan round, edits only on change, best-effort sending, nothing in the
+"""Telegram live progress: one message per model call, edits only on change, best-effort sending, nothing in the
 task's timing (docs/running.md)."""
 
 from __future__ import annotations
@@ -102,9 +102,9 @@ def test_slow_edits_stay_out_of_task_timing(cfg, registry):
     assert phone.final() == progress.texts()
 
 
-def test_each_plan_round_gets_its_own_message(cfg, registry):
-    """A malformed reply and its retry stay in the first message; each later PLAN opens a new one, and DONE joins
-    the last. No validation or skill error detail in any of them."""
+def test_each_model_call_gets_its_own_message(cfg, registry):
+    """A malformed reply, its retry, a failed step, a bounds-rejected plan, a replan and DONE: one message per
+    model call, blank lines around the step list, and no validation or skill error detail."""
     phone = Phone()
     progress = TelegramProgress(registry, interval_s=0.0)
     items = [
@@ -123,25 +123,39 @@ def test_each_plan_round_gets_its_own_message(cfg, registry):
     outcome = asyncio.run(run(d, progress, phone))
     assert outcome.outcome == "DONE"
     final = phone.final()
-    assert final == progress.texts() and len(final) == 3
+    assert final == progress.texts() and len(final) == 5
     malformed = prompts.PROGRESS_PLAN_MALFORMED.format(then=prompts.PROGRESS_ASKING_AGAIN)
-    first = final[0].splitlines()
-    assert first[:4] == [
-        malformed,
+    assert final[0] == malformed
+    second = final[1].splitlines()
+    assert second[:5] == [
         prompts.PROGRESS_PLAN_MESSAGE.format(message="Turn &lt;then&gt; walk."),
+        "",
         "1. turn(direction=left, angle_deg=90)",
         "2. walk(direction=forward, distance_m=1)",
+        "",
     ]
-    assert first[4].startswith("✅ turn(direction=left, angle_deg=90) -&gt; ok (")
-    assert first[5].startswith("❌ walk(direction=forward, distance_m=1) failed: the robot refused the move (")
-    assert len(first) == 6
-    assert final[1].splitlines() == [prompts.PROGRESS_PLAN, "1. walk(distance_m=1)", malformed]
-    last = final[2].splitlines()
-    assert last[:2] == [prompts.PROGRESS_PLAN, "1. turn(direction=left, angle_deg=90)"] and len(last) == 4
-    assert last[3] == prompts.PROGRESS_PLAN_DONE.format(message="Turned left twice; the walk was refused.")
+    assert second[5].startswith("✅ turn(direction=left, angle_deg=90) -&gt; ok (")
+    assert second[6].startswith("❌ walk(direction=forward, distance_m=1) failed: the robot refused the move (")
+    assert len(second) == 7
+    assert final[2].splitlines() == [prompts.PROGRESS_PLAN, "", "1. walk(distance_m=1)", "", malformed]
+    assert final[3].splitlines()[:3] == [prompts.PROGRESS_PLAN, "", "1. turn(direction=left, angle_deg=90)"]
+    assert final[4] == prompts.PROGRESS_PLAN_DONE.format(message="Turned left twice; the walk was refused.")
     text = "\n".join(final)
     assert "3104" not in text and "missing" not in text
     assert prompts.PROGRESS_THINKING not in text  # every round's message ends with its own lines
+
+
+def test_plan_without_results_has_no_trailing_blank_line(registry):
+    phone = Phone()
+
+    async def main():
+        progress = TelegramProgress(registry, interval_s=0.0)
+        assert progress.open(phone.editor(0), phone.new_message)
+        progress.plan(1, Plan(status="PLAN", steps=[TURN]), 1)
+        await progress.close()
+
+    asyncio.run(main())
+    assert phone.final() == [prompts.PROGRESS_PLAN + "\n\n1. turn(direction=left, angle_deg=90)"]
 
 
 def test_rejection_that_ends_the_task_gives_up(registry):
@@ -158,10 +172,9 @@ def test_rejection_that_ends_the_task_gives_up(registry):
         await progress.close()
 
     asyncio.run(main())
-    assert phone.final() == [  # the schema retry stays in the same message
-        prompts.PROGRESS_PLAN_MALFORMED.format(then=prompts.PROGRESS_ASKING_AGAIN)
-        + "\n"
-        + prompts.PROGRESS_PLAN_MALFORMED.format(then=prompts.PROGRESS_GIVING_UP)
+    assert phone.final() == [  # the schema retry gets its own message
+        prompts.PROGRESS_PLAN_MALFORMED.format(then=prompts.PROGRESS_ASKING_AGAIN),
+        prompts.PROGRESS_PLAN_MALFORMED.format(then=prompts.PROGRESS_GIVING_UP),
     ]
 
 

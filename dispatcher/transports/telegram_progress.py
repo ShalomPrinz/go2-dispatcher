@@ -1,4 +1,4 @@
-"""Live task progress for the Telegram bot: a ``TaskObserver`` whose lines one message per plan round shows, edited
+"""Live task progress for the Telegram bot: a ``TaskObserver`` whose lines one message per model call shows, edited
 in place (docs/running.md). Records only update the text; the bot's event loop sends, throttled."""
 
 from __future__ import annotations
@@ -74,10 +74,10 @@ def robot_line(link: Link, state: RobotState | None) -> str:
 
 @dataclass
 class _Round:
-    """One plan round's lines: from a ``PLAN`` reply to the next; each round has its own message."""
+    """One model call's lines: its reply, the plan and the steps it ran; each round has its own message."""
 
     lines: list[str] = field(default_factory=list)
-    planned: bool = False  # a PLAN is shown
+    plan_end: int | None = None  # index after the plan's step list; a blank line goes there once more follows
     pending: str | None = None  # "Thinking..." or the running step; the next line replaces it
 
 
@@ -111,6 +111,7 @@ class TelegramProgress:
         self._interval_s = interval_s
         self._lock = threading.Lock()
         self._rounds: list[_Round] = [_Round()]
+        self._calls = 0  # model calls seen in this task
         self._rejected: str | None = None  # a rejected-plan line awaiting "asking again" or "giving up"
         self._session: _Session | None = None
         self._robot = _Robot()
@@ -124,7 +125,7 @@ class TelegramProgress:
             return False
         session = _Session(asyncio.get_running_loop())
         with self._lock:
-            self._rounds, self._rejected = [_Round()], None
+            self._rounds, self._calls, self._rejected = [_Round()], 0, None
             self._robot = _Robot()
             self._session = session
         session.pump = asyncio.create_task(self._pump(edit, new_message, session))
@@ -155,6 +156,8 @@ class TelegramProgress:
         """Call with the lock held. Only the newest round shows the robot line, which is never dropped."""
         r = self._rounds[i]
         lines = r.lines + ([r.pending] if r.pending is not None else [])
+        if r.plan_end is not None and len(lines) > r.plan_end:  # a blank line between the plan and what followed
+            lines.insert(r.plan_end, "")
         robot = self._robot.line if i == len(self._rounds) - 1 else None
         if robot is None and not lines:
             return prompts.WORKING
@@ -235,6 +238,10 @@ class TelegramProgress:
     ) -> None:
         with self._lock:
             self._resolve_rejected(prompts.PROGRESS_ASKING_AGAIN)
+            if self._calls > 0:  # every model call after the first starts a new round, in a new message
+                self._rounds[-1].pending = None
+                self._rounds.append(_Round())
+            self._calls += 1
         self._update(pending=prompts.PROGRESS_THINKING)
 
     def llm_retry(self, retry: dict[str, Any]) -> None:
@@ -255,12 +262,10 @@ class TelegramProgress:
             head = (
                 prompts.PROGRESS_PLAN_MESSAGE.format(message=h(plan.message)) if plan.message else prompts.PROGRESS_PLAN
             )
-            add = [head] + [prompts.PROGRESS_PLAN_STEP.format(i=i, call=c) for i, c in enumerate(calls, 1)]
+            add = [head, ""] + [prompts.PROGRESS_PLAN_STEP.format(i=i, call=c) for i, c in enumerate(calls, 1)]
             with self._lock:
-                if self._rounds[-1].planned:  # a later PLAN starts a new round, in a new message
-                    self._rounds[-1].pending = None
-                    self._rounds.append(_Round())
-                self._rounds[-1].planned = True
+                r = self._rounds[-1]
+                r.plan_end = len(r.lines) + len(add)
         else:
             template = prompts.PROGRESS_PLAN_DONE if plan.status == "DONE" else prompts.PROGRESS_PLAN_ABORT
             add = [template.format(message=h(plan.message or ""))]
