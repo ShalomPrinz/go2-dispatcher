@@ -110,7 +110,7 @@ Wait = Callable[[float, threading.Event], Any]  # the motion clock: wait seconds
 
 @dataclass
 class Lease:
-    """The armed step: motion is accepted with ``token`` until ``deadline`` (time.monotonic()), on the one
+    """The armed step: motion is accepted with ``token`` until ``deadline`` (Motion's clock), on the one
     connection that first used it (``conn``)."""
 
     token: str
@@ -161,11 +161,20 @@ class YawTracker:
 class Motion:
     """The sport client, the lease and the motion loop thread. ``_lock`` guards the lease, the control
     connection, the running job and the StopMove record, and serialises every Move and every action's commit
-    with the abort."""
+    with the abort. ``clock`` sets and checks the lease deadline; StopMove timing always uses real time."""
 
-    def __init__(self, client: SportClient, wait: Wait, store: StateStore, *, sim: bool) -> None:
+    def __init__(
+        self,
+        client: SportClient,
+        wait: Wait,
+        store: StateStore,
+        *,
+        sim: bool,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
         self._client = client
         self._wait = wait
+        self._clock = clock
         self._store = store
         self._sim = sim
         self._lock = threading.Lock()
@@ -272,7 +281,7 @@ class Motion:
             self._stop_failed, self._stop_error = None, False
         self._end_lease("re-armed")
         with self._lock:
-            self._lease = Lease(token=token, deadline=time.monotonic() + timeout_s)
+            self._lease = Lease(token=token, deadline=self._clock() + timeout_s)
 
     def disarm(self) -> robot_ipc.StopFailure | None:
         """End the lease, wait for every StopMove already decided, and return the lease's latest if it failed."""
@@ -284,12 +293,18 @@ class Motion:
     def _watch_deadline(self) -> None:
         while True:
             time.sleep(LEASE_POLL_S)
-            with self._lock:
-                lease = self._lease
-                expired = lease is not None and time.monotonic() >= lease.deadline
-            if expired:
-                print("robot service: lease deadline passed", file=sys.stderr, flush=True)
-                self._end_lease("lease deadline", lease=lease)
+            self.end_expired_lease()
+
+    def end_expired_lease(self) -> bool:
+        """End the lease if its deadline has passed; True if it did. The deadline thread calls it every
+        LEASE_POLL_S."""
+        with self._lock:
+            lease = self._lease
+            expired = lease is not None and self._clock() >= lease.deadline
+        if expired:
+            print("robot service: lease deadline passed", file=sys.stderr, flush=True)
+            self._end_lease("lease deadline", lease=lease)
+        return expired
 
     # --- primitives --------------------------------------------------------------------------
 
@@ -303,7 +318,7 @@ class Motion:
                 raise Refusal(robot_ipc.ERR_NO_LEASE, "the token does not match the armed lease")
             if lease.conn is not None and lease.conn is not conn:
                 raise Refusal(robot_ipc.ERR_NO_LEASE, "another connection holds the lease")
-            if time.monotonic() >= lease.deadline:
+            if self._clock() >= lease.deadline:
                 raise Refusal(robot_ipc.ERR_NO_LEASE, "the lease deadline has passed")
             lease.conn = conn
             job = Job(run=run)

@@ -8,7 +8,6 @@ from __future__ import annotations
 import math
 import sys
 import threading
-import time
 
 import pytest
 
@@ -16,6 +15,7 @@ from skills import backend, local, motion, process, robot_ipc, robot_service, ru
 from skills.robot_ipc import MoveResult, MoveTarget
 from skills.schema import RobotState
 from skills.state_store import StateStore
+from skills.tests.fake_clock import Clock
 
 
 class FakeClient:
@@ -129,19 +129,20 @@ def test_yaw_target_without_yaw_at_the_start_runs_open_loop():
     assert client.calls == ["Move"] * 12 + ["StopMove"]
 
 
-def test_yaw_target_finishes_on_time_when_yaw_goes_stale(monkeypatch):
-    """Yaw freezes after 0.3 rad: the remaining 0.7 rad at 1 rad/s runs on time, without the lead."""
-    monkeypatch.setattr(robot_service, "MAX_STATE_AGE_S", 0.05)
-    client, store = FakeClient(), StateStore(lambda msg: msg)
+def test_yaw_target_finishes_on_time_when_yaw_goes_stale():
+    """Yaw freezes after 0.3 rad: the remaining 0.7 rad at 1 rad/s runs on time, without the lead. The store
+    clock moves only when a tick advances it, so the state is fresh or stale exactly where the test says."""
+    clock = Clock()
+    client, store = FakeClient(), StateStore(lambda msg: msg, clock=clock)
     live = turning(store, 0.0, 0.1)
     ticks = [0]
 
     def wait(seconds, abort):
         ticks[0] += 1
         if ticks[0] <= 3:
-            live(seconds, abort)
+            live(seconds, abort)  # a new message each tick: age 0
         else:
-            time.sleep(0.1)  # no new message: the last one ages past the limit
+            clock.advance(robot_service.MAX_STATE_AGE_S + 0.1)  # no new message: the last one ages past the limit
 
     target = MoveTarget(yaw_rad=1.0, lead_s=0.2)
     reply = run_job(client, lambda m: m.move(0, 0, 1.0, 5.0, target, None), wait, store)

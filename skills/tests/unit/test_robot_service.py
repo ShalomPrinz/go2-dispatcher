@@ -11,7 +11,7 @@ import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from multiprocessing.connection import Client, Listener
-from typing import NamedTuple
+from typing import NamedTuple, cast
 
 import pytest
 
@@ -19,6 +19,7 @@ from skills import ipc, robot_ipc, robot_service, state_store
 from skills.robot_ipc import LinkEvent, Refused, RobotClient, StateReply
 from skills.schema import RobotState
 from skills.state_store import StateStore
+from skills.tests.fake_clock import Clock
 
 
 def state(height: float) -> RobotState:
@@ -91,34 +92,24 @@ def service(tmp_path):
         yield served
 
 
-class Clock:
-    """A monotonic clock that moves only when the test advances it."""
-
-    def __init__(self) -> None:
-        self.now = 0.0
-
-    def __call__(self) -> float:
-        return self.now
-
-    def advance(self, seconds: float) -> None:
-        self.now += seconds
-
-
 def put_later(store: StateStore, msg: RobotState, delay_s: float) -> None:
     threading.Timer(delay_s, store.put, args=(msg,)).start()
 
 
-def test_hello_and_state_reads(service):
-    path, store, _ = service
-    with RobotClient.connect(path) as client:
-        assert client.hello["backend"] == "stub"
-        empty = client.state()
-        assert (empty.state, empty.rx_mono, empty.link) == (None, None, "down")
-        store.put(state(0.30))
-        latest = client.state()
-        assert latest.state is not None and latest.link == "up"
-        assert (latest.seq, latest.state.body_height) == (1, 0.30)
-        assert latest.state.age_ms is not None and latest.state.age_ms >= 0
+def test_hello_and_state_reads(tmp_path):
+    """The store clock moves only when advanced: the message is exactly LINK_GAP_S old, the link still up."""
+    clock = Clock()
+    with serving(str(tmp_path / "r.sock"), StateStore(lambda msg: msg, clock=clock)) as (path, store, _):
+        with RobotClient.connect(path) as client:
+            assert client.hello["backend"] == "stub"
+            empty = client.state()
+            assert (empty.state, empty.rx_mono, empty.link) == (None, None, "down")
+            store.put(state(0.30))
+            clock.advance(state_store.LINK_GAP_S)
+            latest = client.state()
+            assert latest.state is not None and latest.link == "up"
+            assert (latest.seq, latest.state.body_height) == (1, 0.30)
+            assert latest.state.age_ms == pytest.approx(state_store.LINK_GAP_S * 1000.0)
 
 
 def test_read_next_waits_for_a_newer_message(service):
@@ -245,16 +236,27 @@ def test_motion_needs_the_armed_lease_on_one_connection(service):
     assert robot.calls[0] == "StandDown"
 
 
-def test_deadline_ends_the_lease_and_stops(service):
-    path, _, robot = service
-    outcome: list = []
-    with RobotClient.connect(path, control=True) as control:
-        control.arm("t", 0.3)
-        t = time.monotonic()
-        moving_in_thread(path, "t", outcome).join(5.0)
-        assert 0.25 < time.monotonic() - t < 2.0
-    assert isinstance(outcome[0], Refused) and outcome[0].code == robot_ipc.ERR_ABORTED
-    assert "lease deadline" in outcome[0].message and stopped_after_moving(robot)
+def test_deadline_ends_the_lease_and_stops():
+    """The motion clock moves only when advanced; the test runs the deadline check itself, so the lease holds just
+    before the deadline and ends at it, whatever the machine load."""
+    clock, robot = Clock(), Recorder()
+    motion = robot_service.Motion(
+        robot, lambda s, abort: abort.wait(s), StateStore(lambda m: m), sim=False, clock=clock
+    )
+    threading.Thread(target=motion._loop, daemon=True).start()
+    conn = cast(ipc.Conn, object())  # a lease binds to its connection by identity
+    motion.arm("t", 0.3)
+    job = motion.submit(conn, "t", motion.move(0.3, 0.0, 0.0, 10.0, None, None))
+    assert until(lambda: "Move" in robot.calls, wait_s=10.0)
+    clock.advance(0.299)
+    assert not motion.end_expired_lease()
+    clock.advance(0.002)
+    with pytest.raises(robot_service.Refusal, match="deadline has passed"):
+        motion.submit(conn, "t", motion.action("StandDown", None))
+    assert motion.end_expired_lease()
+    assert job.done.wait(5.0) and job.reply is not None
+    assert job.reply["error"]["code"] == robot_ipc.ERR_ABORTED and "lease deadline" in job.reply["error"]["message"]
+    assert stopped_after_moving(robot)
 
 
 def test_stop_op_stops_and_ends_the_lease(service):

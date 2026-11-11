@@ -7,7 +7,6 @@ from __future__ import annotations
 import math
 import os
 import sys
-import time
 
 import pytest
 
@@ -15,6 +14,7 @@ from skills import backend, env, process, robot_ipc, runner, sit, turn, walk
 from skills.policy import MotionCost
 from skills.runner import InvalidParams, SkillOutcome, StateSampler, parse_params
 from skills.schema import ErrorCode, RobotState
+from skills.tests.fake_clock import Clock
 
 
 @pytest.mark.parametrize(
@@ -88,11 +88,15 @@ def test_run_skill_keeps_state_sampled_before_an_exception(monkeypatch):
 def test_state_ms_excludes_dds_init(monkeypatch):
     """A utility's own DDS init before its first sample is reported as dds_init_ms, not in state_ms."""
     monkeypatch.setenv(env.BACKEND, "stub")
-    states = StateSampler(
-        reader=lambda: RobotState(t=0.0, backend="stub", posture="standing"), prepare=lambda: time.sleep(0.05)
-    )
+    clock = Clock()
+
+    def read() -> RobotState:
+        clock.advance(0.01)
+        return RobotState(t=0.0, backend="stub", posture="standing")
+
+    states = StateSampler(reader=read, prepare=lambda: clock.advance(1.0), clock=clock)
     states.take("before")
-    assert states.used and states.seconds < 0.05 and states.before is not None
+    assert states.used and states.seconds == pytest.approx(0.01) and states.before is not None
 
 
 def test_capture_stdout_keeps_junk_off_the_response_line(tmp_path, monkeypatch):

@@ -57,7 +57,7 @@ class StateSampler:
     run_main owns it, so samples taken before an exception survive (skills/docs/skills.md).
     ``reader`` None: read through the robot service (skills), connecting outside state_ms (robot_connect_ms);
     the utilities pass their own reader and a ``prepare`` (their DDS init), run before each sample, outside
-    state_ms."""
+    state_ms. ``clock`` times the reads into ``seconds``."""
 
     before: RobotState | None = None
     after: RobotState | None = None
@@ -66,6 +66,7 @@ class StateSampler:
     used: bool = False  # a sample was attempted: timing gets state_ms
     reader: StateReader | None = field(default=None, repr=False, compare=False)
     prepare: Callable[[], None] | None = field(default=None, repr=False, compare=False)
+    clock: Callable[[], float] = field(default=time.monotonic, repr=False, compare=False)
 
     def take(self, label: Literal["before", "after"], *, strict: bool = False) -> RobotState | None:
         """Sample state into ``label``; on failure record "<label>: <Type>: <msg>" and return None.
@@ -77,11 +78,11 @@ class StateSampler:
                 self.prepare()
             elif self.reader is None:
                 robot_ipc.session.client()
-            t = time.monotonic()
+            t = self.clock()
             try:
                 state = self.reader() if self.reader is not None else robot_ipc.session.read_state()
             finally:
-                self.seconds += time.monotonic() - t
+                self.seconds += self.clock() - t
         except backend.BackendNotConfigured:
             raise
         except Exception as e:

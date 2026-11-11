@@ -7,6 +7,7 @@ import json
 import os
 import signal
 import time
+from pathlib import Path
 
 import pytest
 
@@ -49,14 +50,31 @@ def test_lock_held_is_a_clear_startup_error(executor):
         robot.stop(other)
 
 
+def read_records(path: Path) -> list[dict]:
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    return [json.loads(line) for line in text.splitlines() if line.endswith("}")]  # skip a line being written
+
+
 def test_state_stream_writes_samples(executor, tmp_path):
+    """The link ends up "up" and the samples advance; a transient "down" on a loaded machine is not a failure,
+    so the test polls with a generous timeout instead of a fixed wait."""
     executor.robot.start()
     path = tmp_path / "task.state_stream.jsonl"
     stream = executor.state_stream(path, time.monotonic())
-    time.sleep(5 * STREAM_PERIOD_S)
+
+    def settled() -> bool:
+        records = read_records(path)
+        samples = [r for r in records if r["type"] == "sample"]
+        links = [r["link"] for r in records if "link" in r]
+        return len(samples) >= 2 and links[-1] == "up"
+
+    deadline = time.monotonic() + 30.0
+    while not settled() and time.monotonic() < deadline:
+        time.sleep(STREAM_PERIOD_S)
     stream.close()
-    lines = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
-    assert lines[0]["type"] == "stream_start" and lines[0]["link"] == "up"
-    samples = [r for r in lines if r["type"] == "sample"]
+    records = read_records(path)
+    assert records[0]["type"] == "stream_start"
+    assert [r["link"] for r in records if "link" in r][-1] == "up"
+    samples = [r for r in records if r["type"] == "sample"]
     assert len(samples) >= 2 and samples[0]["state"]["posture"] == "standing"
     assert samples[-1]["state"]["seq"] > samples[0]["state"]["seq"]
