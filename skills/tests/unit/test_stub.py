@@ -8,9 +8,12 @@ import threading
 
 import pytest
 
-from skills import stub, vision
+from skills import robot_ipc, robot_service, stub, turn, vision, walk
 from skills.env import STUB_FAULT, STUB_OBJECTS, STUB_STATE_FILE, STUB_TIME_SCALE
+from skills.robot_ipc import MoveTarget
 from skills.schema import ObstacleDistances
+from skills.state_store import StateStore
+from skills.tests.fake_clock import Clock
 
 
 @pytest.fixture
@@ -40,7 +43,8 @@ def test_writers_merge_and_missing_pose_is_origin(state):
     stub.write_pose(stub.Pose(1.0, -2.0, 0.25), state)
     stub.write_posture("standing", state)
     stub.write_command((0.1, 0.0, 0.0), state)
-    expected = {"posture": "standing", "pose": {"x": 1.0, "y": -2.0, "yaw": 0.25}, "command": [0.1, 0.0, 0.0]}
+    pose = {"x": 1.0, "y": -2.0, "yaw": 0.25}
+    expected = {"posture": "standing", "pose": pose, "command": [0.1, 0.0, 0.0], "sequence_s": 0.0}
     assert json.loads(state.read_text()) == expected
     state.write_text(json.dumps({"posture": "standing", "pose": {"x": 1.0}}))
     with pytest.raises(ValueError, match="invalid stub state file"):
@@ -61,7 +65,7 @@ def test_advance_body_frame():
 def test_move_wait_stop_integrates_and_samples_pose(state):
     sim, abort = stub.SimRobot(), threading.Event()
     assert sim.Move(0.5, 0.0, 0.0) == 0
-    sim.wait(2.0, abort)  # unscaled seconds drive the pose
+    sim.wait(2.0 + stub.LINEAR_DEAD_S, abort)  # unscaled seconds drive the pose, after the dead time
     moving = stub.sample_state()
     assert moving.velocity == pytest.approx([0.5, 0.0, 0.0])
     assert stub.SimRobot().StopMove() == 0  # another process's client: the command lives in the state file
@@ -73,6 +77,62 @@ def test_move_wait_stop_integrates_and_samples_pose(state):
     stub.write_pose(stub.Pose(0.0, 0.0, math.pi / 2), state)
     assert sim.Move(0.5, 0.0, 0.0) == 0
     assert stub.sample_state().velocity == pytest.approx([0.0, 0.5, 0.0])  # body-frame command in the world frame
+
+
+def test_dead_time_per_axis_restarts_only_after_stop_move(state):
+    sim, abort = stub.SimRobot(), threading.Event()
+    assert sim.Move(0.5, 0.0, 1.0) == 0
+    sim.wait(stub.YAW_DEAD_S, abort)
+    assert stub.read_state(state).pose == stub.Pose()  # no axis has started
+    sim.wait(stub.LINEAR_DEAD_S - stub.YAW_DEAD_S, abort)  # yaw turns in place until the linear dead time ends
+    pose = stub.read_state(state).pose
+    assert (pose.x, pose.y, pose.yaw) == pytest.approx((0.0, 0.0, stub.LINEAR_DEAD_S - stub.YAW_DEAD_S))
+    stub.write_pose(stub.Pose(), state)
+    assert sim.Move(0.5, 0.0, 0.0) == 0  # a new command within the sequence keeps its progress
+    sim.wait(1.0, abort)
+    assert stub.read_state(state).pose.x == pytest.approx(0.5)
+    assert sim.StopMove() == 0 and sim.Move(0.5, 0.0, 0.0) == 0  # StopMove ends the sequence
+    sim.wait(stub.LINEAR_DEAD_S, abort)
+    assert stub.read_state(state).pose.x == pytest.approx(0.5)
+
+
+def run_move(vx: float, vy: float, vyaw: float, duration_s: float, target=None, *, publish: bool) -> dict:
+    """One move primitive on the robot service's loop over SimRobot; ``publish``: a state after every tick, as the
+    sim service does, else no state at all."""
+    sim, store = stub.SimRobot(), StateStore(lambda msg: msg, clock=Clock())
+
+    def wait(seconds, abort):
+        sim.wait(seconds, abort)
+        if publish:
+            store.put(stub.sample_state())
+
+    if publish:
+        store.put(stub.sample_state())
+    m = robot_service.Motion(sim, wait, store, sim=True)
+    threading.Thread(target=m._loop, daemon=True).start()
+    job = robot_service.Job(run=m.move(vx, vy, vyaw, duration_s, target, None))
+    m._jobs.put(job)
+    assert job.done.wait(5) and job.reply is not None
+    return job.reply
+
+
+def test_stub_walk_covers_its_distance(state):
+    params = {"distance_m": 2.55}
+    run_move(walk.VELOCITY_MPS, 0.0, 0.0, walk._motion_s(params), publish=False)
+    pose = stub.read_state(state).pose
+    assert (pose.x, pose.y, pose.yaw) == pytest.approx((2.55, 0.0, 0.0))
+
+
+def test_stub_turn_covers_its_angle_open_and_closed_loop(state):
+    params, yaw = {"angle_deg": 90.0}, math.radians(90.0)
+    target = MoveTarget(yaw_rad=yaw, lead_s=turn.LEAD_S)
+    tick_rad = robot_ipc.CMD_PERIOD_S * turn.YAW_RATE_RPS
+    run_move(0.0, 0.0, turn.YAW_RATE_RPS, turn._motion_s(params), target, publish=False)  # no yaw: open loop
+    assert stub.read_state(state).pose.yaw == pytest.approx(yaw, abs=tick_rad / 2)  # whole periods
+    stub.reset("standing", state)
+    reply = run_move(0.0, 0.0, turn.YAW_RATE_RPS, turn._motion_s(params), target, publish=True)
+    assert reply["duration_s"] < turn._motion_s(params)  # stopped on the measured yaw, before the cap
+    assert yaw - robot_service.YAW_STOP_MARGIN_RAD <= reply["measured"]["yaw_rad"] < yaw + tick_rad
 
 
 def test_move_while_sitting_stores_no_command(state):

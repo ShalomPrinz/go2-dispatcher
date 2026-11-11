@@ -142,16 +142,17 @@ print(json.dumps({"modules": names, "heavy": heavy, "out": buf.getvalue(),
 def test_walk_observations(svc):
     resp = run_ok("walk", {"direction": "backward", "distance_m": 0.3}, svc.arm())
     assert resp.observations == {"direction": "backward", "distance_m": 0.3, "duration_s": 2.1, "sdk_ret": 0}
-    assert resp.state_after is not None and resp.state_after.position == pytest.approx([-0.63, 0.0, 0.32])
+    # the lead time is spent in the stub's dead time, so the pose covers exactly the distance
+    assert resp.state_after is not None and resp.state_after.position == pytest.approx([-0.3, 0.0, 0.32])
 
 
 def test_turn_observations(svc):
     resp = run_ok("turn", {"direction": "right", "angle_deg": 90}, svc.arm())
-    # stopped by the measured yaw, not the cap: 16 commands of 0.1 rad pass 90 deg minus the margin
+    # stopped by the measured yaw, not the cap: 2 dead-time commands, then 16 of 0.1 rad pass 90 deg minus the margin
     obs = {
         "direction": "right",
         "angle_deg": 90.0,
-        "duration_s": 1.6,
+        "duration_s": 1.8,
         "sdk_ret": 0,
         "closed_loop": True,
         "turned_deg": 91.7,

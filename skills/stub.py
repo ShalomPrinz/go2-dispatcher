@@ -17,7 +17,7 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Literal, get_args
 
-from skills import process, vision
+from skills import process, ramp, vision
 from skills.backend import DetectResult
 from skills.env import STUB_FAULT, STUB_OBJECTS, STUB_STATE_FILE, STUB_TIME_SCALE
 from skills.schema import ObstacleDistances, RobotState
@@ -60,6 +60,9 @@ DEFAULT_HEIGHTS_M = {"bottle": 0.25, "cup": 0.10, "chair": 0.90, "person": 1.70}
 OBSTACLE_RADIUS_M = 0.15  # (tunable)
 OBSTACLE_MAX_M = 5.0  # nothing hit within this range -> None (tunable)
 OBSTACLE_DIRECTIONS = {"front": 0.0, "back": math.pi, "left": math.pi / 2, "right": -math.pi / 2}  # body frame
+# Start ramp as dead time per axis (skills/docs/skills.md): the robot's calibrated ramp, which the skills' LEAD_S cover.
+LINEAR_DEAD_S = ramp.LINEAR_S
+YAW_DEAD_S = ramp.YAW_S
 
 
 @dataclass(frozen=True)
@@ -79,6 +82,7 @@ class StubState:
     posture: StubPosture = DEFAULT_POSTURE
     pose: Pose = Pose()
     command: Command | None = None  # set by Move, cleared by StopMove: the robot keeps it until then
+    sequence_s: float = 0.0  # unscaled time waited since the command was set: the dead time's progress
 
 
 @dataclass(frozen=True)
@@ -161,6 +165,18 @@ def advance(pose: Pose, command: tuple[float, float, float], seconds: float) -> 
     return Pose(x=pose.x + vx * s - vy * c, y=pose.y + vx * c + vy * s, yaw=_wrap(yaw1))
 
 
+def advance_sequence(pose: Pose, command: Command, start_s: float, seconds: float) -> Pose:
+    """The pose after ``seconds`` more of a Move sequence already ``start_s`` old: each axis moves only once the
+    sequence is past its dead time."""
+    vx, vy, vyaw = command
+    end = start_s + seconds
+    cuts = sorted({start_s, end, *(min(max(d, start_s), end) for d in (LINEAR_DEAD_S, YAW_DEAD_S))})
+    for t0, t1 in zip(cuts, cuts[1:], strict=False):
+        linear, yaw = t0 >= LINEAR_DEAD_S, t0 >= YAW_DEAD_S
+        pose = advance(pose, (vx if linear else 0.0, vy if linear else 0.0, vyaw if yaw else 0.0), t1 - t0)
+    return pose
+
+
 def project(pose: Pose, obj: WorldObject) -> DetectResult:
     """What the front camera at ``pose`` sees of ``obj``: a pinhole box classified like the real detector's."""
     cam_x = pose.x + CAMERA_OFFSET_M * math.cos(pose.yaw)
@@ -202,8 +218,8 @@ def obstacle_distances(pose: Pose, world: Mapping[str, WorldObject]) -> Obstacle
 
 
 def read_state(path: Path | None = None) -> StubState:
-    """The state file; a missing file means standing at the origin, a missing pose the origin and a missing
-    command none."""
+    """The state file; a missing file means standing at the origin, a missing pose the origin, a missing
+    command none and a missing sequence time zero."""
     path = path or state_file()
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -219,6 +235,7 @@ def read_state(path: Path | None = None) -> StubState:
             posture=posture,
             pose=Pose() if pose is None else Pose(**{k: float(pose[k]) for k in ("x", "y", "yaw")}),
             command=None if command is None else (float(command[0]), float(command[1]), float(command[2])),
+            sequence_s=float(data.get("sequence_s", 0.0)),
         )
     except (TypeError, KeyError, ValueError, AttributeError, IndexError) as e:
         raise ValueError(f"invalid stub state file {path}: {data!r}") from e
@@ -263,9 +280,12 @@ def write_pose(pose: Pose, path: Path | None = None) -> None:
 
 
 def write_command(command: Command | None, path: Path | None = None) -> None:
-    """Set or clear the running command, keeping the rest."""
+    """Set or clear the running command, keeping the rest; a command set from none, or cleared, starts a new
+    Move sequence."""
     path = path or state_file()
-    _write_state(replace(read_state(path), command=command), path)
+    state = read_state(path)
+    sequence_s = state.sequence_s if command is not None and state.command is not None else 0.0
+    _write_state(replace(state, command=command, sequence_s=sequence_s), path)
 
 
 def reset(posture: StubPosture, path: Path | None = None) -> None:
@@ -329,8 +349,9 @@ def apply_service_fault(kind: str) -> None:
 class SimRobot:
     """The stub's sport client, over the state file. Every call returns int, 0 = success. ``wait`` is the robot
     service's motion clock: it waits the scaled time and advances the pose by the unscaled seconds while a
-    command is set. Without a wait the pose stays put, but the command stays set until StopMove. ``_lock``
-    serialises this process's read-modify-writes, so a stop from another thread is never overwritten."""
+    command is set, after each axis's dead time from the sequence start. Without a wait the pose stays put, but
+    the command stays set until StopMove. ``_lock`` serialises this process's read-modify-writes, so a stop from
+    another thread is never overwritten."""
 
     def __init__(self, path: Path | None = None) -> None:
         self.path = path or state_file()
@@ -353,7 +374,7 @@ class SimRobot:
             state = read_state(self.path)
             if state.posture != "standing":
                 return 0
-            _write_state(replace(state, posture="sitting", command=None), self.path)
+            _write_state(replace(state, posture="sitting", command=None, sequence_s=0.0), self.path)
         sleep(STAND_DOWN_S)
         return 0
 
@@ -364,7 +385,8 @@ class SimRobot:
         return 0
 
     def wait(self, seconds: float, abort: threading.Event) -> None:
-        """Wait ``seconds`` scaled, or until ``abort``; a set command moves the pose by the unscaled time waited."""
+        """Wait ``seconds`` scaled, or until ``abort``; a set command moves the pose by the unscaled time waited,
+        less what remains of its dead time."""
         scale = time_scale()
         t = time.monotonic()
         aborted = abort.wait(seconds * scale)
@@ -372,7 +394,8 @@ class SimRobot:
         with self._lock:
             state = read_state(self.path)
             if state.command is not None:
-                _write_state(replace(state, pose=advance(state.pose, state.command, waited)), self.path)
+                pose = advance_sequence(state.pose, state.command, state.sequence_s, waited)
+                _write_state(replace(state, pose=pose, sequence_s=state.sequence_s + waited), self.path)
 
 
 class StubDetector:

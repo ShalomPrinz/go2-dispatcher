@@ -5,13 +5,13 @@ from __future__ import annotations
 import math
 from dataclasses import replace
 
-from skills import motion, policy, runner
+from skills import motion, policy, ramp, runner
 from skills.robot_ipc import MoveTarget
 
 YAW_RATE_RPS = 1.0  # rad/s
 CAP_FACTOR = 1.25  # cap on the closed-loop turn: nominal time x factor + CAP_S (tunable, skills/docs/robot.md)
 CAP_S = 0.5  # s, covers the start ramp (tunable)
-LEAD_S = 0.2  # start-ramp time of an open-loop turn, when no fresh yaw is readable at the start (tunable, robot.md)
+LEAD_S = ramp.YAW_S  # start-ramp time of an open-loop turn, when no fresh yaw is readable at the start (robot.md)
 DIRECTION_SIGN = {"left": 1, "right": -1}
 
 
