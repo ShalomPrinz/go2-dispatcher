@@ -91,17 +91,110 @@ a bad thing
 b
 Call submit_plan again with a corrected plan.
 
+=== TELEGRAM_OUTCOMES DONE ===
+✅ <b>Done</b>: Walked 1 m.
+
+=== TELEGRAM_OUTCOMES ABORTED ===
+⚠️ <b>Aborted</b>: Walked 1 m.
+
+=== TELEGRAM_OUTCOMES STOPPED ===
+🛑 <b>Stopped</b> on request. A stop command was sent to the robot.
+
+=== TELEGRAM_OUTCOMES TIME_LIMIT_EXCEEDED ===
+❌ <b>Stopped</b>: the task reached its time limit. A stop command was sent to the robot.
+
+=== TELEGRAM_OUTCOMES FAILURE_BUDGET_EXHAUSTED ===
+❌ <b>Stopped</b>: the robot failed 3 times while trying this task.
+
+=== TELEGRAM_OUTCOMES CALL_BUDGET_EXHAUSTED ===
+❌ <b>Stopped</b>: the task reached the limit of 3 planning calls without finishing.
+
+=== TELEGRAM_OUTCOMES LLM_INVALID ===
+❌ <b>Stopped</b>: the model produced a malformed plan twice.
+
+=== TELEGRAM_OUTCOMES LLM_ERROR ===
+❌ <b>Stopped</b>: the model could not be reached.
+
+=== TELEGRAM_OUTCOMES STATE_UNAVAILABLE ===
+❌ <b>Stopped</b>: the robot state could not be read.
+
+=== TELEGRAM_OUTCOMES ROBOT_SERVICE_LOST ===
+❌ <b>Stopped</b>: the robot control service was lost.
+
+=== TELEGRAM_OUTCOMES STOP_FAILED ===
+❌ <b>Stopped</b>: the robot may still be moving.
+
+=== TELEGRAM_OUTCOMES INTERNAL_ERROR ===
+❌ <b>Stopped</b>: internal error. See run log abc123.
+
+=== STEP_REASONS timeout ===
+timed out
+
+=== STEP_REASONS interrupted ===
+was stopped
+
+=== STEP_REASONS malformed ===
+gave no valid answer
+
+=== STEP_REASONS rejected ===
+was in a malformed plan
+
+=== STEP_REASONS motion_budget_exceeded ===
+would exceed the motion budget
+
+=== STEP_REASONS invalid_params ===
+got invalid parameters
+
+=== STEP_REASONS sdk_error ===
+failed: robot command error
+
+=== STEP_REASONS backend_not_configured ===
+failed: backend not configured
+
+=== STEP_REASONS exception ===
+failed: skill error
+
+=== STEP_REASONS unsupported_object ===
+failed: object not supported
+
+=== STEP_REASONS detector_error ===
+failed: vision error
+
+=== STEP_REASONS camera_unavailable ===
+failed: camera unavailable
+
+=== STEP_REASONS bad_frame ===
+failed: camera unavailable
+
+=== STEP_REASONS weights_missing ===
+failed: vision error
+
+=== STEP_REASONS vision_unavailable ===
+failed: vision unavailable
+
+=== STEP_REASONS state_unavailable ===
+failed: robot state unavailable
+
+=== STEP_REASONS robot_unavailable ===
+failed: robot unavailable
+
+=== STEP_REASONS motion_rejected ===
+failed: the robot refused the move
+
+=== STEP_REASONS robot_service_lost ===
+failed: robot control service lost
+
 === BUSY ===
-Busy: a task is running. Send "stop" to stop it.
+⏳ Busy: a task is running. Send "stop" to stop it.
 
 === STOPPING ===
-Stopping.
+🛑 Stopping.
 
 === NOTHING_RUNNING ===
-Nothing is running.
+ℹ️ Nothing is running.
 
 === WORKING ===
-Working on it.
+🔵 Working on it.
 
 === EMPTY_TASK ===
 Send a task, for example: walk forward one metre.
@@ -290,40 +383,64 @@ Steps: 3 run, 1 failed
 (4 earlier lines omitted)
 
 === ERROR_REPLY ===
-Error: KeyError
+❌ Internal error in the bot. The details are in its console output.
+
+=== TELEGRAM_STOP_MOVE_WARNING ===
+⚠️ <b>The stop command to the robot failed. Stop the robot manually.</b>
+
+=== TELEGRAM_LAST_FAILURE ===
+Last failure: walk failed: the robot refused the move.
+
+=== STEP_REASON_FALLBACK ===
+failed: blocked
 
 === PROGRESS_THINKING ===
-Thinking...
+🔵 <i>Thinking...</i>
 
 === PROGRESS_PLAN ===
-Plan:
+ℹ️ <b>Plan</b>
 
 === PROGRESS_PLAN_MESSAGE ===
-Plan: Turning first.
+ℹ️ <b>Plan</b>: Turning first.
 
 === PROGRESS_PLAN_STEP ===
 1. turn(direction=left, angle_deg=90)
 
-=== PROGRESS_PLAN_END ===
-Plan: DONE: Turned left.
+=== PROGRESS_PLAN_DONE ===
+✅ <b>Done</b>: Turned left.
+
+=== PROGRESS_PLAN_ABORT ===
+⚠️ <b>Aborted</b>: Which chair?
+
+=== PROGRESS_PLAN_MALFORMED ===
+❌ The model produced a malformed plan; asking again
+
+=== PROGRESS_PLAN_OVER_BUDGET ===
+❌ The plan would exceed the motion budget; giving up
+
+=== PROGRESS_ASKING_AGAIN ===
+asking again
+
+=== PROGRESS_GIVING_UP ===
+giving up
 
 === PROGRESS_STEP_RUNNING ===
-▶ turn(direction=left, angle_deg=90)
+▶️ turn(direction=left, angle_deg=90)
 
 === PROGRESS_STEP_OK ===
-✓ turn(direction=left, angle_deg=90) -> ok
+✅ turn(direction=left, angle_deg=90) -&gt; ok
 
 === PROGRESS_STEP_FAILED ===
-✗ walk(distance_m=1) -> error: Move returned 3104
+❌ walk(distance_m=1) failed: the robot refused the move
 
 === PROGRESS_DURATION (repr) ===
 ' (0.3s)'
 
 === PROGRESS_STOP_REQUESTED ===
-■ Stop requested (telegram)
+🛑 Stop requested (telegram)
 
 === PROGRESS_STOP_MOVE_SENT ===
-■ StopMove sent (0.2s)
+🛑 StopMove sent (0.2s)
 
 === PROGRESS_STOP_MOVE_FAILED ===
-■ StopMove FAILED (12.0s)
+❌ <b>StopMove failed</b> (12.0s)

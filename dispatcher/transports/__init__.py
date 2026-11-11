@@ -8,13 +8,13 @@ from collections.abc import Callable
 
 from skills import stub
 
-from .. import process_lock, prompts
+from .. import process_lock
 from ..config import API_KEY_ENV, Config, load_config_and_env
-from ..context import PromptSurface, render_step
+from ..context import PromptSurface
 from ..dispatcher import Dispatcher
 from ..executor import Executor, needs_vision
 from ..llm import AnthropicPlanner, OpenRouterPlanner, PlannerClient
-from ..models import ConfigError, RegistryError, StartupError, TaskOutcome
+from ..models import ConfigError, RegistryError, StartupError
 from ..registry import Registry
 from ..runlog import TaskObserver
 
@@ -22,16 +22,13 @@ __all__ = [
     "load_config_and_env",
     "build_dispatcher",
     "startup_error_text",
-    "format_outcome",
     "make_planner",
     "API_KEY_ENV",
     "TEST_PLANNER_ENV",
-    "OUTCOME_MAX_CHARS",
 ]
 
 TEST_PLANNER_ENV = "GO2_TEST_PLANNER"  # "module:factory" (tests only)
 MISSING_API_KEY = "Missing {env}."
-OUTCOME_MAX_CHARS = 4000  # Telegram's limit is 4096 (docs/running.md)
 
 
 def startup_error_text(e: StartupError) -> str:
@@ -90,17 +87,3 @@ def build_dispatcher(
     if any(needs_vision(registry[name]) for name in registry.names()):
         executor.vision.start()  # no wait: the first vision step waits for ready (docs/running.md)
     return dispatcher
-
-
-def format_outcome(outcome: TaskOutcome, registry: Registry) -> str:
-    """Plain-text outcome for the operator (docs/running.md); oldest step lines are dropped if the
-    whole text would exceed ``OUTCOME_MAX_CHARS``."""
-    run = len(outcome.dispatched_steps)
-    head = [f"{outcome.outcome}: {outcome.message}", prompts.STEPS_LINE.format(run=run, failed=outcome.failures)]
-    steps = [render_step(s, registry, numbered=True) for s in outcome.steps]
-    text = "\n".join(head + steps)
-    dropped = 0
-    while len(text) > OUTCOME_MAX_CHARS and dropped < len(steps):
-        dropped += 1
-        text = "\n".join(head + [prompts.OMITTED_LINES.format(n=dropped)] + steps[dropped:])
-    return text

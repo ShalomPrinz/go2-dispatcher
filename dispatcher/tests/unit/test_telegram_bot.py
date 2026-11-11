@@ -141,8 +141,8 @@ def test_handler_exception_replies_error(cfg, capsys):
     d.run_task.side_effect = RuntimeError("boom")
     u = fake_update("walk forward", USER)
     call(on_text, u, fake_context(dispatcher=d, cfg=cfg))
-    assert replies(u) == [prompts.WORKING, "Error: RuntimeError"]
-    assert "RuntimeError: boom" in capsys.readouterr().err
+    assert replies(u) == [prompts.WORKING, prompts.ERROR_REPLY]
+    assert "RuntimeError: boom" in capsys.readouterr().err  # the detail goes to the console, not the phone
 
 
 def test_normal_task(cfg, registry):
@@ -161,7 +161,7 @@ def test_normal_task(cfg, registry):
     got = replies(u)
     assert got[0] == prompts.WORKING
     assert len(got) == 2
-    assert got[1].startswith("DONE: Turned left.\nSteps: 1 run, 0 failed\n1. turn(")
+    assert got[1].startswith("✅ <b>Done</b>: Turned left.\nSteps: 1 run, 0 failed\n1. ✅ turn(")
     assert not d.is_busy()
 
 

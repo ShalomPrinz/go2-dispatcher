@@ -70,13 +70,17 @@ TEXT_ARGS: dict[str, dict[str, object]] = {
     "KILL_STEP_TIMEOUT": {"timeout_s": 30.0},
     "STEPS_LINE": {"run": 3, "failed": 1},
     "OMITTED_LINES": {"n": 4},
-    "ERROR_REPLY": {"exception_type": "KeyError"},
+    "TELEGRAM_LAST_FAILURE": {"skill": "walk", "reason": "failed: the robot refused the move"},
+    "STEP_REASON_FALLBACK": {"code": "blocked"},
     "PROGRESS_PLAN_MESSAGE": {"message": "Turning first."},
     "PROGRESS_PLAN_STEP": {"i": 1, "call": "turn(direction=left, angle_deg=90)"},
-    "PROGRESS_PLAN_END": {"status": "DONE", "message": "Turned left."},
+    "PROGRESS_PLAN_DONE": {"message": "Turned left."},
+    "PROGRESS_PLAN_ABORT": {"message": "Which chair?"},
+    "PROGRESS_PLAN_MALFORMED": {"then": "asking again"},
+    "PROGRESS_PLAN_OVER_BUDGET": {"then": "giving up"},
     "PROGRESS_STEP_RUNNING": {"call": "turn(direction=left, angle_deg=90)"},
-    "PROGRESS_STEP_OK": {"step": "turn(direction=left, angle_deg=90) -> ok"},
-    "PROGRESS_STEP_FAILED": {"step": "walk(distance_m=1) -> error: Move returned 3104"},
+    "PROGRESS_STEP_OK": {"step": "turn(direction=left, angle_deg=90) -&gt; ok"},
+    "PROGRESS_STEP_FAILED": {"call": "walk(distance_m=1)", "reason": "failed: the robot refused the move"},
     "PROGRESS_DURATION": {"seconds": 0.3},
     "PROGRESS_STOP_REQUESTED": {"source": "telegram"},
     "PROGRESS_STOP_MOVE_SENT": {"seconds": 0.2},
@@ -101,6 +105,10 @@ def render_fixed_texts() -> str:
         ("motion budget message", prompts.MOTION_BUDGET_MESSAGE.format(need=1.5, unit="m", kind="travel", left=0.5))
     )
     parts.append(("rejection_section", prompts.rejection_section(["a bad\nthing", "b"])))
+    for code, template in prompts.TELEGRAM_OUTCOMES.items():
+        parts.append((f"TELEGRAM_OUTCOMES {code}", template.format(message="Walked 1 m.", n=3, run_id="abc123")))
+    for key, reason in prompts.STEP_REASONS.items():
+        parts.append((f"STEP_REASONS {key}", reason))
     for name in ("BUSY", "STOPPING", "NOTHING_RUNNING", "WORKING", "EMPTY_TASK"):
         parts.append((name, getattr(prompts, name)))
     parts.append(('help_text("stub")', prompts.help_text("stub")))
@@ -115,10 +123,12 @@ def render_fixed_texts() -> str:
 
 
 def test_fixed_texts_match_golden(update_golden):
-    # Guard: render_fixed_texts() reaches str constants via __all__ and only the two containers it loops over.
+    # Guard: render_fixed_texts() reaches str constants via __all__ and only the containers it loops over.
     public = {n: v for n, v in vars(prompts).items() if not n.startswith("_")}
     assert {n for n, v in public.items() if isinstance(v, str)} <= set(prompts.__all__)
-    assert {n for n, v in public.items() if isinstance(v, (dict, list, tuple))} == {"NOTICES", "OPERATOR_MESSAGES"}
+    assert {n for n, v in public.items() if isinstance(v, (dict, list, tuple))} == {
+        *("NOTICES", "OPERATOR_MESSAGES", "TELEGRAM_OUTCOMES", "STEP_REASONS")
+    }
     text = render_fixed_texts()
     if update_golden:
         GOLDEN.write_text(text, encoding="utf-8")
@@ -126,7 +136,7 @@ def test_fixed_texts_match_golden(update_golden):
 
 
 def test_every_outcome_has_operator_message():
-    assert set(prompts.OPERATOR_MESSAGES) == set(ALL_OUTCOMES)
+    assert set(prompts.OPERATOR_MESSAGES) == set(ALL_OUTCOMES) == set(prompts.TELEGRAM_OUTCOMES)
     assert set(NOTICE_ARGS) == set(prompts.NOTICES)
     for code in ALL_OUTCOMES:
         text = prompts.operator_message(code, OUTCOME_FACTS[code])

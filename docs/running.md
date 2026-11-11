@@ -51,7 +51,7 @@ Plan: DONE: The robot has successfully turned left 90 degrees as requested.
 DONE · 2 LLM calls · 1 steps run, 0 failed · 3437 in / 276 out tokens · 6.9s
 ```
 
-On a terminal the trace is colored and the `Thinking...` and `▶` lines are replaced in place; when stderr is not a terminal, or `NO_COLOR` is set, it is plain text with one line per event. The trace is `dispatcher/transports/console_trace.py`, an observer of the run log records ([run-log.md](../dispatcher/docs/run-log.md#observers)); the Telegram bot shows a shorter version in one message ([below](#progress-message)). The machine-readable record of a task is its run log ([run-log.md](../dispatcher/docs/run-log.md)).
+On a terminal the trace is colored and the `Thinking...` and `▶` lines are replaced in place; when stderr is not a terminal, or `NO_COLOR` is set, it is plain text with one line per event. The trace is `dispatcher/transports/console_trace.py`, an observer of the run log records ([run-log.md](../dispatcher/docs/run-log.md#observers)); the Telegram bot shows a shorter version in one message per plan round ([below](#progress-message)). The machine-readable record of a task is its run log ([run-log.md](../dispatcher/docs/run-log.md)).
 
 `batch` prints `Task {i}: {task}` to stdout before each task, with a blank line between tasks. It prints no aggregate after the last task.
 
@@ -131,79 +131,118 @@ Stop the bot with Ctrl+C (or SIGTERM). If a task is running, it is stopped at on
 
 ### Commands and replies
 
-Messages from users who are not in `allowed_user_ids` get no reply (a warning line is printed to stderr). Edited messages are ignored. All replies are plain text.
+Messages from users who are not in `allowed_user_ids` get no reply (a warning line is printed to stderr). Edited messages are ignored. All replies and progress messages are sent with `parse_mode` HTML, and every dynamic part (model text, skill calls, plan messages, error codes) is escaped with `html.escape` and cut to 500 characters first (`PART_MAX_CHARS` in `dispatcher/transports/telegram_text.py`), so one line always fits in a message.
 
 | You send | Reply |
 |---|---|
 | `/start` | `I control the Go2 robot. Send a task in plain words. Send "stop" to stop the current task. Backend: {backend}.` |
-| `stop` (any case, spaces around it), or `/stop`, while a task runs | `Stopping.` The task's own reply follows with outcome `STOPPED`. |
-| `stop` or `/stop` while idle | `Nothing is running.` |
+| `stop` (any case, spaces around it), or `/stop`, while a task runs | `🛑 Stopping.` The task's own reply follows with outcome `STOPPED`. |
+| `stop` or `/stop` while idle | `ℹ️ Nothing is running.` |
 | an empty message | `Send a task, for example: walk forward one metre.` |
-| a task while another task runs | `Busy: a task is running. Send "stop" to stop it.` |
-| a task | `Working on it.`, which then becomes the progress message ([below](#progress-message)), then the outcome text ([below](#outcome-text)) as a new message |
+| a task while another task runs | `⏳ Busy: a task is running. Send "stop" to stop it.` |
+| a task | `🔵 Working on it.`, which then becomes the first progress message ([below](#progress-message)), then the outcome text ([below](#outcome-text)) as a new message |
 
-If a handler raises an error, the bot replies `Error: {ExceptionType}` and prints the traceback to stderr.
+If a handler raises an error, the bot replies `❌ Internal error in the bot. The details are in its console output.` and prints the traceback to stderr. The reply never names the exception.
 
 Only `stop` is recognised during a task. Other messages sent during a task are answered `Busy` and are not forwarded to the model (forwarding them is a future idea; see [roadmap.md](roadmap.md#future-ideas)).
 
+### Colour scheme
+
+The Bot API cannot colour text, so a coloured emoji at the start of a line is the colour code:
+
+| Emoji | Meaning | Used for |
+|---|---|---|
+| 🔵 | working | `Working on it.`, `Thinking...` |
+| ℹ️ | information | plan title, `Nothing is running.` |
+| ▶️ | running | the running step |
+| ✅ | success | a step that ended `ok`, the `DONE` plan and outcome |
+| ❌ | failure or error | a failed step, a rejected plan, a failed StopMove, every outcome that is not `DONE`, `ABORTED` or `STOPPED`, the internal error reply |
+| ⚠️ | attention | the `ABORT` plan and `ABORTED` outcome, the StopMove failure warning |
+| 🛑 | stop | stop requested, StopMove sent, `Stopping.`, the `STOPPED` outcome |
+| ⏳ | wait | `Busy` |
+| 🟢 / 🔴 | link up / link down | the [robot line](#robot-line) |
+
+Titles are bold (`<b>Plan</b>`, `<b>Done</b>`, `<b>Stopped</b>`); `Thinking...` is italic. Plan steps are plain `{i}. {skill(params)}`.
+
 ### Progress message
 
-The `Working on it.` reply is the task's progress message: while the task runs, the bot edits it in place to show the part of the CLI trace an operator needs ([Output](#output)). Each edit replaces the whole text:
+Each plan round has its own progress message. A round starts with a `PLAN` reply and holds that plan, the steps it ran, and the model calls that follow until the next `PLAN`. The `🔵 Working on it.` reply is the first message: it also holds what comes before the first plan, such as a malformed reply and its schema retry. Every later `PLAN` (after a completed plan, a checkpoint, a failed step or a rejected plan) sends a new message for its round; a `DONE` or `ABORT` reply stays in the current message. The bot edits the newest message in place, and an older message keeps the final text of its round. Each edit replaces the whole text. A task that turns left, walks into a refused move, then replans shows two progress messages:
 
 ```
-Plan:
+ℹ️ <b>Plan</b>
 1. turn(direction=left, angle_deg=90)
-✓ turn(direction=left, angle_deg=90) -> ok (0.3s)
-Plan: DONE: I turned left 90 degrees.
-Robot: link up | standing | 0.00 m/s, turn 0 deg/s | obstacles m F 1.2 B - L 0.8 R - | 0.1 s ago
+2. walk(direction=forward, distance_m=1)
+✅ turn(direction=left, angle_deg=90) -&gt; ok (0.3s)
+❌ walk(direction=forward, distance_m=1) failed: the robot refused the move (1.2s)
+```
+```
+ℹ️ <b>Plan</b>: Walking is refused, so I sit down.
+1. sit()
+✅ sit() -&gt; ok (2.1s)
+✅ <b>Done</b>: I turned left; the robot refused the walk, so I sat down.
 ```
 
 | Event | Line |
 |---|---|
-| model call running | `Thinking...` as the last line, removed when the reply arrives |
-| plan `PLAN` | `Plan:` (or `Plan: {message}` when the plan has a message), then `{i}. {skill(params)}` per step |
-| plan `DONE` / `ABORT` | `Plan: {status}: {message}` |
-| step running | `▶ {skill(params)}` as the last line, replaced by the result |
-| step result | `✓ {step}` or `✗ {step}`, the step rendered as in the LLM context, then ` ({seconds:.1f}s)` if it was dispatched |
-| stop request | `■ Stop requested ({source})` (`telegram` or `shutdown`) |
-| StopMove | `■ StopMove sent ({seconds:.1f}s)` or `■ StopMove FAILED ({seconds:.1f}s)` |
-| state stream | one robot line, always last ([below](#robot-line)) |
+| model call running | `🔵 <i>Thinking...</i>` as the last line, removed when the reply arrives |
+| plan `PLAN` | `ℹ️ <b>Plan</b>` (or `ℹ️ <b>Plan</b>: {message}` when the plan has a message), then `{i}. {skill(params)}` per step |
+| plan `DONE` / `ABORT` | `✅ <b>Done</b>: {message}` / `⚠️ <b>Aborted</b>: {message}` |
+| reply rejected by validation, or plan rejected by the bounds check | `❌ The model produced a malformed plan; asking again` |
+| plan rejected by the motion budget | `❌ The plan would exceed the motion budget; asking again` |
+| step running | `▶️ {skill(params)}` as the last line, replaced by the result |
+| step result | `✅ {skill(params)} -> ok` with the observations the LLM context shows, or `❌ {skill(params)} {reason}` ([Outcome text](#outcome-text)), then ` ({seconds:.1f}s)` |
+| stop request | `🛑 Stop requested ({source})` (`telegram` or `shutdown`) |
+| StopMove | `🛑 StopMove sent ({seconds:.1f}s)` or `❌ <b>StopMove failed</b> ({seconds:.1f}s)` |
+| state stream | one robot line, always last, in the newest message only ([below](#robot-line)) |
 
-Left out: token counts, `Thought for …` timing, infrastructure retries, rejected plans, internal errors and the posture line. They are in the run log. The texts are fixed (`PROGRESS_*` in `dispatcher/prompts.py`) and identical across conditions. They are not part of the prompt surface, so they do not change the registry hash. If the text grows past 4000 characters, the oldest lines are replaced by `({n} earlier lines omitted)`.
+A rejected-plan line ends in `asking again` when the model is called again and in `giving up` when the rejection ends the task (`LLM_INVALID`, or the failure budget). The line waits for that next event, which follows the rejection at once. Left out: token counts, `Thought for …` timing, infrastructure retries, validation errors, skill error messages, internal errors and the posture line. They are in the run log and the CLI trace. The texts are fixed (`PROGRESS_*` in `dispatcher/prompts.py`) and identical across conditions. They are not part of the prompt surface, so they do not change the registry hash. If a message grows past 4000 characters, its oldest lines are replaced by `({n} earlier lines omitted)`. Every line is whole markup (each tag opens and closes in the same line), so dropping lines never cuts a tag.
 
-The message is edited at most once per second (`EDIT_INTERVAL_S` in `dispatcher/transports/telegram_progress.py`, tunable); events in between are merged into the next edit. When the task ends, the last state is sent, then the outcome text follows as a new message. A failed edit prints `Warning: Telegram progress update failed: {ExceptionType}.` to stderr and is skipped; the next event tries again, and the task is not affected. The progress is `dispatcher/transports/telegram_progress.py`, the bot's run-log observer ([run-log.md](../dispatcher/docs/run-log.md#observers)). Its record methods only change the text and wake a sender on the bot's event loop. They never wait for Telegram, so sending does not slow the loop or the stop path and is not part of any measured LLM or step latency.
+The pump makes one Telegram call (an edit or a new message) at a time, at most one per second (`EDIT_INTERVAL_S` in `dispatcher/transports/telegram_progress.py`, tunable); events in between are merged into the next call. It edits a message only when its rendered text differs from the text of its last successful send or edit, and it sends the next round's message only after the older message shows its final text. When the task ends, the last state is sent, then the outcome text follows as a new message. A failed call prints `Warning: Telegram progress update failed: {ExceptionType}.` to stderr and is skipped; the next event tries again, and the task is not affected. The progress is `dispatcher/transports/telegram_progress.py`, the bot's run-log observer ([run-log.md](../dispatcher/docs/run-log.md#observers)). Its record methods only change the text and wake a sender on the bot's event loop. They never wait for Telegram, so sending does not slow the loop or the stop path and is not part of any measured LLM or step latency.
 
 #### Robot line
 
-While the task's [state stream](#robot-service) runs, the last line of the progress message shows the robot's latest state:
+While the task's [state stream](#robot-service) runs, the last line of the newest progress message shows the robot's latest state:
 
 ```
-Robot: link up | standing | 0.42 m/s, turn 12 deg/s | obstacles m F 1.2 B - L 0.8 R 2.0 | 0.1 s ago
-Robot: LINK DOWN | standing | 0.42 m/s, turn 12 deg/s | obstacles m F 1.2 B - L 0.8 R 2.0 | 3.2 s ago
+🟢 Robot: link up | standing | 0.42 m/s, turn 12 deg/s | obstacles m F 1.2 B - L 0.8 R 2.0
+🔴 Robot: link down | standing | 0.42 m/s, turn 12 deg/s | obstacles m F 1.2 B - L 0.8 R 2.0
 ```
 
 | Part | Content |
 |---|---|
-| link | `link up`, or `LINK DOWN` when the service sees no state messages; the rest is then the last sample before the gap |
+| link | `🟢 Robot: link up`, or `🔴 Robot: link down` when the service sees no state messages; the rest is then the last sample before the gap |
 | posture | `RobotState.posture` |
 | motion | ground speed `hypot(vx, vy)` in m/s, 2 decimals, and `yaw_speed` in deg/s, whole degrees; `speed n/a` without `velocity` |
 | obstacles | nearest obstacle per direction from `obstacle_m` (front, back, left, right), metres to 0.1; `-` for a direction without a reading, `obstacles n/a` without `obstacle_m` ([robot.md](../skills/docs/robot.md)) |
-| age | seconds since the sample arrived in the service, at the time of the edit |
 
-Before the first sample it reads `Robot: link up | no state yet`. The line is rendered by `robot_line` in `dispatcher/transports/telegram_progress.py`. It is not a `PROGRESS_*` fixed text: it is never compared across runs and never reaches the model. The progress keeps only the latest sample and link. While the line is shown, the message is edited every `EDIT_INTERVAL_S` even without a new record, so the age keeps counting during a link gap. At `task_end` the line is removed and later samples are dropped, so the final text holds only the task's lines, with no state frozen at an arbitrary moment. There is no line between tasks, and none when the task has no log file (no stream then).
+Before the first sample it reads `🟢 Robot: link up | no state yet`. The line is rendered by `robot_line` in `dispatcher/transports/telegram_progress.py`. It is not a `PROGRESS_*` fixed text: it is never compared across runs and never reaches the model. The progress keeps only the latest sample and link, and wakes the sender only when the rendered line changed, so a robot at rest causes no edits. When a new round starts, the line moves to the new message and leaves the older one. At `task_end` the line is removed and later samples are dropped, so the final text holds only the task's lines, with no state frozen at an arbitrary moment. There is no line between tasks, and none when the task has no log file (no stream then).
 
 ### Outcome text
 
-The reply that ends a task is plain text:
+The reply that ends a task (`format_outcome` in `dispatcher/transports/telegram_text.py`):
 
 ```
-DONE: I turned left 90 degrees and see a chair ahead, close by.
+✅ <b>Done</b>: I turned left 90 degrees and see a chair ahead, close by.
 Steps: 2 run, 0 failed
-1. turn(direction=left, angle_deg=90) -> ok
-2. detect_object(target=chair) -> ok: object_found=true, position=center, closeness=near, confidence=0.9
+1. ✅ turn(direction=left, angle_deg=90) -&gt; ok
+2. ✅ detect_object(target=chair) -&gt; ok: object_found=true, position=center, closeness=near, confidence=0.9
 ```
 
-The first line is `{OUTCOME}: {message}`. `Steps:` counts dispatched steps and failures (rejections count as failures). Then each recorded step is shown, rendered as in the LLM context ([loop-and-context.md](../dispatcher/docs/loop-and-context.md#user-message)). If the whole text is longer than 4000 characters, the oldest step lines are replaced by `({n} earlier lines omitted)`.
+The first line is the outcome category (`TELEGRAM_OUTCOMES` in `dispatcher/prompts.py`): `DONE` and `ABORTED` carry the model's message; the others name what happened without the detail (`❌ <b>Stopped</b>: the model could not be reached.`, not the provider's error), and `INTERNAL_ERROR` names the run id so the log can be found. `FAILURE_BUDGET_EXHAUSTED` adds `Last failure: {skill} {reason}.` When a StopMove failed, `⚠️ <b>The stop command to the robot failed. Stop the robot manually.</b>` follows. `Steps:` counts dispatched steps and failures (rejections count as failures). Then each recorded step is shown, numbered, or with `–` when it was rejected before running: an `ok` step as in the LLM context ([loop-and-context.md](../dispatcher/docs/loop-and-context.md#user-message)), a failed one as `❌ {skill(params)} {reason}`. If the whole text is longer than 4000 characters, the oldest step lines are replaced by `({n} earlier lines omitted)`.
+
+A step's reason is a short category from `STEP_REASONS` in `dispatcher/prompts.py`, keyed by the step outcome, or by the skill's error code for outcome `error`:
+
+| Key | Reason |
+|---|---|
+| `timeout` / `interrupted` / `malformed` | `timed out` / `was stopped` / `gave no valid answer` |
+| `rejected` / `motion_budget_exceeded` | `was in a malformed plan` / `would exceed the motion budget` |
+| `invalid_params` | `got invalid parameters` |
+| `sdk_error` / `exception` / `backend_not_configured` | `failed: robot command error` / `failed: skill error` / `failed: backend not configured` |
+| `motion_rejected` / `robot_unavailable` / `state_unavailable` / `robot_service_lost` | `failed: the robot refused the move` / `failed: robot unavailable` / `failed: robot state unavailable` / `failed: robot control service lost` |
+| `camera_unavailable`, `bad_frame` / `vision_unavailable` / `detector_error`, `weights_missing` / `unsupported_object` | `failed: camera unavailable` / `failed: vision unavailable` / `failed: vision error` / `failed: object not supported` |
+| any other error code | `failed: {code}` with underscores as spaces (`blocked` gives `failed: blocked`) |
+
+The skill's error message, stderr and validation errors never reach Telegram; they are in the run log and the CLI trace.
 
 ## Stub vs real
 
@@ -274,8 +313,10 @@ and exit code 2. This stops two processes from driving one robot, overwriting th
 
 - **Two thin transports over one dispatcher.** The CLI and the bot only parse input, report the task and handle signals; everything else is shared, so CLI runs and Telegram runs produce the same logs. The Telegram integration replaces OpenClaw's channels ([architecture.md](architecture.md#why-a-purpose-built-dispatcher)).
 - **The live trace is the CLI's only task output.** The trace already ends with the outcome, step counts, tokens and duration, and shows the operator message once (in the `DONE` or `ABORT` plan line, otherwise just before the summary), so printing the outcome text after it repeated the same task. Rejected: keeping the outcome text on stdout for scripting; the run log JSONL is the machine-readable record of every task ([run-log.md](../dispatcher/docs/run-log.md)). The bot keeps the outcome text, because its progress message leaves out the counts and the step list.
-- **The bot shows progress in one message, edited in place, and sends the outcome as a new message.** Without progress the operator saw nothing for the 15 to 60 s of a model call. One edited message gives one notification per task (the new outcome message gives a second one, at the end). Telegram limits a chat to about 1 message per second, so edits are merged to at most one per `EDIT_INTERVAL_S` (tunable). The record methods only update the text and the sending runs on the event loop, so Telegram never delays the loop, the stop path or the measured latencies. A failed edit is printed and skipped, so Telegram trouble never fails a task. The message carries only what the operator acts on: token counts, timings, retries, rejected plans and internal errors are diagnostics, noise on a phone, and already in the run log. Rejected: one message per step, which gives a notification per step and runs into the rate limit on short steps; a separate event bus, because the run-log observer already gives the typed records the CLI trace uses.
-- **Telegram telemetry reuses the per-task state stream and the progress edit rate.** The stream writer hands each downsampled sample and link change to the observer, and the progress keeps only the latest for its robot line, refreshed with each edit. One subscription per task serves both the log and the operator, and the line lives exactly as long as the stream. Rejected: a separate telemetry message, which doubles edit traffic against Telegram's per-chat rate limit; a second service subscription for the bot; an idle `/state` command, which no current use needs.
+- **The bot shows progress in one message per plan round, edited in place, and sends the outcome as a new message.** Without progress the operator saw nothing for the 15 to 60 s of a model call. A message per round keeps each plan next to the steps it ran and its result, so a replan reads as a new attempt instead of a growing list; the old message keeps its final text as the record of that round. A round starts at a `PLAN`, not at a model call, so a schema retry stays with the reply it corrects and a `DONE` or `ABORT` joins the plan it closes instead of standing alone above the outcome text that repeats it. Telegram limits a chat to about 1 message per second, so the pump makes one call at a time, at most one per `EDIT_INTERVAL_S` (tunable), and merges events in between. The record methods only update the text and the sending runs on the event loop, so Telegram never delays the loop, the stop path or the measured latencies. A failed call is printed and skipped, so Telegram trouble never fails a task. Rejected: one message per task, where a long task with replans scrolled its plans away; one message per model call, which gave schema retries and the final `DONE` a message of their own; one message per step, which gives a notification per step and runs into the rate limit on short steps; a separate event bus, because the run-log observer already gives the typed records the CLI trace uses.
+- **A message is edited only when its rendered text changed.** An identical edit costs a call against the rate limit and Telegram rejects it anyway. The robot line has no sample age for the same reason: an age changes every second and would force an edit every interval while nothing else moved. Rejected: a periodic refresh of the robot line, which spent the edit rate on a counter; showing the age at the edit, which made the line change without new data.
+- **Emoji are the colour code, and titles use HTML bold.** The Bot API has no text colour; `parse_mode` HTML gives only bold, italic, code and quotes. One coloured emoji per line kind lets the operator scan a phone screen for red without reading. All dynamic text is escaped and every line is whole markup, so model text cannot break the message and trimming never cuts a tag. Rejected: MarkdownV2, whose escaping rules cover most punctuation in skill calls and model text; `<pre>` blocks, which lose the emoji's role and wrap badly on a phone.
+- **Telegram shows categories, not technical detail.** The operator acts on what happened (the model's plan was malformed, the robot refused a move), not on a schema message or an SDK return code, and the detail is already in the run log and the CLI trace. A short reason per step outcome or error code keeps a failure readable on a phone; an unknown error code is still shown, with underscores as spaces, because a skill's code is a short word, not a message. Rejected: showing the step's `error_message`, which is written for the model and can be a validation or SDK text; hiding failures entirely, which leaves the operator unable to tell a refused move from a timeout.
 - **`batch` stops at the first `ROBOT_SERVICE_LOST`.** A repeatedly crashing service would otherwise keep spending LLM calls and moving the robot, one line at a time. It exits 1, as `run` does for a task that does not end `DONE`. Rejected: running on, relying on the next task's restart.
 - **`batch` stops after any task whose stop failed, whatever its outcome** (user decision). The next line would call the model with the robot possibly moving, and no operator reads the warning between lines ([safety.md](safety.md#design-decisions)). It exits 1 with the same stderr shape. Rejected: stopping only at `STOP_FAILED` and `ROBOT_SERVICE_LOST`; running on.
 - **`batch` carries the previous task across lines**, because that is how the robot behaves between messages: it remembers. Experiments may need independent tasks later ([roadmap.md](roadmap.md#future-ideas)).

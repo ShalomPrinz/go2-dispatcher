@@ -1,4 +1,4 @@
-"""``go2 bot`` Telegram transport (docs/running.md): long polling, plain-text replies."""
+"""``go2 bot`` Telegram transport (docs/running.md): long polling, HTML replies."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from telegram import Update
+from telegram.constants import ParseMode
 from telegram.ext import (
     Application,
     ApplicationBuilder,
@@ -30,8 +31,9 @@ from .. import prompts
 from ..config import TOKEN_ENV, Config
 from ..dispatcher import Dispatcher
 from ..models import BusyError, StartupError
-from . import build_dispatcher, format_outcome, load_config_and_env, startup_error_text
-from .telegram_progress import TelegramProgress
+from . import build_dispatcher, load_config_and_env, startup_error_text
+from .telegram_progress import Edit, TelegramProgress
+from .telegram_text import format_outcome, h
 
 __all__ = [
     "build_application",
@@ -75,9 +77,17 @@ def _progress(context: Any) -> TelegramProgress | None:
     return context.application.bot_data.get("progress")
 
 
+async def _reply(message: Any, text: str) -> Any:
+    return await message.reply_text(text, parse_mode=ParseMode.HTML)
+
+
+def _editor(sent: Any) -> Edit:
+    return functools.partial(sent.edit_text, parse_mode=ParseMode.HTML)
+
+
 def _guarded(fn: Callable[[Any, Any, Any], Awaitable[None]]) -> Handler:
     """Missing user/message → ignore; unauthorised → no reply, stderr warning;
-    any exception → traceback on stderr and ``Error: {ExceptionType}`` reply."""
+    any exception → traceback on stderr and the ``ERROR_REPLY`` category, never the detail."""
 
     @functools.wraps(fn)
     async def handler(update: Any, context: Any) -> None:
@@ -90,21 +100,21 @@ def _guarded(fn: Callable[[Any, Any, Any], Awaitable[None]]) -> Handler:
             return
         try:
             await fn(user, message, context)
-        except Exception as e:  # noqa: BLE001 - reported to the operator
+        except Exception:  # noqa: BLE001 - reported to the operator
             traceback.print_exc(file=sys.stderr)
-            await message.reply_text(prompts.ERROR_REPLY.format(exception_type=type(e).__name__))
+            await _reply(message, prompts.ERROR_REPLY)
 
     return handler
 
 
 async def _stop(message: Any, context: Any) -> None:
     result = _dispatcher(context).request_stop(SOURCE)
-    await message.reply_text(prompts.STOPPING if result == "stopping" else prompts.NOTHING_RUNNING)
+    await _reply(message, prompts.STOPPING if result == "stopping" else prompts.NOTHING_RUNNING)
 
 
 @_guarded
 async def on_start(user: Any, message: Any, context: Any) -> None:
-    await message.reply_text(prompts.help_text(_cfg(context).robot.backend))
+    await _reply(message, h(prompts.help_text(_cfg(context).robot.backend)))
 
 
 @_guarded
@@ -119,26 +129,30 @@ async def on_text(user: Any, message: Any, context: Any) -> None:
         await _stop(message, context)
         return
     if not text:
-        await message.reply_text(prompts.EMPTY_TASK)
+        await _reply(message, prompts.EMPTY_TASK)
         return
     dispatcher = _dispatcher(context)
     if dispatcher.is_busy():
-        await message.reply_text(prompts.BUSY)
+        await _reply(message, prompts.BUSY)
         return
-    working = await message.reply_text(prompts.WORKING)  # the progress message, edited in place (docs/running.md)
+    working = await _reply(message, prompts.WORKING)  # the first progress message, edited in place (docs/running.md)
     progress = _progress(context)
-    if progress is not None and not progress.open(working.edit_text):
-        await message.reply_text(prompts.BUSY)  # another handler started a task during the await
+
+    async def new_message(text: str) -> Edit:  # the progress message of a later plan round
+        return _editor(await _reply(message, text))
+
+    if progress is not None and not progress.open(_editor(working), new_message):
+        await _reply(message, prompts.BUSY)  # another handler started a task during the await
         return
     try:
         outcome = await asyncio.to_thread(dispatcher.run_task, text, source=SOURCE, sender_id=str(user.id))
     except BusyError:
-        await message.reply_text(prompts.BUSY)
+        await _reply(message, prompts.BUSY)
         return
     finally:
         if progress is not None:
             await progress.close()
-    await message.reply_text(format_outcome(outcome, dispatcher.registry))
+    await _reply(message, format_outcome(outcome, dispatcher.registry))
 
 
 def on_stop_signal(app: Application) -> None:
