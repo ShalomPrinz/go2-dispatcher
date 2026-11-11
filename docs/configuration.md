@@ -91,7 +91,7 @@ There is no `temperature` key (adding one is an unknown-key error), and `tool_ch
 | `initial_posture` | `"standing"` \| `"sitting"` | `"standing"` | | Posture written to the state file, with the pose reset to the origin, at startup by `run`, `batch`, `go2 bot` and `--reset-stub`. |
 | `state_file` | path | `"logs/.stub_state.json"` | | JSON file that holds the stub posture and odometry pose. Shared by all skill processes. |
 | `objects` | table str → `{x, y, height_m?}` | `{}` | keys are COCO class names; `x`, `y` finite numbers; optional `height_m` > 0, required for classes without a default height; no other keys | Objects in the stub world, in metres in the world (odometry) frame: the robot starts at (0, 0) facing +x, +y is left. The stub camera projects them from the current pose. Passed to skill processes as `GO2_STUB_OBJECTS`; see [skills.md](../skills/docs/skills.md#stub-backend) for the default heights and the projection. |
-| `faults` | list of `{step, kind}` | `[]` | `step` int ≥ 1, unique; `kind` ∈ `error`, `hang`, `crash`, `garbage`; must be empty when `backend = "real"` | Faults injected by dispatched step number (counted across the task). See [skills.md](../skills/docs/skills.md#fault-injection). |
+| `faults` | list of `{step, kind}` | `[]` | `step` int ≥ 1, unique; `kind` one of the [fault kinds](../skills/docs/skills.md#fault-injection) (`stub.FaultKind`); must be empty when `backend = "real"` | Faults injected by dispatched step number (counted across the task). See [skills.md](../skills/docs/skills.md#fault-injection). |
 
 COCO class names that contain a space must be quoted as TOML keys:
 
@@ -123,7 +123,7 @@ Each failure below is a config error:
 - A value of the wrong type (see the type notes above).
 - `robot.backend = "real"` with a blank `robot.network_interface`.
 - `robot.backend = "real"` with a non-empty `stub.faults`.
-- `stub.faults[].kind` not one of `error | hang | crash | garbage`; `stub.faults[].step` not an integer ≥ 1; the same step listed twice.
+- `stub.faults[].kind` not one of the [fault kinds](../skills/docs/skills.md#fault-injection) (`stub.FaultKind`); `stub.faults[].step` not an integer ≥ 1; the same step listed twice.
 - `stub.objects` key not in `COCO_CLASSES`, or an entry that breaks the rules of `skills.stub.parse_objects` (missing `x` or `y`, a non-finite number, `height_m` ≤ 0, an extra key, or no `height_m` for a class without a default). The config check calls `parse_objects`, so it cannot drift from what the skill process accepts. The removed key `stub.detections` is reported as `stub.detections: unknown key`.
 - Integers ≥ 1: `planning_horizon`, `max_failures`, `max_llm_calls`, `context_history_k`, `max_tokens`.
 - Floats > 0: `task_time_limit_s`, `request_timeout_s`, `stub.time_scale`.

@@ -1,6 +1,6 @@
 """The robot service as a process on the stub backend: skills sample state and move through it, a killed skill or
-a gone dispatcher stops the robot, the service faults, a failed StopMove reported by the disarm, one service per
-socket (skills/docs/skills.md)."""
+a gone dispatcher stops the robot, the service faults, a rejected Move, a failed StopMove reported by the disarm,
+one service per socket (skills/docs/skills.md)."""
 
 from __future__ import annotations
 
@@ -121,6 +121,15 @@ def test_failed_stop_ending_a_walk_is_reported_by_the_disarm(tmp_path):
     assert command(tmp_path) is not None  # worst case: the robot keeps its last velocity
     stop = RESPONSE.validate_python(single_response(run_module("stop_move", {}, stub_env(tmp_path))))
     assert stop.status == "ok" and command(tmp_path) is None
+
+
+def test_rejected_move_ends_the_walk_as_an_sdk_error(tmp_path):
+    """rejected: the service's Move fails with the SDK's send code, the skill reports it as on the robot."""
+    with robot.running(stub_env(tmp_path)) as svc:
+        proc = run_module("walk", LONG_WALK, {**svc.arm(), "GO2_STUB_FAULT": "rejected"})
+    resp = RESPONSE.validate_python(single_response(proc))
+    assert resp.error is not None and (resp.error.code, resp.error.message) == ("sdk_error", "Move returned 3102")
+    assert resp.observations["sdk_ret"] == stub.SDK_ERR_CLIENT_SEND and command(tmp_path) is None
 
 
 def test_service_hang_stops_the_whole_service(tmp_path):

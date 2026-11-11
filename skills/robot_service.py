@@ -22,7 +22,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from multiprocessing.connection import Listener
 from types import FrameType
-from typing import Any, NoReturn, Protocol
+from typing import Any, NoReturn, Protocol, cast
 
 from skills import backend, ipc, process, robot_ipc, stub
 from skills.env import ROBOT_SOCKET, robot_lock_path
@@ -186,6 +186,7 @@ class Motion:
         self._stops_done = threading.Condition(self._lock)
         self._stop_failed: robot_ipc.StopFailure | None = None  # the lease's latest StopMove, if it failed
         self._stop_error = False  # the sim's stop_error fault: every StopMove fails until the next arm
+        self._rejected = False  # the sim's rejected fault: every Move and action fails until the next arm
 
     def start(self) -> None:
         threading.Thread(target=self._loop, name="motion-loop", daemon=True).start()
@@ -278,7 +279,7 @@ class Motion:
 
     def arm(self, token: str, timeout_s: float) -> None:
         with self._lock:
-            self._stop_failed, self._stop_error = None, False
+            self._stop_failed, self._stop_error, self._rejected = None, False, False
         self._end_lease("re-armed")
         with self._lock:
             self._lease = Lease(token=token, deadline=self._clock() + timeout_s)
@@ -349,6 +350,11 @@ class Motion:
         if fault == "stop_error":
             with self._lock:
                 self._stop_error = True
+        elif fault == "rejected":
+            with self._lock:
+                self._rejected = True
+        elif fault in stub.CONDITIONS:  # accepted only on the sim backend (_service_fault)
+            cast(stub.SimRobot, self._client).inject(cast(stub.Condition, fault))
         elif fault is not None:
             stub.apply_service_fault(fault)
 
@@ -382,7 +388,7 @@ class Motion:
                 with self._lock:
                     if job.abort.is_set():
                         break
-                    ret = self._client.Move(vx, vy, vyaw)
+                    ret = stub.SDK_ERR_CLIENT_SEND if self._rejected else self._client.Move(vx, vy, vyaw)
                 if ret != 0:
                     move_ret = ret
                     break
@@ -418,7 +424,7 @@ class Motion:
             with self._lock:
                 if job.abort.is_set():
                     return self._aborted(job)
-                call = getattr(self._client, name)
+                call = (lambda: stub.SDK_ERR_API_TIMEOUT) if self._rejected else getattr(self._client, name)
             ret = call()
             if job.abort.is_set():
                 self.stop_move(f"lease ended during {name}")  # the stop may have reached the robot first

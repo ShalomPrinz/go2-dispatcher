@@ -8,7 +8,7 @@ import threading
 
 import pytest
 
-from skills import robot_ipc, robot_service, stub, turn, vision, walk
+from skills import real, robot_ipc, robot_service, stub, turn, vision, walk
 from skills.env import STUB_FAULT, STUB_OBJECTS, STUB_STATE_FILE, STUB_TIME_SCALE
 from skills.robot_ipc import MoveTarget
 from skills.schema import ObstacleDistances
@@ -44,7 +44,7 @@ def test_writers_merge_and_missing_pose_is_origin(state):
     stub.write_posture("standing", state)
     stub.write_command((0.1, 0.0, 0.0), state)
     pose = {"x": 1.0, "y": -2.0, "yaw": 0.25}
-    expected = {"posture": "standing", "pose": pose, "command": [0.1, 0.0, 0.0], "sequence_s": 0.0}
+    expected = {"posture": "standing", "pose": pose, "command": [0.1, 0.0, 0.0], "sequence_s": 0.0, "condition": None}
     assert json.loads(state.read_text()) == expected
     state.write_text(json.dumps({"posture": "standing", "pose": {"x": 1.0}}))
     with pytest.raises(ValueError, match="invalid stub state file"):
@@ -73,7 +73,6 @@ def test_move_wait_stop_integrates_and_samples_pose(state):
     at_rest = stub.sample_state()
     assert at_rest.position == pytest.approx([1.0, 0.0, stub.BODY_HEIGHT_STANDING_M])
     assert (at_rest.velocity, at_rest.yaw_speed, at_rest.imu_rpy) == ([0.0, 0.0, 0.0], 0.0, [0.0, 0.0, 0.0])
-    assert (at_rest.mode, at_rest.gait_type, at_rest.foot_force) == (None, None, None)
     stub.write_pose(stub.Pose(0.0, 0.0, math.pi / 2), state)
     assert sim.Move(0.5, 0.0, 0.0) == 0
     assert stub.sample_state().velocity == pytest.approx([0.0, 0.5, 0.0])  # body-frame command in the world frame
@@ -96,7 +95,9 @@ def test_dead_time_per_axis_restarts_only_after_stop_move(state):
     assert stub.read_state(state).pose.x == pytest.approx(0.5)
 
 
-def run_move(vx: float, vy: float, vyaw: float, duration_s: float, target=None, *, publish: bool) -> dict:
+def run_move(
+    vx: float, vy: float, vyaw: float, duration_s: float, target=None, *, publish: bool, fault: str | None = None
+) -> dict:
     """One move primitive on the robot service's loop over SimRobot; ``publish``: a state after every tick, as the
     sim service does, else no state at all."""
     sim, store = stub.SimRobot(), StateStore(lambda msg: msg, clock=Clock())
@@ -110,7 +111,7 @@ def run_move(vx: float, vy: float, vyaw: float, duration_s: float, target=None, 
         store.put(stub.sample_state())
     m = robot_service.Motion(sim, wait, store, sim=True)
     threading.Thread(target=m._loop, daemon=True).start()
-    job = robot_service.Job(run=m.move(vx, vy, vyaw, duration_s, target, None))
+    job = robot_service.Job(run=m.move(vx, vy, vyaw, duration_s, target, fault))
     m._jobs.put(job)
     assert job.done.wait(5) and job.reply is not None
     return job.reply
@@ -234,3 +235,54 @@ def test_obstacle_ray_cast_follows_the_pose(state, monkeypatch):
 def test_obstacle_inside_a_disc_is_zero_in_every_direction(state, monkeypatch):
     monkeypatch.setenv(STUB_OBJECTS, json.dumps({"chair": {"x": 0.1, "y": 0.0}}))  # centre behind the left/right axis
     assert stub.sample_state().obstacle_m == ObstacleDistances(front=0.0, back=0.0, left=0.0, right=0.0)
+
+
+# --- state fields and robot faults (skills/docs/skills.md#fault-injection) ------------------------------------
+
+
+def test_nominal_samples_match_the_robot_and_the_posture_rule(state):
+    for posture in stub.STUB_POSTURES:
+        stub.reset(posture, state)
+        s = stub.sample_state()
+        assert s.posture == posture == real.derive_posture(s.body_height, s.mode)
+        assert (s.imu_rpy, s.foot_force, s.gait_type, s.error_code) == ([0.0] * 3, [0.0] * 4, 0, stub.ERROR_CODE)
+    assert stub.sample_state().mode == stub.MODE_SITTING
+    stub.reset("standing", state)
+    assert stub.sample_state().mode == stub.MODE_STANDING == 0  # measured on the robot
+
+
+def test_fallen_tilts_the_robot_and_lasts_until_reset(state):
+    reply = run_move(walk.VELOCITY_MPS, 0.0, 0.0, 3.0, publish=False, fault="fallen")
+    assert (reply["move_ret"], reply["stop_ret"]) == (0, 0)  # Move is sent without a reply: nothing tells
+    s = stub.sample_state()
+    assert s.imu_rpy == pytest.approx([stub.FALLEN_ROLL_RAD, 0.0, 0.0]) and s.mode == stub.MODE_FALLEN
+    assert s.posture == real.derive_posture(s.body_height, s.mode)
+    assert (s.position, s.velocity) == ([0.0, 0.0, stub.FALLEN_BODY_HEIGHT_M], [0.0] * 3)
+    sim = stub.SimRobot()
+    assert (sim.Move(0.3, 0.0, 0.0), sim.StandDown(), sim.Stretch()) == (0, 0, 0)
+    sim.wait(5.0, threading.Event())
+    assert stub.read_state(state) == stub.StubState(condition="fallen")  # no command, no motion, no posture change
+    stub.reset("standing", state)
+    assert stub.sample_state().imu_rpy == [0.0] * 3
+
+
+def test_stuck_holds_the_pose_until_the_sequence_ends(state):
+    stub.SimRobot().inject("stuck")
+    assert stub.read_state(state).condition is None  # nothing to hold without a running command
+    reply = run_move(walk.VELOCITY_MPS, 0.0, 0.0, 3.0, publish=False, fault="stuck")
+    assert (reply["move_ret"], reply["stop_ret"], reply["duration_s"]) == (0, 0, 3.0)  # the walk reports success
+    assert stub.read_state(state) == stub.StubState()  # still at the origin; the closing StopMove ended stuck
+    reply = run_move(walk.VELOCITY_MPS, 0.0, 0.0, 3.0, publish=False)
+    assert stub.read_state(state).pose.x == pytest.approx(walk.VELOCITY_MPS * (3.0 - stub.LINEAR_DEAD_S))
+
+
+def test_rejected_fails_every_call_with_the_sdk_code_until_the_next_arm(state):
+    reply = run_move(walk.VELOCITY_MPS, 0.0, 0.0, 3.0, publish=False, fault="rejected")
+    assert (reply["move_ret"], reply["stop_ret"]) == (stub.SDK_ERR_CLIENT_SEND, 0)  # the stop still goes through
+    assert reply["duration_s"] == robot_ipc.CMD_PERIOD_S and stub.read_state(state).command is None
+    m = robot_service.Motion(stub.SimRobot(), lambda s, a: None, StateStore(lambda msg: msg), sim=True)
+    m._fault("rejected")
+    assert m.action("StandDown", None)(robot_service.Job(run=lambda j: {}))["ret"] == stub.SDK_ERR_API_TIMEOUT
+    assert stub.read_posture(state) == "standing"
+    m.arm("token", 10.0)
+    assert m.action("StandDown", None)(robot_service.Job(run=lambda j: {}))["ret"] == 0

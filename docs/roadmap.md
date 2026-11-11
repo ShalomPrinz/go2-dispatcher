@@ -56,10 +56,6 @@ On a `failed` verdict, abandon the rest of the plan and call the model again wit
 
 A dedicated status for clarifying questions (for example "go to the chair" when there are two chairs). In v1 the model returns `ABORT` with the question in `message`.
 
-### Stub upgrade (prerequisite)
-
-The stub integrates commanded velocity into a pose and reports it in `position` and `imu_rpy` ([skills.md](../skills/docs/skills.md#stub-backend)). Still missing for the verifier: fault signals (IMU roll and pitch, foot force, `mode`), which the stub reports as zero or `null`.
-
 ### Seams already in v1
 
 Kept on purpose; do not remove them as dead code.
@@ -69,7 +65,7 @@ Kept on purpose; do not remove them as dead code.
 - The `expect` key is accepted (and ignored) in `SKILL.md` frontmatter, for per-skill expectations.
 - A single posture rule, `derive_posture()` in `skills/real.py`.
 - Plan status normalised in one place (`Plan._normalise_status` in `models.py`), so adding `ASK` is local.
-- The stub state file and stub `sample_state()`, which the stub upgrade extends.
+- Stub robot faults (`fallen`, `stuck`, `rejected`) with the real sample's fields, to test fault detection offline ([skills.md](../skills/docs/skills.md#robot-faults)).
 - `skills.dir` is configurable, so other granularity tiers can be loaded.
 
 ## Future ideas
@@ -113,7 +109,7 @@ Not scheduled.
 The gate for experiments with participants, collected from the sections above. Each item is specified where it is linked.
 
 1. Resolve the [pending human work](#pending-human-work) below (live API check, robot checklist, Python pin, Telegram test, odometry source and accuracy).
-2. Implement the [v2 plan](#v2-plan), including the stub upgrade.
+2. Implement the [v2 plan](#v2-plan).
 3. Build the medium and composite skill tiers ([future ideas](#future-ideas)); decide the `stand` skill and whether `batch` needs a per-task reset.
 4. Run phase one: characterise the system in simulation and from run logs ([project.md](project.md#study-design)); tune the starting values.
 5. Settle the experiment-design [open questions](#open-questions) with the advisor: protocol, task set, trust measurement, how granularity and horizon are crossed, OpenClaw conditions, `max_llm_calls` per horizon.

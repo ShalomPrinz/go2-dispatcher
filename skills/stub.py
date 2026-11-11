@@ -20,7 +20,7 @@ from typing import Literal, get_args
 from skills import process, ramp, vision
 from skills.backend import DetectResult
 from skills.env import STUB_FAULT, STUB_OBJECTS, STUB_STATE_FILE, STUB_TIME_SCALE
-from skills.schema import ObstacleDistances, RobotState
+from skills.schema import ObstacleDistances, Posture, RobotState
 
 # Stub defaults: used when the env is unset (manual runs) and as the dispatcher's stub config defaults.
 DEFAULT_STATE_FILE = "logs/.stub_state.json"
@@ -32,9 +32,14 @@ DEFAULT_POSTURE: StubPosture = "standing"
 
 STUB_ERR_NOT_STANDING = 1
 STUB_ERR_INJECTED = 99
-FaultKind = Literal["error", "hang", "crash", "garbage", "service_hang", "service_crash", "stop_error"]
+FaultKind = Literal[
+    "error", "hang", "crash", "garbage", "service_hang", "service_crash", "stop_error", "rejected", "fallen", "stuck"
+]
 FAULT_KINDS: tuple[FaultKind, ...] = get_args(FaultKind)
-SERVICE_FAULTS: tuple[FaultKind, ...] = ("service_hang", "service_crash", "stop_error")  # applied by the robot service
+Condition = Literal["fallen", "stuck"]  # robot faults the sim robot keeps in the state file
+CONDITIONS: tuple[Condition, ...] = get_args(Condition)
+# Applied by the robot service; the conditions by the sim robot, the rest by the service itself.
+SERVICE_FAULTS: tuple[FaultKind, ...] = ("service_hang", "service_crash", "stop_error", "rejected", *CONDITIONS)
 CRASH_EXIT_CODE = 139
 GARBAGE_TEXT = "not json\n"
 HANG_POLL_S = 1.0
@@ -44,6 +49,21 @@ STRETCH_S = 3.0
 DETECT_S = 0.5
 BODY_HEIGHT_STANDING_M = 0.32
 BODY_HEIGHT_SITTING_M = 0.08
+
+# Nominal state fields (skills/docs/robot.md): standing values as measured on the robot, the rest unverified.
+MODE_STANDING = 0
+MODE_SITTING = 5  # lieDown in Unitree's sport mode list, unverified
+GAIT_TYPE = 0
+ERROR_CODE = 100  # reported in every standing sample on the robot; meaning undocumented
+FOOT_FORCE = (0.0, 0.0, 0.0, 0.0)  # rt/sportmodestate reports zeros on the robot
+# Fallen condition (skills/docs/skills.md): on its side, the sport mode damped; all unverified (tunable).
+FALLEN_ROLL_RAD = math.pi / 2
+FALLEN_BODY_HEIGHT_M = 0.10
+MODE_FALLEN = 7  # damping in Unitree's sport mode list
+# The rejected fault's codes, the Unitree SDK's (unitree_sdk2py/rpc/internal.py): Move is sent without a reply, so a
+# failed send is the only non-zero code it returns; actions wait for a reply and time out.
+SDK_ERR_CLIENT_SEND = 3102
+SDK_ERR_API_TIMEOUT = 3104
 
 # Simulated front camera (skills/docs/robot.md): Unitree Go2 spec 1280x720, 120 deg FOV, taken as horizontal.
 CAMERA_WIDTH_PX = 1280  # (tunable)
@@ -83,6 +103,7 @@ class StubState:
     pose: Pose = Pose()
     command: Command | None = None  # set by Move, cleared by StopMove: the robot keeps it until then
     sequence_s: float = 0.0  # unscaled time waited since the command was set: the dead time's progress
+    condition: Condition | None = None  # an injected robot fault: fallen until reset, stuck until the sequence ends
 
 
 @dataclass(frozen=True)
@@ -219,7 +240,7 @@ def obstacle_distances(pose: Pose, world: Mapping[str, WorldObject]) -> Obstacle
 
 def read_state(path: Path | None = None) -> StubState:
     """The state file; a missing file means standing at the origin, a missing pose the origin, a missing
-    command none and a missing sequence time zero."""
+    command or condition none and a missing sequence time zero."""
     path = path or state_file()
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -231,11 +252,15 @@ def read_state(path: Path | None = None) -> StubState:
             raise ValueError(posture)
         pose = data.get("pose")
         command = data.get("command")
+        condition = data.get("condition")
+        if condition is not None and condition not in CONDITIONS:
+            raise ValueError(condition)
         return StubState(
             posture=posture,
             pose=Pose() if pose is None else Pose(**{k: float(pose[k]) for k in ("x", "y", "yaw")}),
             command=None if command is None else (float(command[0]), float(command[1]), float(command[2])),
             sequence_s=float(data.get("sequence_s", 0.0)),
+            condition=condition,
         )
     except (TypeError, KeyError, ValueError, AttributeError, IndexError) as e:
         raise ValueError(f"invalid stub state file {path}: {data!r}") from e
@@ -281,11 +306,15 @@ def write_pose(pose: Pose, path: Path | None = None) -> None:
 
 def write_command(command: Command | None, path: Path | None = None) -> None:
     """Set or clear the running command, keeping the rest; a command set from none, or cleared, starts a new
-    Move sequence."""
+    Move sequence, which ends a stuck condition. A fallen robot keeps no command."""
     path = path or state_file()
     state = read_state(path)
-    sequence_s = state.sequence_s if command is not None and state.command is not None else 0.0
-    _write_state(replace(state, command=command, sequence_s=sequence_s), path)
+    if state.condition == "fallen":
+        return
+    if command is not None and state.command is not None:
+        _write_state(replace(state, command=command), path)
+    else:
+        _write_state(replace(state, command=command, sequence_s=0.0, condition=None), path)
 
 
 def reset(posture: StubPosture, path: Path | None = None) -> None:
@@ -359,7 +388,10 @@ class SimRobot:
 
     def Move(self, vx: float, vy: float, vyaw: float) -> int:
         with self._lock:
-            if read_posture(self.path) != "standing":
+            state = read_state(self.path)
+            if state.condition == "fallen":
+                return 0  # sent without a reply, as on the robot; a fallen robot does not move
+            if state.posture != "standing":
                 return STUB_ERR_NOT_STANDING
             write_command((vx, vy, vyaw), self.path)
         return 0
@@ -372,17 +404,30 @@ class SimRobot:
     def StandDown(self) -> int:
         with self._lock:
             state = read_state(self.path)
-            if state.posture != "standing":
+            if state.posture != "standing" or state.condition == "fallen":
                 return 0
-            _write_state(replace(state, posture="sitting", command=None, sequence_s=0.0), self.path)
+            _write_state(replace(state, posture="sitting", command=None, sequence_s=0.0, condition=None), self.path)
         sleep(STAND_DOWN_S)
         return 0
 
     def Stretch(self) -> int:
-        if read_posture(self.path) != "standing":
+        state = read_state(self.path)
+        if state.condition == "fallen":
+            return 0
+        if state.posture != "standing":
             return STUB_ERR_NOT_STANDING
         sleep(STRETCH_S)
         return 0
+
+    def inject(self, condition: Condition) -> None:
+        """The robot service's side of a robot fault: fallen drops the command and lasts until reset; stuck holds
+        the running Move sequence in place and does nothing without one."""
+        with self._lock:
+            state = read_state(self.path)
+            if condition == "fallen":
+                _write_state(replace(state, command=None, sequence_s=0.0, condition="fallen"), self.path)
+            elif state.command is not None and state.condition is None:
+                _write_state(replace(state, condition="stuck"), self.path)
 
     def wait(self, seconds: float, abort: threading.Event) -> None:
         """Wait ``seconds`` scaled, or until ``abort``; a set command moves the pose by the unscaled time waited,
@@ -393,7 +438,7 @@ class SimRobot:
         waited = min((time.monotonic() - t) / scale, seconds) if aborted and scale > 0 else seconds
         with self._lock:
             state = read_state(self.path)
-            if state.command is not None:
+            if state.command is not None and state.condition is None:
                 pose = advance_sequence(state.pose, state.command, state.sequence_s, waited)
                 _write_state(replace(state, pose=pose, sequence_s=state.sequence_s + waited), self.path)
 
@@ -411,21 +456,33 @@ class StubDetector:
 
 
 def sample_state() -> RobotState:
-    """Posture and pose in the real fields; velocity is the running command in the world frame (zero at rest);
-    obstacle distances are ray-cast against the stub objects."""
+    """The real state sample's fields with the robot's values for the posture or the fault condition; velocity is
+    the running command in the world frame (zero at rest or under a fault); obstacle distances are ray-cast
+    against the stub objects."""
     state = read_state()
     pose = state.pose
-    height = BODY_HEIGHT_STANDING_M if state.posture == "standing" else BODY_HEIGHT_SITTING_M
-    vx, vy, vyaw = state.command or (0.0, 0.0, 0.0)
+    posture: Posture = state.posture
+    roll = 0.0
+    if state.condition == "fallen":
+        posture, height, mode, roll = "sitting", FALLEN_BODY_HEIGHT_M, MODE_FALLEN, FALLEN_ROLL_RAD  # by body height
+    elif state.posture == "standing":
+        height, mode = BODY_HEIGHT_STANDING_M, MODE_STANDING
+    else:
+        height, mode = BODY_HEIGHT_SITTING_M, MODE_SITTING
+    vx, vy, vyaw = (state.command if state.condition is None else None) or (0.0, 0.0, 0.0)
     cos, sin = math.cos(pose.yaw), math.sin(pose.yaw)
     return RobotState(
         t=time.time(),
         backend="stub",
-        posture=state.posture,
+        posture=posture,
+        mode=mode,
+        gait_type=GAIT_TYPE,
         body_height=height,
         position=[pose.x, pose.y, height],
         velocity=[vx * cos - vy * sin, vx * sin + vy * cos, 0.0],
         yaw_speed=vyaw,
-        imu_rpy=[0.0, 0.0, pose.yaw],
+        imu_rpy=[roll, 0.0, pose.yaw],
+        foot_force=list(FOOT_FORCE),
+        error_code=ERROR_CODE,
         obstacle_m=obstacle_distances(pose, objects()),
     )
