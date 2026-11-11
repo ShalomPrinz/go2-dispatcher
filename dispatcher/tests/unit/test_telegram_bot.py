@@ -161,7 +161,7 @@ def test_normal_task(cfg, registry):
     got = replies(u)
     assert got[0] == prompts.WORKING
     assert len(got) == 2
-    assert got[1].startswith("✅ <b>Done</b>: Turned left.\nSteps: 1 run, 0 failed\n1. ✅ turn(")
+    assert got[1].startswith("✅ <b>Done</b>: Turned left.\n\nSteps: 1 run, 0 failed\n1. ✅ turn(")
     assert not d.is_busy()
 
 

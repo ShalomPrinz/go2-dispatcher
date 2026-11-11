@@ -64,19 +64,20 @@ def _last_failure(outcome: TaskOutcome) -> StepResult | None:
 
 
 def format_outcome(outcome: TaskOutcome, registry: Registry) -> str:
-    """The reply that ends a task (docs/running.md): outcome line, step counts, one line per recorded step."""
+    """The reply that ends a task (docs/running.md): outcome line, step counts and one line per recorded step,
+    then the last failure and the StopMove warning."""
     code = outcome.outcome
     n = outcome.llm_calls if code == "CALL_BUDGET_EXHAUSTED" else outcome.failures
     first = prompts.TELEGRAM_OUTCOMES[code].format(message=h(outcome.message), n=n, run_id=h(outcome.run_id))
     last = _last_failure(outcome) if code == "FAILURE_BUDGET_EXHAUSTED" else None
+    tail = []
     if last is not None:
-        first += " " + prompts.TELEGRAM_LAST_FAILURE.format(skill=h(last.ref.skill), reason=step_reason(last))
-    head = [first]
+        tail.append(prompts.TELEGRAM_LAST_FAILURE.format(skill=h(last.ref.skill), reason=step_reason(last)))
     if outcome.stop_move_failed:
-        head.append(prompts.TELEGRAM_STOP_MOVE_WARNING)
-    head.append(prompts.STEPS_LINE.format(run=len(outcome.dispatched_steps), failed=outcome.failures))
+        tail.append(prompts.TELEGRAM_STOP_MOVE_WARNING)
+    head = [first, "", prompts.STEPS_LINE.format(run=len(outcome.dispatched_steps), failed=outcome.failures)]
     steps = [_numbered(s, registry) for s in outcome.steps]
-    return trim(head, steps, [])
+    return trim(head, steps, [""] + tail if tail else [])  # blank lines around the counts and list
 
 
 def _numbered(sr: StepResult, registry: Registry) -> str:

@@ -71,6 +71,7 @@ def test_outcome_hides_error_detail(registry):
     text = format_outcome(outcome([step(1), rejected, failed], failures=2), registry)
     assert text.splitlines() == [
         "✅ <b>Done</b>: All done.",
+        "",
         "Steps: 2 run, 2 failed",
         "1. ✅ sit() -&gt; ok",
         "– ❌ sit() was in a malformed plan",
@@ -80,15 +81,25 @@ def test_outcome_hides_error_detail(registry):
 
 
 def test_outcome_categories_without_detail(registry):
-    lost = outcome([step(1, "error", "sdk_error", "Traceback ...")], failures=3, code="FAILURE_BUDGET_EXHAUSTED")
-    assert format_outcome(lost, registry).splitlines()[0] == (
-        "❌ <b>Stopped</b>: the robot failed 3 times while trying this task. "
-        "Last failure: sit failed: robot command error."
+    lost = outcome(
+        [step(1, "error", "sdk_error", "Traceback ...")],
+        failures=3,
+        code="FAILURE_BUDGET_EXHAUSTED",
+        stop_move_failed=True,
     )
+    assert format_outcome(lost, registry).splitlines() == [
+        "❌ <b>Stopped</b>: the robot failed 3 times while trying this task.",
+        "",
+        "Steps: 1 run, 3 failed",
+        "1. ❌ sit() failed: robot command error",
+        "",
+        "Last failure: sit failed: robot command error.",
+        prompts.TELEGRAM_STOP_MOVE_WARNING,
+    ]
     llm = outcome([], code="LLM_ERROR", message="Stopped: the model could not be reached (HTTP 529 overloaded).")
     assert "529" not in format_outcome(llm, registry)
-    warned = format_outcome(outcome([], code="STOP_FAILED", message="x", stop_move_failed=True), registry)
-    assert warned.splitlines()[1] == prompts.TELEGRAM_STOP_MOVE_WARNING
+    done = format_outcome(outcome([step(1)]), registry)
+    assert not done.endswith("\n")  # no trailing empty line without a tail
 
 
 def test_model_text_is_escaped(registry):
@@ -104,12 +115,17 @@ def test_every_error_code_has_a_reason():
 
 def test_trim_drops_whole_lines_and_keeps_markup_balanced(registry):
     steps = [step(i, "error", "x" * 150, "y" * 150) for i in range(1, 80)]
-    text = format_outcome(outcome(steps, failures=79, message="<i>" * 200), registry)
+    text = format_outcome(
+        outcome(steps, failures=79, code="FAILURE_BUDGET_EXHAUSTED", message="<i>" * 200, stop_move_failed=True),
+        registry,
+    )
     assert len(text) <= MAX_CHARS
     assert_balanced(text)
     lines = text.splitlines()
-    m = re.fullmatch(r"\((\d+) earlier lines omitted\)", lines[2])
+    assert lines[1] == "" and lines[2].startswith("Steps: ")
+    m = re.fullmatch(r"\((\d+) earlier lines omitted\)", lines[3])
     assert m is not None
-    assert lines[3].startswith(f"{int(m.group(1)) + 1}. ❌ sit()") and lines[-1].startswith("79. ")
+    assert lines[4].startswith(f"{int(m.group(1)) + 1}. ❌ sit()") and lines[-4].startswith("79. ")
+    assert lines[-3] == "" and lines[-1] == prompts.TELEGRAM_STOP_MOVE_WARNING  # the tail is never dropped
     one = trim(["<b>head</b>"], ["<i>a</i>" * 1000], ["tail"])  # one line is always kept
     assert one.splitlines()[1] == "<i>a</i>" * 1000

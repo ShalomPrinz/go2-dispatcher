@@ -225,12 +225,23 @@ The reply that ends a task (`format_outcome` in `dispatcher/transports/telegram_
 
 ```
 ✅ <b>Done</b>: I turned left 90 degrees and see a chair ahead, close by.
+
 Steps: 2 run, 0 failed
 1. ✅ turn(direction=left, angle_deg=90) -&gt; ok
 2. ✅ detect_object(target=chair) -&gt; ok: object_found=true, position=center, closeness=near, confidence=0.9
 ```
+```
+❌ <b>Stopped</b>: the robot failed 3 times while trying this task.
 
-The first line is the outcome category (`TELEGRAM_OUTCOMES` in `dispatcher/prompts.py`): `DONE` and `ABORTED` carry the model's message; the others name what happened without the detail (`❌ <b>Stopped</b>: the model could not be reached.`, not the provider's error), and `INTERNAL_ERROR` names the run id so the log can be found. `FAILURE_BUDGET_EXHAUSTED` adds `Last failure: {skill} {reason}.` When a StopMove failed, `⚠️ <b>The stop command to the robot failed. Stop the robot manually.</b>` follows. `Steps:` counts dispatched steps and failures (rejections count as failures). Then each recorded step is shown, numbered, or with `–` when it was rejected before running: an `ok` step as in the LLM context ([loop-and-context.md](../dispatcher/docs/loop-and-context.md#user-message)), a failed one as `❌ {skill(params)} {reason}`. If the whole text is longer than 4000 characters, the oldest step lines are replaced by `({n} earlier lines omitted)`.
+Steps: 3 run, 3 failed
+1. ❌ walk(direction=forward, distance_m=1) failed: the robot refused the move
+2. ❌ walk(direction=left, distance_m=0.5) failed: the robot refused the move
+3. ❌ walk(direction=right, distance_m=0.5) timed out
+
+Last failure: walk timed out.
+```
+
+The first line is the outcome category (`TELEGRAM_OUTCOMES` in `dispatcher/prompts.py`): `DONE` and `ABORTED` carry the model's message; the others name what happened without the detail (`❌ <b>Stopped</b>: the model could not be reached.`, not the provider's error), and `INTERNAL_ERROR` names the run id so the log can be found. `Steps:` follows after an empty line and counts dispatched steps and failures (rejections count as failures). Then each recorded step is shown, numbered, or with `–` when it was rejected before running: an `ok` step as in the LLM context ([loop-and-context.md](../dispatcher/docs/loop-and-context.md#user-message)), a failed one as `❌ {skill(params)} {reason}`. After the list and an empty line, `FAILURE_BUDGET_EXHAUSTED` adds `Last failure: {skill} {reason}.`, and when a StopMove failed, `⚠️ <b>The stop command to the robot failed. Stop the robot manually.</b>` follows; without either the message ends with the list. If the whole text is longer than 4000 characters, the oldest step lines are replaced by `({n} earlier lines omitted)`; the title, the counts and the lines after the list are always kept.
 
 A step's reason is a short category from `STEP_REASONS` in `dispatcher/prompts.py`, keyed by the step outcome, or by the skill's error code for outcome `error`:
 
