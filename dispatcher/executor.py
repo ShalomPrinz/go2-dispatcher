@@ -113,7 +113,7 @@ def _stderr_tail(text: str | None) -> str | None:
 
 
 class _Readers:
-    """Two daemon threads draining stdout (kept whole) and stderr (tail only)."""
+    """Two daemon threads draining stdout (kept whole) and stderr (tail only). Each thread closes its pipe at EOF."""
 
     def __init__(self, proc: subprocess.Popen):
         self._stdout: list[str] = []
@@ -127,15 +127,17 @@ class _Readers:
 
     def _read_stdout(self, stream) -> None:
         try:
-            for chunk in iter(lambda: stream.read(4096), ""):
-                self._stdout.append(chunk)
+            with stream:  # the reading thread owns the pipe, so a close never waits on a blocked read
+                for chunk in iter(lambda: stream.read(4096), ""):
+                    self._stdout.append(chunk)
         except (OSError, ValueError):
             pass
 
     def _read_stderr(self, stream) -> None:
         try:
-            for chunk in iter(lambda: stream.read(4096), ""):
-                self._stderr = _stderr_tail(self._stderr + chunk) or ""
+            with stream:
+                for chunk in iter(lambda: stream.read(4096), ""):
+                    self._stderr = _stderr_tail(self._stderr + chunk) or ""
         except (OSError, ValueError):
             pass
 
