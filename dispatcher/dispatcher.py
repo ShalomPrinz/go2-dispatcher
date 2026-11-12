@@ -19,7 +19,6 @@ from .context import ContextInput, Feedback, RequestReason, ReturnReason, build_
 from .executor import STDERR_TAIL_CHARS, SkillExecutor
 from .llm import LLMResult, PlanCheck, PlannerClient, check_reply
 from .models import (
-    FAILURE_OUTCOMES,
     KILLED_OUTCOMES,
     BusyError,
     LLMInterrupted,
@@ -279,7 +278,7 @@ class Dispatcher:
         """Append a step, update posture and the StopMove flag, log it (and the StopMove of a killed step)."""
         t.steps.append(sr)
         self._apply_state(t, sr, stop)
-        if sr.outcome in FAILURE_OUTCOMES:
+        if sr.is_failure:
             t.failures += 1
             t.last_failure = sr
         if sr.dispatch is None:
@@ -539,7 +538,7 @@ class Dispatcher:
             ref = StepRef(call_index=t.llm_calls, plan_step=i, skill=step.skill, params=pre.filled[i - 1])
             self._check_precondition(t, ref)
             sr = self._run_step(t, ref)
-            if sr.outcome in FAILURE_OUTCOMES:
+            if sr.is_failure:  # a failing outcome or a failed verdict (dispatcher/docs/loop-and-context.md)
                 return Feedback.failure(plan.steps, sr, t.failures, ran=i)
         if stop_at < len(plan.steps):
             return Feedback.checkpoint(plan.steps, stop_at)
@@ -591,7 +590,7 @@ class Dispatcher:
 
         exec_fields = {k: v for k, v in ex if k not in ("interrupt_cause", "stop_move", "service_lost")}  # 1:1
         exec_fields["error_message"] = cut_message(ex.error_message) if ex.error_message else None
-        check = verify(desc.expect, params, ex.response)
+        check = verify(desc.expect, params, ex.response, ok=ex.outcome == "ok")
         sr = StepResult(ref=ref, dispatch=dispatch, verification=check.verdict, faults=check.faults, **exec_fields)
         self._record(t, sr, ex.stop_move)
 

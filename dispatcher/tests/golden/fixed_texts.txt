@@ -193,6 +193,15 @@ failed: the robot refused the move
 === STEP_REASONS robot_service_lost ===
 failed: robot control service lost
 
+=== FAULT_TEXTS fallen ===
+the robot fell
+
+=== FAULT_TEXTS fault_mode ===
+the robot is in a fault mode
+
+=== FAULT_TEXTS command_rejected ===
+the robot rejected the command
+
 === BUSY ===
 ⏳ Busy: a task is running. Send "stop" to stop it.
 
@@ -376,6 +385,15 @@ stopped: the robot control service was lost
 === NOT_DISPATCHED_PREFIX (repr) ===
 '- rejected before running: '
 
+=== VERIFICATION_FAILED ===
+verification failed
+
+=== VERIFICATION_FAILED_DETAIL ===
+verification failed: the robot fell
+
+=== GOAL_NOT_REACHED ===
+the step did not reach its goal
+
 === SERVICE_LOST_STOP_CONFIRMED ===
 the fallback stop was confirmed
 
@@ -402,6 +420,15 @@ Last failure: walk failed: the robot refused the move.
 
 === STEP_REASON_FALLBACK ===
 failed: blocked
+
+=== STEP_REASON_FAULTS ===
+failed: the robot fell
+
+=== STEP_REASON_GOAL ===
+did not reach its goal
+
+=== STEP_REASON_WITH_FAULTS ===
+timed out; the robot fell
 
 === PROGRESS_THINKING ===
 🔵 <i>Thinking...</i>

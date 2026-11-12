@@ -8,14 +8,10 @@ Agreed direction with the advisor. The study's experiments run only after v2 is 
 
 ### Verification layer
 
-Implemented: every dispatched step gets a verdict from fault detection and goal verification, and a step whose precondition is not met is not dispatched ([loop-and-context.md](../dispatcher/docs/loop-and-context.md#verification)). Conceptual basis: DoReMi ([references.md](references.md)). Still pending:
+Implemented: every dispatched step gets fault detection, a step with outcome `ok` also gets goal verification and a verdict, a `failed` verdict abandons the rest of the plan and calls the model again, and a step whose precondition is not met is not dispatched ([loop-and-context.md](../dispatcher/docs/loop-and-context.md#verification)). Conceptual basis: DoReMi ([references.md](references.md)). Still pending:
 
 - **`walk` verification, dependent on odometry.** The robot provides odometry relative to its power-on pose ([robot.md](../skills/docs/robot.md#open-robot-side-questions)). Which source carries it (`SportModeState.position` on `rt/sportmodestate`, or `rt/utlidar/robot_odom` / `rt/utlidar/robot_pose`) and its accuracy and drift are open ([pending work](#pending-human-work)). If the estimate is accurate enough, `walk` gets a position-delta expectation (with a drift tolerance; the power-on origin does not matter), which would also catch a stuck walk, and a geofence becomes possible. Keep this distinction: the robot's **own measurement-based estimator** is acceptable as a verification source; **dead reckoning from commanded velocity** is not, because it restates the walk skill's own assumption (walk is open-loop: it commands a speed for a time). Owner: dispatcher and skills, after checklist item 2.
 - **Fault thresholds on the robot.** `FALLEN_TILT_RAD` and `FAULT_MODES` are assumed signatures (*unverified*); the first fall in a run log, or Unitree's documentation of `mode`, settles them ([robot.md](../skills/docs/robot.md#open-robot-side-questions), checklist item 9).
-
-### Escalation
-
-On a `failed` verdict, abandon the rest of the plan and call the model again with the observed state and the failure. This is the stop-and-report behaviour the study is about, and the source of the replanning-frequency metric.
 
 ### `ASK` plan status
 
@@ -25,7 +21,6 @@ A dedicated status for clarifying questions (for example "go to the chair" when 
 
 Kept on purpose; do not remove them as dead code.
 
-- `StepResult.verification` and `faults`: the verdict is recorded only, ready for escalation to act on.
 - `state_before` / `state_after` on every skill response and `state_after` on every `StopMove`, including the robot's own `position` estimate when published.
 - Typed `expect` and `requires` keys in `SKILL.md` frontmatter, declared for every v1 skill and not rendered into the catalog; the dispatcher evaluates them for verdicts and preconditions ([skills.md](../skills/docs/skills.md#expectations-and-preconditions)).
 - A single posture rule, `derive_posture()` in `skills/real.py`.

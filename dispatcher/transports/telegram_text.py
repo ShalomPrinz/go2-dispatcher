@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 
 from .. import prompts
 from ..context import NOT_DISPATCHED_OUTCOMES, format_call, render_step
-from ..models import FAILURE_OUTCOMES
 
 if TYPE_CHECKING:
     from ..models import StepResult, TaskOutcome
@@ -32,16 +31,22 @@ def call_html(skill: str, params: dict, registry: Registry) -> str:
 
 
 def step_reason(sr: StepResult) -> str:
-    """Short operator reason for a failed step: from its outcome, or its error code for ``error``."""
+    """Short operator reason for a failed step: from its outcome, or its error code for ``error``, then any
+    detected fault; for an ``ok`` step with a failed verdict, its faults or the missed goal."""
+    faults = ", ".join(prompts.FAULT_TEXTS[f] for f in sr.faults)
+    if sr.outcome == "ok":
+        return prompts.STEP_REASON_FAULTS.format(faults=faults) if faults else prompts.STEP_REASON_GOAL
     key = (sr.error_code or "") if sr.outcome == "error" else sr.outcome
     if key in prompts.STEP_REASONS:
-        return prompts.STEP_REASONS[key]
-    return h(prompts.STEP_REASON_FALLBACK.format(code=key.replace("_", " ") or "error"))
+        reason = prompts.STEP_REASONS[key]
+    else:
+        reason = h(prompts.STEP_REASON_FALLBACK.format(code=key.replace("_", " ") or "error"))
+    return prompts.STEP_REASON_WITH_FAULTS.format(reason=reason, faults=faults) if faults else reason
 
 
 def step_line(sr: StepResult, registry: Registry) -> str:
     """``✅ call -> ok: observations`` or ``❌ call reason``, without number or duration."""
-    if sr.outcome == "ok":
+    if sr.outcome == "ok" and not sr.is_failure:
         return prompts.PROGRESS_STEP_OK.format(step=h(render_step(sr, registry, numbered=False)))
     return prompts.PROGRESS_STEP_FAILED.format(
         call=call_html(sr.ref.skill, sr.ref.params, registry), reason=step_reason(sr)
@@ -60,7 +65,7 @@ def trim(head: list[str], lines: list[str], tail: list[str]) -> str:
 
 
 def _last_failure(outcome: TaskOutcome) -> StepResult | None:
-    return next((s for s in reversed(outcome.steps) if s.outcome in FAILURE_OUTCOMES), None)
+    return next((s for s in reversed(outcome.steps) if s.is_failure), None)
 
 
 def format_outcome(outcome: TaskOutcome, registry: Registry) -> str:

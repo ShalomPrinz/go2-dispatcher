@@ -70,6 +70,11 @@ __all__ = [
     "KILL_SHUTDOWN",
     "KILL_ROBOT_SERVICE_LOST",
     "NOT_DISPATCHED_PREFIX",
+    "VERIFICATION_FAILED",
+    "VERIFICATION_FAILED_DETAIL",
+    "GOAL_NOT_REACHED",
+    "FAULT_TEXTS",
+    "fault_note",
     "OPERATOR_MESSAGES",
     "SERVICE_LOST_STOP_CONFIRMED",
     "SERVICE_LOST_STOP_FAILED",
@@ -92,6 +97,9 @@ __all__ = [
     "TELEGRAM_LAST_FAILURE",
     "STEP_REASONS",
     "STEP_REASON_FALLBACK",
+    "STEP_REASON_FAULTS",
+    "STEP_REASON_GOAL",
+    "STEP_REASON_WITH_FAULTS",
     "PROGRESS_THINKING",
     "PROGRESS_PLAN",
     "PROGRESS_PLAN_MESSAGE",
@@ -255,6 +263,25 @@ KILL_ROBOT_SERVICE_LOST = "stopped: the robot control service was lost"
 
 NOT_DISPATCHED_PREFIX = "- rejected before running: "
 
+# A failed verdict and detected faults, as the model reads them (dispatcher/docs/loop-and-context.md)
+VERIFICATION_FAILED = "verification failed"  # the failure notice's {outcome} for an ok step
+VERIFICATION_FAILED_DETAIL = "verification failed: {reasons}"
+GOAL_NOT_REACHED = "the step did not reach its goal"  # no fault: the goal check failed
+FAULT_TEXTS: dict[str, str] = {
+    "fallen": "the robot fell",
+    "fault_mode": "the robot is in a fault mode",
+    "command_rejected": "the robot rejected the command",
+}
+
+
+def fault_note(sr: StepResult) -> str | None:
+    """What a step line adds after its outcome: for a ``failed`` verdict, the faults or the missed goal; for a
+    step with no verdict, the detected faults only; else None."""
+    faults = ", ".join(FAULT_TEXTS[f] for f in sr.faults)
+    if sr.verification == "failed":
+        return VERIFICATION_FAILED_DETAIL.format(reasons=faults or GOAL_NOT_REACHED)
+    return faults or None
+
 
 # --- Operator messages (TaskOutcome.message) ---------------------------------------------------
 
@@ -299,6 +326,16 @@ class OutcomeFacts:
     precondition: PreconditionFailure | None = None  # PRECONDITION_FAILED
 
 
+def _last_failure(lf: StepResult | None) -> str:
+    """An ``ok`` step: its failed verdict. Else the step's message (or its outcome), then any detected fault."""
+    if lf is None:
+        return ""
+    note = fault_note(lf)
+    if lf.outcome == "ok":
+        return note or lf.outcome
+    return "; ".join(filter(None, [lf.error_message or lf.outcome, note]))
+
+
 def _operator_args(outcome: TaskOutcomeCode, facts: OutcomeFacts) -> dict[str, Any]:
     if outcome == "DONE":
         return {"message": facts.message if facts.message and facts.message.strip() else DONE_DEFAULT_MESSAGE}
@@ -308,11 +345,7 @@ def _operator_args(outcome: TaskOutcomeCode, facts: OutcomeFacts) -> dict[str, A
         return {"limit": facts.time_limit_s}
     if outcome == "FAILURE_BUDGET_EXHAUSTED":
         lf = facts.last_failure
-        return {
-            "n": facts.failures,
-            "skill": lf.ref.skill if lf else "",
-            "error_message": (lf.error_message or lf.outcome) if lf else "",
-        }
+        return {"n": facts.failures, "skill": lf.ref.skill if lf else "", "error_message": _last_failure(lf)}
     if outcome == "CALL_BUDGET_EXHAUSTED":
         return {"n": facts.max_llm_calls}
     if outcome in ("LLM_ERROR", "STATE_UNAVAILABLE", "ROBOT_SERVICE_LOST"):
@@ -394,6 +427,9 @@ STEP_REASONS: dict[str, str] = {
     "motion_rejected": "failed: the robot refused the move",
     "robot_service_lost": "failed: robot control service lost",
 }
+STEP_REASON_FAULTS = "failed: {faults}"  # an ok step with detected faults ({faults}: FAULT_TEXTS, joined)
+STEP_REASON_GOAL = "did not reach its goal"  # an ok step whose goal check failed
+STEP_REASON_WITH_FAULTS = "{reason}; {faults}"  # a failed step with detected faults
 STEP_REASON_FALLBACK = "failed: {code}"  # an error code without a reason above, underscores as spaces
 
 

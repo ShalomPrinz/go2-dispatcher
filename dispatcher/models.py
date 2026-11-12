@@ -197,8 +197,14 @@ class StepResult(_Model):
     exit_code: int | None = None
     pid: int | None = None  # LOG ONLY
     stderr_tail: str | None = None  # last 2000 chars; LOG ONLY, never in context
-    verification: Verdict | None = None  # None: not dispatched (dispatcher/docs/loop-and-context.md)
-    faults: list[Fault] = []  # faults detected in the step's response; any forces verification "failed"
+    verification: Verdict | None = None  # None: not dispatched, or the outcome is not ok (loop-and-context.md)
+    faults: list[Fault] = []  # faults detected in the step's response; on an ok step any forces "failed"
+
+    @property
+    def is_failure(self) -> bool:
+        """A failing outcome, or a ``failed`` verdict, which only an ``ok`` step can have
+        (dispatcher/docs/loop-and-context.md)."""
+        return self.outcome in FAILURE_OUTCOMES or self.verification == "failed"
 
 
 # --- Task outcome and summary (dispatcher/docs/loop-and-context.md) -------------------------------------

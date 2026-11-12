@@ -19,7 +19,7 @@ __all__ = ["Verification", "detect_faults", "check_goal", "verify"]
 
 
 class Verification(NamedTuple):
-    verdict: Verdict
+    verdict: Verdict | None  # None: the step's outcome was not ok, so no goal check ran
     faults: list[Fault]
 
 
@@ -76,9 +76,14 @@ def check_goal(expect: Expectation | None, params: dict[str, Any], response: Ski
     return "unavailable" if "unavailable" in checks else "verified"
 
 
-def verify(expect: Expectation | None, params: dict[str, Any], response: SkillResponse | None) -> Verification:
-    """One verdict: a detected fault forces ``failed``; without ``state_after`` nothing is ``verified``."""
+def verify(
+    expect: Expectation | None, params: dict[str, Any], response: SkillResponse | None, *, ok: bool
+) -> Verification:
+    """One verdict for a step with outcome ``ok``: a detected fault forces ``failed``; without ``state_after``
+    nothing is ``verified``. Any other outcome gets fault detection only and no verdict."""
     faults = detect_faults(response)
+    if not ok:
+        return Verification(None, faults or [])
     if faults:
         return Verification("failed", faults)
     goal = check_goal(expect, params, response)

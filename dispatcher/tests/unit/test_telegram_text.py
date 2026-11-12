@@ -80,6 +80,20 @@ def test_outcome_hides_error_detail(registry):
     assert "3104" not in text and "missing parameter" not in text
 
 
+def test_failed_verdict_on_an_ok_step_shows_as_a_failed_step(registry):
+    fallen = step(1).model_copy(update={"verification": "failed", "faults": ["fallen", "fault_mode"]})
+    missed = step(2).model_copy(update={"verification": "failed"})
+    errored = step(3, "timeout").model_copy(update={"faults": ["fallen"]})  # no verdict; its error, then the fault
+    text = format_outcome(outcome([fallen, missed, errored], failures=3, code="FAILURE_BUDGET_EXHAUSTED"), registry)
+    assert text.splitlines()[3:] == [
+        "1. ❌ sit() failed: the robot fell, the robot is in a fault mode",
+        "2. ❌ sit() did not reach its goal",
+        "3. ❌ sit() timed out; the robot fell",
+        "",
+        "Last failure: sit timed out; the robot fell.",
+    ]
+
+
 def test_outcome_categories_without_detail(registry):
     lost = outcome(
         [step(1, "error", "sdk_error", "Traceback ...")],

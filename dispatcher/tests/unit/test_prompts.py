@@ -77,6 +77,9 @@ TEXT_ARGS: dict[str, dict[str, object]] = {
     "OMITTED_LINES": {"n": 4},
     "TELEGRAM_LAST_FAILURE": {"skill": "walk", "reason": "failed: the robot refused the move"},
     "STEP_REASON_FALLBACK": {"code": "blocked"},
+    "STEP_REASON_FAULTS": {"faults": "the robot fell"},
+    "STEP_REASON_WITH_FAULTS": {"reason": "timed out", "faults": "the robot fell"},
+    "VERIFICATION_FAILED_DETAIL": {"reasons": "the robot fell"},
     "PROGRESS_PLAN_MESSAGE": {"message": "Turning first."},
     "PROGRESS_PLAN_STEP": {"i": 1, "call": "turn(direction=left, angle_deg=90)"},
     "PROGRESS_PLAN_DONE": {"message": "Turned left."},
@@ -114,6 +117,8 @@ def render_fixed_texts() -> str:
         parts.append((f"TELEGRAM_OUTCOMES {code}", template.format(message="Walked 1 m.", n=3, run_id="abc123")))
     for key, reason in prompts.STEP_REASONS.items():
         parts.append((f"STEP_REASONS {key}", reason))
+    for fault, fault_text in prompts.FAULT_TEXTS.items():
+        parts.append((f"FAULT_TEXTS {fault}", fault_text))
     for name in ("BUSY", "STOPPING", "NOTHING_RUNNING", "WORKING", "EMPTY_TASK"):
         parts.append((name, getattr(prompts, name)))
     parts.append(('help_text("stub")', prompts.help_text("stub")))
@@ -132,7 +137,7 @@ def test_fixed_texts_match_golden(update_golden):
     public = {n: v for n, v in vars(prompts).items() if not n.startswith("_")}
     assert {n for n, v in public.items() if isinstance(v, str)} <= set(prompts.__all__)
     assert {n for n, v in public.items() if isinstance(v, (dict, list, tuple))} == {
-        *("NOTICES", "OPERATOR_MESSAGES", "TELEGRAM_OUTCOMES", "STEP_REASONS")
+        *("NOTICES", "OPERATOR_MESSAGES", "TELEGRAM_OUTCOMES", "STEP_REASONS", "FAULT_TEXTS")
     }
     text = render_fixed_texts()
     if update_golden:

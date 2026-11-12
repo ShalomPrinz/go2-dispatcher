@@ -107,6 +107,9 @@ def render_step(sr: StepResult, registry: Registry, *, numbered: bool) -> str:
         body = f"{call} -> ok{_observations(sr, registry)}"
     else:
         body = f"{call} -> {_failure_text(sr)}"
+    note = prompts.fault_note(sr)
+    if note is not None:
+        body += f"; {note}"
     return f"{sr.dispatch.index}. {body}" if numbered else body
 
 
@@ -153,11 +156,12 @@ class Feedback:
         if self.return_reason == "failure":
             assert self.failed is not None  # set by Feedback.failure
             ref = self.failed.ref
+            by_verdict = self.failed.verification == "failed"  # an ok step (dispatcher/docs/loop-and-context.md)
             return prompts.notice(
                 "failure",
                 n=ref.plan_step,
                 skill=ref.skill,
-                outcome=self.failed.outcome,
+                outcome=prompts.VERIFICATION_FAILED if by_verdict else self.failed.outcome,
                 f=self.failures,
                 max_failures=max_failures,
             )

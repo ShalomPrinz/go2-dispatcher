@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from dispatcher import prompts
 from dispatcher.context import PromptSurface
 from dispatcher.dispatcher import Dispatcher
 from dispatcher.executor import Executor
@@ -227,22 +228,32 @@ def test_precondition_ends_the_task_before_dispatch(tmp_path, registry):
 
 
 @pytest.mark.parametrize(
-    ("kind", "outcome", "faults"),
-    [("fallen", "ok", ["fallen", "fault_mode"]), ("stuck", "ok", []), ("rejected", "error", ["command_rejected"])],
+    ("kind", "outcome", "verdict", "faults"),
+    [
+        ("fallen", "ok", "failed", ["fallen", "fault_mode"]),
+        ("stuck", "ok", "failed", []),
+        ("rejected", "error", None, ["command_rejected"]),  # a failed step gets fault detection only
+    ],
 )
-def test_robot_fault_fails_the_step(tmp_path, registry, kind, outcome, faults):
-    """A fault forces failed; a stuck turn fails its yaw expectation; the plan goes on as before."""
-    items = [Plan(status="PLAN", steps=[TURN]), Plan(status="DONE")]
-    d, _, _ = build(tmp_path, registry, items, stub={"faults": [{"step": 1, "kind": kind}]})
+def test_robot_fault_fails_the_step_and_replans(tmp_path, registry, kind, outcome, verdict, faults):
+    """A fault forces failed; a stuck turn fails its yaw expectation; either abandons the plan and replans."""
+    items = [Plan(status="PLAN", steps=[TURN, DETECT]), Plan(status="DONE")]
+    d, planner, _ = build(tmp_path, registry, items, stub={"faults": [{"step": 1, "kind": kind}]})
     try:
         o = d.run_task("turn", source="test")
     finally:
         d.shutdown(0)
     assert o.outcome == "DONE", o.message
     [step] = o.steps
-    assert (step.outcome, step.verification, step.faults) == (outcome, "failed", faults)
+    assert (step.outcome, step.verification, step.faults) == (outcome, verdict, faults)
     [rec] = [r for r in read_jsonl(o.log_path) if r["type"] == "step_result"]
-    assert (rec["verification"], rec["faults"]) == ("failed", faults)
+    assert (rec["verification"], rec["faults"]) == (verdict, faults)
+    assert o.failures == 1
+    assert [r["return_reason"] for r in read_jsonl(o.log_path) if r["type"] == "llm_request"] == ["initial", "failure"]
+    user = planner.calls[1]["user"]
+    assert "2. detect_object(target=chair) [abandoned]" in user
+    reasons = ", ".join(prompts.FAULT_TEXTS[f] for f in faults) or prompts.GOAL_NOT_REACHED
+    assert (f"; verification failed: {reasons}" if verdict else f"; {reasons}\n") in user
 
 
 def test_service_lost_between_tasks_restarts_at_the_next_task(tmp_path, registry):

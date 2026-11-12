@@ -159,6 +159,55 @@ def test_failure_budget(tmp_path, registry):
     assert o.failures == 3
 
 
+def test_failed_verdict_abandons_rest_and_replans(tmp_path, registry):
+    """An ok step whose goal check failed is a failure: the model sees the verdict and the observed state."""
+    sit = PlanStep(skill="sit", params={})
+    results = [exec_result(skill="sit", posture="standing")]  # sit expects sitting
+    r = Rig(tmp_path, registry, [plan(sit, walk()), done()], results)
+    o = r.run()
+    assert o.outcome == "DONE" and len(r.executor.runs) == 1
+    assert [(s.outcome, s.verification) for s in o.steps] == [("ok", "failed")]
+    assert (o.failures, reasons(o)) == (1, ["initial", "failure"])
+    assert records(o, "task_end")[0]["rejections"] == 0
+    user = r.user(1)
+    assert "Posture: standing" in user
+    assert "1. sit() -> ok; verification failed: the step did not reach its goal" in user
+    assert "2. walk(direction=forward, distance_m=0.5) [abandoned]" in user
+    assert "failed at step 1 (sit): verification failed. This is failure 1 of 3." in user
+
+
+def test_failed_verdicts_exhaust_the_failure_budget(tmp_path, registry):
+    sit = PlanStep(skill="sit", params={})
+    results = [exec_result(skill="sit", posture="standing")] * 2
+    r = Rig(tmp_path, registry, [plan(sit)] * 2, results, loop={"max_failures": 2})
+    o = r.run()
+    assert (o.outcome, o.failures, len(r.planner.calls)) == ("FAILURE_BUDGET_EXHAUSTED", 2, 2)
+    assert o.message.endswith("Last failure: sit: verification failed: the step did not reach its goal")
+
+
+def test_failed_step_gets_no_verdict_and_shows_only_a_detected_fault(tmp_path, registry):
+    sit = PlanStep(skill="sit", params={})
+    results = [
+        exec_result("error", skill="sit", posture="standing"),  # sdk_error: command_rejected; sit's goal not met
+        exec_result("error", skill="sit", posture="standing", error_code="exception", error_message="boom"),
+    ]
+    r = Rig(tmp_path, registry, [plan(sit), plan(sit)], results, loop={"max_failures": 2})
+    o = r.run()
+    assert [(s.verification, s.faults) for s in o.steps] == [(None, ["command_rejected"]), (None, [])]
+    assert "1. sit() -> error: Move returned 1; the robot rejected the command\n" in r.user(1)
+    assert "failed at step 1 (sit): error." in r.user(1)
+    assert (o.outcome, o.failures) == ("FAILURE_BUDGET_EXHAUSTED", 2)
+    assert o.message.endswith("Last failure: sit: boom")
+
+
+def test_unverified_and_unavailable_verdicts_do_not_escalate(tmp_path, registry):
+    results = [exec_result(posture="standing"), exec_result(skill="turn", posture="standing")]  # turn: no yaw sample
+    r = Rig(tmp_path, registry, [plan(walk(), turn()), done()], results)
+    o = r.run()
+    assert [s.verification for s in o.steps] == ["unverified", "unavailable"]
+    assert (o.outcome, o.failures, reasons(o)) == ("DONE", 0, ["initial", "plan_complete"])
+
+
 def test_checkpoints_never_count(tmp_path, registry):
     items = [plan(walk(0.2), walk(0.2), replan_after=1)] * 5 + [done()]
     r = Rig(tmp_path, registry, items, [exec_result()] * 5, loop={"max_failures": 1})

@@ -155,7 +155,7 @@ Constructing a `SkillResponse` checks only that `error` is present if and only i
 
 **Reading records with `schema_version` 1.** Skills read state in their own process with their own DDS subscription: a skill's `state_ms` includes the subscription, DDS discovery and the wait for the first message (DDS init is in `dds_init_ms` when present), and every skill, `detect_object` included, reports `dds_init_ms`. The states have no `seq` and `age_ms`.
 
-Robot state fields, their sources and the posture rule are in [robot.md](robot.md#state-sampling). The dispatcher checks `requires` against a fresh state read before each step and gives each dispatched step a verdict from `state_before` and `state_after` ([loop-and-context.md](../../dispatcher/docs/loop-and-context.md#verification)); the model sees only the derived posture ([loop-and-context.md](../../dispatcher/docs/loop-and-context.md#user-message)).
+Robot state fields, their sources and the posture rule are in [robot.md](robot.md#state-sampling). The dispatcher checks `requires` against a fresh state read before each step and uses `state_before` and `state_after` for fault detection on every dispatched step and a verdict on each step with outcome `ok` ([loop-and-context.md](../../dispatcher/docs/loop-and-context.md#verification)); what the model sees of the state and of a detected fault is in [robot.md](robot.md#state-sampling) and [loop-and-context.md](../../dispatcher/docs/loop-and-context.md#user-message).
 
 Run a skill by hand ([below](#running-a-skill-by-hand)) to see a full response.
 

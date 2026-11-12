@@ -178,7 +178,7 @@ class ConsoleTrace:
         self._open(f"▶ {format_call(ref.skill, ref.params, self._registry)}")
 
     def step_result(self, sr: StepResult, *, budget: MotionBudget, failures: int, posture: Posture) -> None:
-        mark = self._style("✓", GREEN) if sr.outcome == "ok" else self._style("✗", RED)
+        mark = self._style("✓", GREEN) if sr.outcome == "ok" and not sr.is_failure else self._style("✗", RED)
         line = f"{mark} {render_step(sr, self._registry, numbered=False)}"
         if sr.dispatch is not None:
             line += self._style(f" ({_secs(sr.duration_ms)})", DIM)
