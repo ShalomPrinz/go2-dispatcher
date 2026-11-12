@@ -80,6 +80,52 @@ def test_ok(executor, registry):
     assert res.stop_move is None and res.error_code is None
 
 
+class FailingRead:
+    """A pipe whose ``read`` fails, as on a broken pipe; closing it closes the real pipe."""
+
+    def __init__(self, pipe):
+        self.pipe = pipe
+
+    def read(self, _size):
+        raise OSError("read failed")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        self.pipe.close()
+
+
+def record_popen(executor, monkeypatch, wrap=None):
+    """Record the pipes of each process ``executor`` starts; ``wrap`` replaces each before the readers get it."""
+    pipes = []
+    popen = executor._popen
+
+    def recording(*args):
+        proc = popen(*args)
+        pipes.append((proc.stdout, proc.stderr))
+        if wrap is not None:
+            proc.stdout, proc.stderr = wrap(proc.stdout), wrap(proc.stderr)
+        return proc
+
+    monkeypatch.setattr(executor, "_popen", recording)
+    return pipes
+
+
+def test_run_closes_both_pipes_at_eof(executor, registry, monkeypatch):
+    pipes = record_popen(executor, monkeypatch)
+    assert run(executor, registry).outcome == "ok"
+    [(stdout, stderr)] = pipes
+    assert stdout.closed and stderr.closed  # the reader threads have ended: run joined them
+
+
+def test_run_closes_both_pipes_when_the_read_fails(executor, registry, monkeypatch):
+    pipes = record_popen(executor, monkeypatch, wrap=FailingRead)
+    assert run(executor, registry).outcome == "malformed"  # nothing was read
+    [(stdout, stderr)] = pipes
+    assert stdout.closed and stderr.closed
+
+
 def test_fault_error(executor, registry):
     res = run(executor, registry, fault="error")
     assert res.outcome == "error"
