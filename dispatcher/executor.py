@@ -152,6 +152,22 @@ class _Readers:
         return _stderr_tail(self._stderr)
 
 
+def _step_outcome(
+    cause: StopCause | None, service_lost: bool, response: SkillResponse | None, rc: int | None, timeout_s: float
+) -> tuple[ExecOutcome, StopCause | None, str | None, str | None]:
+    """(outcome, interrupt_cause, error_code, error_message) of a step that ran. A service loss with no other kill
+    cause overrides the skill's own reply (dispatcher/docs/loop-and-context.md)."""
+    if cause == StopCause.ROBOT_SERVICE_LOST or (cause is None and service_lost):
+        return "error", None, StopCause.ROBOT_SERVICE_LOST.value, prompts.KILL_ROBOT_SERVICE_LOST
+    if cause is not None:
+        outcome, error_code, template = cause.kill
+        return outcome, cause if outcome == "interrupted" else None, error_code, template.format(timeout_s=timeout_s)
+    if response is None:
+        return "malformed", None, "malformed", prompts.MALFORMED_RESPONSE.format(rc=rc)
+    error = response.error
+    return response.status, None, error.code if error else None, error.message if error else None
+
+
 def _parse_response(stdout: str, skill_name: str) -> SkillResponse | None:
     """Last non-empty stdout line as a SkillResponse for ``skill_name``, else None."""
     lines = [ln for ln in stdout.splitlines() if ln.strip()]
@@ -327,23 +343,9 @@ class Executor:
         duration_ms = _ms(t0)
 
         response = _parse_response(readers.stdout, skill.name)
-
-        outcome: ExecOutcome
-        interrupt_cause: StopCause | None = None
-        if cause == StopCause.ROBOT_SERVICE_LOST:
-            outcome, error_code = "error", StopCause.ROBOT_SERVICE_LOST.value
-            error_message = prompts.KILL_ROBOT_SERVICE_LOST
-        elif cause is not None:
-            outcome, error_code, template = cause.kill
-            interrupt_cause = cause if outcome == "interrupted" else None
-            error_message = template.format(timeout_s=timeout_s)
-        elif response is None:
-            outcome, error_code = "malformed", "malformed"
-            error_message = prompts.MALFORMED_RESPONSE.format(rc=rc)
-        else:
-            outcome = response.status
-            error_code = response.error.code if response.error else None
-            error_message = response.error.message if response.error else None
+        outcome, interrupt_cause, error_code, error_message = _step_outcome(
+            cause, service_lost, response, rc, timeout_s
+        )
         return ExecResult(
             outcome=outcome,
             interrupt_cause=interrupt_cause,
