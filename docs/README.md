@@ -22,7 +22,7 @@ Documents that cover the whole system or both services.
 | [configuration.md](configuration.md) | Every config key (type, default, tunable or not), `.env` and secrets, precedence, CLI overrides, path resolution, validation rules. |
 | [setup.md](setup.md) | Installing on a development machine and on the lab machine (uv, robot and vision extras, CycloneDDS troubleshooting, network interface, YOLO weights), Python version, verifying an install. |
 | [running.md](running.md) | Operating the system: CLI commands and exit codes, `batch` files, Ctrl+C, Telegram setup, commands and replies, stub vs real backend, switching skill sets. |
-| [roadmap.md](roadmap.md) | What comes next: the v2 plan (pending verification work, escalation, `ASK`, existing seams), future ideas, open questions (including experiment design), the gate before experiments, and pending human work with owners. |
+| [roadmap.md](roadmap.md) | What comes next: the v2 plan (pending verification work, escalation, existing seams), future ideas, open questions (including experiment design), the gate before experiments, and pending human work with owners. |
 | [references.md](references.md) | External documentation and papers, each with one line on why it matters to the project. |
 
 ### Dispatcher (`dispatcher/docs/`)

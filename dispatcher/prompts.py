@@ -106,6 +106,7 @@ __all__ = [
     "PROGRESS_PLAN_STEP",
     "PROGRESS_PLAN_DONE",
     "PROGRESS_PLAN_ABORT",
+    "PROGRESS_PLAN_ASK",
     "PROGRESS_PLAN_MALFORMED",
     "PROGRESS_PLAN_OVER_BUDGET",
     "PROGRESS_ASKING_AGAIN",
@@ -135,7 +136,8 @@ Rules:
 - A plan may contain at most {horizon} steps.
 - status PLAN: one or more steps to run. message is optional.
 - status DONE: the task is complete. No steps. message is required: tell the operator what was done and anything they asked to find out.
-- status ABORT: the task cannot or should not be done with these skills, or it is ambiguous. No steps. message is required: explain why, or ask the operator a clarifying question.
+- status ABORT: the task cannot or should not be done with these skills. No steps. message is required: explain why.
+- status ASK: the task is ambiguous, and the robot state and the results so far cannot settle it. No steps. message is required: one clarifying question for the operator. The task ends; the answer arrives as a new task, with this task and your question under "Previous task".
 - A message that is not a robot task (a greeting, small talk, a general question): status DONE. No steps. message: one sentence that replies and says what the robot can do.
 - replan_after N: stop after step N and call you again before running the rest. Use it when later steps depend on what earlier steps find. Omit it to run the whole plan.
 - If a step fails, the rest of that plan is abandoned and you are called again with the failure.
@@ -145,7 +147,7 @@ Obstacle distances:
 - The Robot section gives the distance in metres to the nearest obstacle in front of, behind, left of and right of the robot, measured when the robot state was last read. "no reading" means the sensor reported nothing in that direction; "unavailable" means no distances are known.
 - The values are a snapshot. Any walk or turn makes them stale. To use distances after a walk or turn, set replan_after to that step and plan the rest with the new values.
 - A value is the nearest thing the sensor detected in that direction. It does not prove that the path of a walk is clear and does not say what the object is. The sensor misses glass, thin objects and low objects. "no reading" and "unavailable" do not mean the way is clear. The values are not a safety stop.
-- Never plan a walk farther than the distance in its direction (forward: front, backward: back, left: left, right: right) minus 0.3 m. If the task needs more, walk the shorter distance and say why in message, or return ABORT with a message that explains or asks the operator.
+- Never plan a walk farther than the distance in its direction (forward: front, backward: back, left: left, right: right) minus 0.3 m. If the task needs more, walk the shorter distance and say why in message, or return ABORT with a message that explains, or ASK with a question for the operator.
 - For tasks that ask about distances, such as "walk to the wall" or "how far is the nearest thing", use the values directly."""
 
 SKILLS_HEADER = "## Skills\n"
@@ -288,6 +290,7 @@ def fault_note(sr: StepResult) -> str | None:
 OPERATOR_MESSAGES: dict[str, str] = {
     "DONE": "{message}",
     "ABORTED": "{message}",
+    "ASKED": "Question: {message}",
     "STOPPED": "Stopped on request. A stop command was sent to the robot.",
     "TIME_LIMIT_EXCEEDED": (
         "Stopped: the task exceeded its {limit:g}s time limit. A stop command was sent to the robot."
@@ -320,7 +323,7 @@ class OutcomeFacts:
     max_llm_calls: int
     failures: int
     last_failure: StepResult | None = None
-    message: str | None = None  # DONE / ABORTED: the model's message
+    message: str | None = None  # DONE / ABORTED / ASKED: the model's message
     detail: str = ""  # LLM_ERROR, STATE_UNAVAILABLE, ROBOT_SERVICE_LOST
     exception_type: str = "Exception"  # INTERNAL_ERROR
     precondition: PreconditionFailure | None = None  # PRECONDITION_FAILED
@@ -339,7 +342,7 @@ def _last_failure(lf: StepResult | None) -> str:
 def _operator_args(outcome: TaskOutcomeCode, facts: OutcomeFacts) -> dict[str, Any]:
     if outcome == "DONE":
         return {"message": facts.message if facts.message and facts.message.strip() else DONE_DEFAULT_MESSAGE}
-    if outcome == "ABORTED":
+    if outcome in ("ABORTED", "ASKED"):
         return {"message": facts.message or ""}
     if outcome == "TIME_LIMIT_EXCEEDED":
         return {"limit": facts.time_limit_s}
@@ -390,6 +393,7 @@ ERROR_REPLY = "❌ Internal error in the bot. The details are in its console out
 TELEGRAM_OUTCOMES: dict[str, str] = {
     "DONE": "✅ <b>Done</b>: {message}",
     "ABORTED": "⚠️ <b>Aborted</b>: {message}",
+    "ASKED": "❓ {message}",  # the operator message already starts with "Question:"
     "STOPPED": "🛑 <b>Stopped</b> on request. A stop command was sent to the robot.",
     "TIME_LIMIT_EXCEEDED": "❌ <b>Stopped</b>: the task reached its time limit. A stop command was sent to the robot.",
     "FAILURE_BUDGET_EXHAUSTED": "❌ <b>Stopped</b>: the robot failed {n} times while trying this task.",
@@ -441,6 +445,7 @@ PROGRESS_PLAN_MESSAGE = "ℹ️ <b>Plan</b>: {message}"  # PLAN with its optiona
 PROGRESS_PLAN_STEP = "{i}. {call}"
 PROGRESS_PLAN_DONE = "✅ <b>Done</b>: {message}"
 PROGRESS_PLAN_ABORT = "⚠️ <b>Aborted</b>: {message}"
+PROGRESS_PLAN_ASK = "❓ <b>Question</b>: {message}"
 PROGRESS_PLAN_MALFORMED = "❌ The model produced a malformed plan; {then}"
 PROGRESS_PLAN_OVER_BUDGET = "❌ The plan would exceed the motion budget; {then}"
 PROGRESS_ASKING_AGAIN = "asking again"

@@ -73,7 +73,7 @@ With `llm.provider = "openrouter"` the same fields hold OpenRouter's native valu
 
 ### `plan`
 
-A valid plan: `call_index`, `plan` (`status`, `steps`, `replan_after`, `message`), `stop_at` (`replan_after` or the number of steps).
+A valid plan: `call_index`, `plan` (`status`: `PLAN`, `DONE`, `ABORT` or `ASK`; `steps`, `replan_after`, `message`), `stop_at` (`replan_after` or the number of steps).
 
 ### `plan_invalid`
 
@@ -156,6 +156,7 @@ Pick the folder first (`logs/anthropic/real/` for the study), then group its tas
 | Metric | How to compute it |
 |---|---|
 | Task outcome, success rate | `index.jsonl` `outcome` (`DONE` = success); outcome codes in [loop-and-context.md](loop-and-context.md#task-outcomes) |
+| Clarifying questions | `index.jsonl` `outcome == "ASKED"`; the question is the last `plan` record's `plan.message` (`plan.status == "ASK"`) |
 | Tokens per task | `index.jsonl` `input_tokens` / `output_tokens`, or `task_end.usage_totals` (all numeric usage fields) |
 | Tokens per call | `llm_response.usage` |
 | LLM calls per task | `index.jsonl` `llm_calls` = number of `llm_response` records (schema retries included, infra retries not) |

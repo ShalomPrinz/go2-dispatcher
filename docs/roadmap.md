@@ -13,10 +13,6 @@ Implemented: every dispatched step gets fault detection, a step with outcome `ok
 - **`walk` verification, dependent on odometry.** The robot provides odometry relative to its power-on pose ([robot.md](../skills/docs/robot.md#open-robot-side-questions)). Which source carries it (`SportModeState.position` on `rt/sportmodestate`, or `rt/utlidar/robot_odom` / `rt/utlidar/robot_pose`) and its accuracy and drift are open ([pending work](#pending-human-work)). If the estimate is accurate enough, `walk` gets a position-delta expectation (with a drift tolerance; the power-on origin does not matter), which would also catch a stuck walk, and a geofence becomes possible. Keep this distinction: the robot's **own measurement-based estimator** is acceptable as a verification source; **dead reckoning from commanded velocity** is not, because it restates the walk skill's own assumption (walk is open-loop: it commands a speed for a time). Owner: dispatcher and skills, after checklist item 2.
 - **Fault thresholds on the robot.** `FALLEN_TILT_RAD` and `FAULT_MODES` are assumed signatures (*unverified*); the first fall in a run log, or Unitree's documentation of `mode`, settles them ([robot.md](../skills/docs/robot.md#open-robot-side-questions), checklist item 9).
 
-### `ASK` plan status
-
-A dedicated status for clarifying questions (for example "go to the chair" when there are two chairs). In v1 the model returns `ABORT` with the question in `message`.
-
 ### Seams already in v1
 
 Kept on purpose; do not remove them as dead code.
@@ -24,7 +20,6 @@ Kept on purpose; do not remove them as dead code.
 - `state_before` / `state_after` on every skill response and `state_after` on every `StopMove`, including the robot's own `position` estimate when published.
 - Typed `expect` and `requires` keys in `SKILL.md` frontmatter, declared for every v1 skill and not rendered into the catalog; the dispatcher evaluates them for verdicts and preconditions ([skills.md](../skills/docs/skills.md#expectations-and-preconditions)).
 - A single posture rule, `derive_posture()` in `skills/real.py`.
-- Plan status normalised in one place (`Plan._normalise_status` in `models.py`), so adding `ASK` is local.
 - Stub robot faults (`fallen`, `stuck`, `rejected`) with the real sample's fields, which the fault-detection tests use ([skills.md](../skills/docs/skills.md#robot-faults)).
 - `skills.dir` is configurable, so other granularity tiers can be loaded.
 
@@ -34,6 +29,7 @@ Not scheduled.
 
 - **Further granularity tiers** (medium, composite) as separate skill folders selected with `skills.dir`. This is the main study's manipulated variable, so it is needed before the participant study.
 - **Forward messages received during a run to the LLM.** Decide between letting the model update the plan in place (the dispatcher would need to support replacing a running plan) and limiting it to classifying the message as a stop or replying to the sender with text. In v1 only the stop word is recognised during a task; other messages get a busy reply.
+- **Previous-task context across processes.** A clarifying question asked by `go2 run` cannot be answered by a second `go2 run`: the previous-task context lives in the dispatcher process, so only the Telegram bot and one `batch` file carry the original task and the question to the answer ([running.md](running.md#commands-and-replies), [loop-and-context.md](../dispatcher/docs/loop-and-context.md#user-message)). Resolve by persisting the last task summary under `log.dir` and loading it at start; add it when operators use `go2 run` for ambiguous tasks.
 - **Prompt caching** for the static slots (tools, system text, catalog). Reduces cost, but cached tokens are reported separately and cache behaviour differs between skill sets of different sizes, so token comparisons would need uncached-equivalent reporting. The slot order already allows it.
 - **Geofence**, if the odometry is accurate enough (see odometry above). At every session start the dispatcher records the start pose, and the fence is defined relative to it. Two limits:
   - The fence is relative to the start pose, not to the room. A fence around fixed obstacles needs the robot started from a known spot.

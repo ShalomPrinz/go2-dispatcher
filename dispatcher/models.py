@@ -78,7 +78,7 @@ class PlanStep(_Model):
 
 
 class Plan(_Model):
-    status: Literal["PLAN", "DONE", "ABORT"]
+    status: Literal["PLAN", "DONE", "ABORT", "ASK"]
     steps: list[PlanStep] = []
     replan_after: StrictInt | None = None  # 1-based step index within this plan
     message: StrictStr | None = None
@@ -212,6 +212,7 @@ class StepResult(_Model):
 TaskOutcomeCode = Literal[
     "DONE",
     "ABORTED",
+    "ASKED",
     "STOPPED",
     "TIME_LIMIT_EXCEEDED",
     "FAILURE_BUDGET_EXHAUSTED",

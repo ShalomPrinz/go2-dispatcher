@@ -41,6 +41,7 @@ GREEN = "\x1b[32m"
 YELLOW = "\x1b[33m"
 CYAN = "\x1b[36m"
 CLEAR_LINE = "\r\x1b[2K"
+_OUTCOME_COLORS = {"DONE": GREEN, "ASKED": YELLOW}  # every other outcome is red (docs/running.md)
 TOKEN_KEY_PAIRS = (("input_tokens", "output_tokens"), ("prompt_tokens", "completion_tokens"))  # Anthropic, OpenRouter
 
 
@@ -213,7 +214,7 @@ class ConsoleTrace:
         if tokens:
             parts.append(tokens)
         parts.append(_secs(result.duration_ms))
-        color = GREEN if result.outcome == "DONE" else RED
+        color = _OUTCOME_COLORS.get(result.outcome, RED)
         summary = self._style(" · ".join(parts), BOLD, color)
         if result.message and result.message != self._shown_message:  # e.g. STOPPED, budget, LLM_INVALID
             summary = self._style(result.message, BOLD, color) + "\n" + summary

@@ -116,6 +116,11 @@ def test_outcome_categories_without_detail(registry):
     assert not done.endswith("\n")  # no trailing empty line without a tail
 
 
+def test_asked_outcome_is_a_question(registry):
+    asked = outcome([], code="ASKED", message="Question: Which <chair>?")
+    assert format_outcome(asked, registry).splitlines()[0] == "❓ Question: Which &lt;chair&gt;?"
+
+
 def test_model_text_is_escaped(registry):
     text = format_outcome(outcome([], message="<b>x</b> & <script>"), registry)
     assert text.splitlines()[0] == "✅ <b>Done</b>: &lt;b&gt;x&lt;/b&gt; &amp; &lt;script&gt;"

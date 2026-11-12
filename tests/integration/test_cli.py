@@ -115,6 +115,13 @@ def test_run_abort(cfg_path):
     assert proc.stderr.splitlines()[-1].startswith("ABORTED · ")
 
 
+def test_run_ask_prints_the_question(cfg_path):
+    proc = cli(cfg_path, "run", "go to the chair", script=[{"status": "ASK", "steps": [], "message": "Which chair?"}])
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert proc.stderr.splitlines()[-2:][0] == "Question: Which chair?"
+    assert proc.stderr.splitlines()[-1].startswith("ASKED · ")
+
+
 def test_batch(cfg_path, tmp_path):
     tasks = tmp_path / "tasks.txt"
     tasks.write_text("# comment\nturn left\n\nfly\n", encoding="utf-8")

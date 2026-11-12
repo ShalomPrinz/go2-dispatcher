@@ -527,6 +527,8 @@ class Dispatcher:
             raise _TaskEnded(_Ending("DONE", message=plan.message))
         if plan.status == "ABORT":
             raise _TaskEnded(_Ending("ABORTED", message=plan.message))
+        if plan.status == "ASK":  # ends the task like ABORT; the answer is a new task (loop-and-context.md)
+            raise _TaskEnded(_Ending("ASKED", message=plan.message))
 
         pre = precheck(plan, stop_at, self.registry, t.budget, call_index=t.llm_calls)
         if pre.rejection is not None:

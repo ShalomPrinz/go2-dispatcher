@@ -34,7 +34,8 @@ FACTS = prompts.OutcomeFacts(
     ),
 )
 OUTCOME_FACTS = {
-    code: replace(FACTS, message={"DONE": "Walked 1 m.", "ABORTED": "Which chair?"}.get(code)) for code in ALL_OUTCOMES
+    code: replace(FACTS, message={"DONE": "Walked 1 m.", "ABORTED": "Which chair?", "ASKED": "Which chair?"}.get(code))
+    for code in ALL_OUTCOMES
 }
 
 NOTICE_ARGS = {
@@ -84,6 +85,7 @@ TEXT_ARGS: dict[str, dict[str, object]] = {
     "PROGRESS_PLAN_STEP": {"i": 1, "call": "turn(direction=left, angle_deg=90)"},
     "PROGRESS_PLAN_DONE": {"message": "Turned left."},
     "PROGRESS_PLAN_ABORT": {"message": "Which chair?"},
+    "PROGRESS_PLAN_ASK": {"message": "Which chair?"},
     "PROGRESS_PLAN_MALFORMED": {"then": "asking again"},
     "PROGRESS_PLAN_OVER_BUDGET": {"then": "giving up"},
     "PROGRESS_STEP_RUNNING": {"call": "turn(direction=left, angle_deg=90)"},

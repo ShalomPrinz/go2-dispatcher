@@ -18,7 +18,7 @@ This repository is new, not a fork. Only the skill logic was ported; `walk` was 
 
 ### The advisor's requirements
 
-The advisor's original complaint about the inherited system was that the LLM guided the robot step by step, which made it slow. He asked for the LLM to produce an **up-front plan with explicit stop-and-report points** at which it can replan. The plan contract (`PLAN` / `DONE` / `ABORT`, `replan_after`, the planning horizon) exists because of this; it is specified in [loop-and-context.md](../dispatcher/docs/loop-and-context.md).
+The advisor's original complaint about the inherited system was that the LLM guided the robot step by step, which made it slow. He asked for the LLM to produce an **up-front plan with explicit stop-and-report points** at which it can replan. The plan contract (`PLAN` / `DONE` / `ABORT` / `ASK`, `replan_after`, the planning horizon) exists because of this; it is specified in [loop-and-context.md](../dispatcher/docs/loop-and-context.md).
 
 He also defined what counts as a failure (skill error, bounds rejection, timeout); the dispatcher's failure budget follows that definition ([loop-and-context.md](../dispatcher/docs/loop-and-context.md)).
 

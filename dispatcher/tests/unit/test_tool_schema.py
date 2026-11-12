@@ -22,4 +22,4 @@ def test_horizon_closed_objects_and_status_enum():
     assert t["name"] == "submit_plan"
     assert t["input_schema"]["additionalProperties"] is False
     assert t["input_schema"]["properties"]["steps"]["items"]["additionalProperties"] is False
-    assert t["input_schema"]["properties"]["status"]["enum"] == ["PLAN", "DONE", "ABORT"]
+    assert t["input_schema"]["properties"]["status"]["enum"] == ["PLAN", "DONE", "ABORT", "ASK"]

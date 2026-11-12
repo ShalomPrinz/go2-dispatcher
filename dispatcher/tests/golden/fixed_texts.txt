@@ -10,6 +10,12 @@ Which chair?
 === operator_message ABORTED stop_move_failed ===
 Which chair? WARNING: the stop command to the robot failed. Stop the robot manually.
 
+=== operator_message ASKED ===
+Question: Which chair?
+
+=== operator_message ASKED stop_move_failed ===
+Question: Which chair? WARNING: the stop command to the robot failed. Stop the robot manually.
+
 === operator_message STOPPED ===
 Stopped on request. A stop command was sent to the robot.
 
@@ -102,6 +108,9 @@ Call submit_plan again with a corrected plan.
 
 === TELEGRAM_OUTCOMES ABORTED ===
 ⚠️ <b>Aborted</b>: Walked 1 m.
+
+=== TELEGRAM_OUTCOMES ASKED ===
+❓ Walked 1 m.
 
 === TELEGRAM_OUTCOMES STOPPED ===
 🛑 <b>Stopped</b> on request. A stop command was sent to the robot.
@@ -233,7 +242,8 @@ Rules:
 - A plan may contain at most 5 steps.
 - status PLAN: one or more steps to run. message is optional.
 - status DONE: the task is complete. No steps. message is required: tell the operator what was done and anything they asked to find out.
-- status ABORT: the task cannot or should not be done with these skills, or it is ambiguous. No steps. message is required: explain why, or ask the operator a clarifying question.
+- status ABORT: the task cannot or should not be done with these skills. No steps. message is required: explain why.
+- status ASK: the task is ambiguous, and the robot state and the results so far cannot settle it. No steps. message is required: one clarifying question for the operator. The task ends; the answer arrives as a new task, with this task and your question under "Previous task".
 - A message that is not a robot task (a greeting, small talk, a general question): status DONE. No steps. message: one sentence that replies and says what the robot can do.
 - replan_after N: stop after step N and call you again before running the rest. Use it when later steps depend on what earlier steps find. Omit it to run the whole plan.
 - If a step fails, the rest of that plan is abandoned and you are called again with the failure.
@@ -243,7 +253,7 @@ Obstacle distances:
 - The Robot section gives the distance in metres to the nearest obstacle in front of, behind, left of and right of the robot, measured when the robot state was last read. "no reading" means the sensor reported nothing in that direction; "unavailable" means no distances are known.
 - The values are a snapshot. Any walk or turn makes them stale. To use distances after a walk or turn, set replan_after to that step and plan the rest with the new values.
 - A value is the nearest thing the sensor detected in that direction. It does not prove that the path of a walk is clear and does not say what the object is. The sensor misses glass, thin objects and low objects. "no reading" and "unavailable" do not mean the way is clear. The values are not a safety stop.
-- Never plan a walk farther than the distance in its direction (forward: front, backward: back, left: left, right: right) minus 0.3 m. If the task needs more, walk the shorter distance and say why in message, or return ABORT with a message that explains or asks the operator.
+- Never plan a walk farther than the distance in its direction (forward: front, backward: back, left: left, right: right) minus 0.3 m. If the task needs more, walk the shorter distance and say why in message, or return ABORT with a message that explains, or ASK with a question for the operator.
 - For tasks that ask about distances, such as "walk to the wall" or "how far is the nearest thing", use the values directly.
 
 === system_blocks(5) block 1 ===
@@ -447,6 +457,9 @@ timed out; the robot fell
 
 === PROGRESS_PLAN_ABORT ===
 ⚠️ <b>Aborted</b>: Which chair?
+
+=== PROGRESS_PLAN_ASK ===
+❓ <b>Question</b>: Which chair?
 
 === PROGRESS_PLAN_MALFORMED ===
 ❌ The model produced a malformed plan; asking again

@@ -74,14 +74,15 @@ def plan_tool_schema(horizon: int) -> dict:
             "properties": {
                 "status": {
                     "type": "string",
-                    "enum": ["PLAN", "DONE", "ABORT"],
+                    "enum": ["PLAN", "DONE", "ABORT", "ASK"],
                     "description": "PLAN: run the steps. DONE: task complete, no steps. "
-                    "ABORT: cannot or should not be done, no steps.",
+                    "ABORT: cannot or should not be done, no steps. "
+                    "ASK: ambiguous, message is a question for the operator, no steps.",
                 },
                 "steps": {
                     "type": "array",
                     "maxItems": horizon,
-                    "description": "Skill calls to run in order. Empty for DONE and ABORT.",
+                    "description": "Skill calls to run in order. Empty for DONE, ABORT and ASK.",
                     "items": {
                         "type": "object",
                         "properties": {
@@ -99,7 +100,7 @@ def plan_tool_schema(horizon: int) -> dict:
                 },
                 "message": {
                     "type": "string",
-                    "description": "Required for DONE and ABORT: text for the operator. Optional for PLAN.",
+                    "description": "Required for DONE, ABORT and ASK: text for the operator. Optional for PLAN.",
                 },
             },
             "required": list(TOOL_REQUIRED),
@@ -125,10 +126,10 @@ def _semantic_errors(plan: Plan) -> list[str]:
     n = len(plan.steps)
     if s == "PLAN" and n == 0:
         errors.append(prompts.PLAN_NEEDS_STEPS)
-    if s in ("DONE", "ABORT"):
+    if s in ("DONE", "ABORT", "ASK"):
         if n > 0:
             errors.append(prompts.STATUS_NO_STEPS.format(status=s))
-        if s == "ABORT" and (plan.message is None or not plan.message.strip()):
+        if s in ("ABORT", "ASK") and (plan.message is None or not plan.message.strip()):
             errors.append(prompts.STATUS_NEEDS_MESSAGE.format(status=s))
     if plan.replan_after is not None:
         if s != "PLAN":

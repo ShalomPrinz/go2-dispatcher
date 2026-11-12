@@ -41,6 +41,12 @@ EDIT_INTERVAL_S = 1.0  # min gap between Telegram calls; Telegram allows about 1
 EDIT_FAILED_WARNING = "Warning: Telegram progress update failed: {exception_type}."
 ROBOT_LINK_UP = "🟢 Robot: link up"
 ROBOT_LINK_DOWN = "🔴 Robot: link down"
+# the progress line of a plan that ends the task, by plan status (docs/running.md)
+_PLAN_END_LINES = {
+    "DONE": prompts.PROGRESS_PLAN_DONE,
+    "ABORT": prompts.PROGRESS_PLAN_ABORT,
+    "ASK": prompts.PROGRESS_PLAN_ASK,
+}
 
 Edit = Callable[[str], Awaitable[Any]]  # sets a progress message's HTML text, e.g. ``Message.edit_text``
 NewMessage = Callable[[str], Awaitable[Edit]]  # sends a new progress message with this HTML text; returns its Edit
@@ -268,8 +274,7 @@ class TelegramProgress:
                 r = self._rounds[-1]
                 r.plan_end = len(r.lines) + len(add)
         else:
-            template = prompts.PROGRESS_PLAN_DONE if plan.status == "DONE" else prompts.PROGRESS_PLAN_ABORT
-            add = [template.format(message=h(plan.message or ""))]
+            add = [_PLAN_END_LINES[plan.status].format(message=h(plan.message or ""))]
         self._update(add=add)
 
     def plan_invalid(self, call_index: int, tool_input: Any, check: PlanCheck, horizon: int) -> None:

@@ -26,7 +26,7 @@ flowchart LR
 1. **Plan.** The LLM answers with a plan of skill calls through a single `submit_plan` tool, with explicit stop-and-report points.
 2. **Validate.** The dispatcher checks every plan against the skill catalog, parameter bounds and safety budgets before anything moves.
 3. **Execute.** Each step runs as an isolated subprocess against the real robot (Unitree SDK over DDS, no ROS) or a stub.
-4. **Replan.** Results go back to the LLM until it reports `DONE` or `ABORT`.
+4. **Replan.** Results go back to the LLM until it reports `DONE`, `ABORT` or `ASK`.
 5. **Log.** Each task writes a complete JSONL record: tokens, latency, replanning, outcomes.
 
 ## Highlights

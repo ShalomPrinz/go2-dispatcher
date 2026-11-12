@@ -116,10 +116,23 @@ def test_immediate_done(tmp_path, registry):
     assert (o.outcome, o.message, o.steps, r.executor.runs) == ("DONE", "nothing to do", [], [])
 
 
-def test_abort_with_question(tmp_path, registry):
-    r = Rig(tmp_path, registry, [Plan(status="ABORT", message="Which chair?")])
+def test_abort_with_reason(tmp_path, registry):
+    r = Rig(tmp_path, registry, [Plan(status="ABORT", message="I cannot fly.")])
     o = r.run()
-    assert (o.outcome, o.message) == ("ABORTED", "Which chair?")
+    assert (o.outcome, o.message) == ("ABORTED", "I cannot fly.")
+
+
+def test_ask_ends_the_task_and_the_next_task_sees_the_question(tmp_path, registry):
+    ask = Plan(status="ASK", message="Which chair?")
+    r = Rig(tmp_path, registry, [plan(turn(), replan_after=1), ask, done()], [exec_result()])
+    o = r.run("go to the chair")
+    assert (o.outcome, o.message) == ("ASKED", "Question: Which chair?")
+    assert (len(o.dispatched_steps), o.llm_calls, r.executor.stop_moves) == (1, 2, [])  # ends as ABORT does
+    assert records(o, "plan")[-1]["plan"]["status"] == "ASK"
+    assert records(o, "task_end")[0]["outcome"] == "ASKED"
+    assert r.run("the left one").outcome == "DONE"
+    previous = "## Previous task\nTask: go to the chair\nOutcome: ASKED\nMessage: Question: Which chair?\n"
+    assert r.user(2).startswith(previous)
 
 
 def test_checkpoint(tmp_path, registry):

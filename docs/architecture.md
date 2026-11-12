@@ -4,7 +4,7 @@ How the system is put together and why. Behaviour details live in the topic docu
 
 ## Overview
 
-An operator sends a natural-language task over Telegram or the CLI. The LLM returns a **plan**, an ordered list of skill calls, through a single tool, `submit_plan`. The dispatcher validates the plan, runs each step as a separate subprocess that drives the Go2 (or a stub), and feeds structured results back. The model then answers `DONE`, `PLAN` (more steps) or `ABORT`. Budgets and limits bound every task, and every task writes a JSONL run log.
+An operator sends a natural-language task over Telegram or the CLI. The LLM returns a **plan**, an ordered list of skill calls, through a single tool, `submit_plan`. The dispatcher validates the plan, runs each step as a separate subprocess that drives the Go2 (or a stub), and feeds structured results back. The model then answers `DONE`, `PLAN` (more steps), `ABORT` or `ASK` (a clarifying question that ends the task). Budgets and limits bound every task, and every task writes a JSONL run log.
 
 ## Components and data flow
 
@@ -50,7 +50,7 @@ An operator sends a natural-language task over Telegram or the CLI. The LLM retu
 | Configuration and `.env` | `config.py` | [configuration.md](configuration.md) |
 | Single-instance lock | `process_lock.py` | [safety.md](safety.md) |
 
-One task, in outline: build the context from fixed slots → call the LLM → validate the plan and pre-check every step → run steps up to the model's checkpoint (or all of them), one subprocess each → call the LLM again with the reason (`plan_complete`, `checkpoint` or `failure`) → repeat until `DONE`, `ABORT`, or a budget or limit ends the task. The full loop is in [loop-and-context.md](../dispatcher/docs/loop-and-context.md).
+One task, in outline: build the context from fixed slots → call the LLM → validate the plan and pre-check every step → run steps up to the model's checkpoint (or all of them), one subprocess each → call the LLM again with the reason (`plan_complete`, `checkpoint` or `failure`) → repeat until `DONE`, `ABORT`, `ASK`, or a budget or limit ends the task. The full loop is in [loop-and-context.md](../dispatcher/docs/loop-and-context.md).
 
 ## Process model
 
@@ -80,7 +80,7 @@ What was lost, and how it is covered:
 |---|---|
 | Provider retry | Own infrastructure retries with backoff, logged separately, never counted as LLM calls or replans ([llm.md](../dispatcher/docs/llm.md)) |
 | Model failover | Not covered; accepted |
-| Free-text replies to the operator | `message` field, required on `DONE` / `ABORT`, optional on `PLAN` ([loop-and-context.md](../dispatcher/docs/loop-and-context.md)) |
+| Free-text replies to the operator | `message` field, required on `DONE` / `ABORT` / `ASK`, optional on `PLAN` ([loop-and-context.md](../dispatcher/docs/loop-and-context.md)) |
 | Telegram integration | Own thin integration on `python-telegram-bot` ([running.md](running.md)) |
 | Compaction | Removed deliberately: the context is fixed-slot and depends only on the current task |
 

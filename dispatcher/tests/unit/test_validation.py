@@ -53,6 +53,13 @@ def test_abort_with_blank_message():
     assert errors == ["status ABORT needs a message"] and kind == "semantic"
 
 
+def test_ask_needs_a_question_and_no_steps():
+    plan, errors, _ = v({"status": "ask", "steps": [], "message": "Which chair?"})
+    assert plan is not None and plan.status == "ASK" and errors == []
+    _, errors, kind = v({"status": "ASK", "steps": [STEP]})
+    assert errors == ["status ASK must have no steps", "status ASK needs a message"] and kind == "semantic"
+
+
 def test_replan_after_zero():
     _, errors, kind = v({"status": "PLAN", "steps": [STEP, STEP], "replan_after": 0})
     assert errors == ["replan_after must be between 1 and 2"] and kind == "semantic"
