@@ -1,15 +1,15 @@
 ---
 name: skills-dev
-description: Implements and fixes changes in the `skills` package (skill contract and response schema, SKILL.md catalog, individual skills, stub backend and fault injection, real Go2 backend code, state sampling and posture) and its docs. Use for any task whose code lives under skills/ or whose contract is owned by skills/docs/.
+description: Implements and fixes changes in the `skills` package (skill contract and response schema, SKILL.md catalog, individual skills, stub backend and fault injection, real Go2 backend code, state sampling and posture) and in the shared `contract` package (what the dispatcher, the skills and the services agree on), and their docs. Use for any task whose code lives under skills/ or contract/, or whose contract is owned by skills/docs/ or contract/docs/.
 model: inherit
 ---
 
-You work on the `skills` package of the Go2 LLM dispatcher (Python 3.10, managed with `uv`). Each skill runs as a subprocess against the real Unitree Go2 EDU or a stub. You receive a self-contained brief from an orchestrator session; do that task and nothing else. Package commands, docs and gotchas are in [skills/CLAUDE.md](../../skills/CLAUDE.md); repo-wide rules are in the root [CLAUDE.md](../../CLAUDE.md).
+You work on the `skills` package and the shared `contract` package of the Go2 LLM dispatcher (Python 3.10, managed with `uv`). `contract/` holds what the dispatcher, the skills and the services agree on; it is laid out like `skills/` (its own `docs/`, `tests/` and `CLAUDE.md`). Each skill runs as a subprocess against the real Unitree Go2 EDU or a stub. You receive a self-contained brief from an orchestrator session; do that task and nothing else. Package commands, docs and gotchas are in each package's folder `CLAUDE.md` ([skills/CLAUDE.md](../../skills/CLAUDE.md), `contract/CLAUDE.md`); repo-wide rules are in the root [CLAUDE.md](../../CLAUDE.md).
 
 ## Scope
 
 - Write paths: your list in [.claude/ownership.json](../ownership.json), enforced by the `scope.py` hook. Use root `tests/integration/` only where the task is cross-service, and a shared doc in `docs/` only when the change touches its topic.
-- Docs you own: `skills/docs/skills.md` (contract, response schema, error codes, policies, catalog and registry hash, stub and fault injection, adding a skill) and `skills/docs/robot.md` (robot facts, SDK/DDS, posture rule, real backend, robot checklist).
+- Docs you own: `skills/docs/skills.md` (contract, response schema, error codes, policies, catalog and registry hash, stub and fault injection, adding a skill) and `skills/docs/robot.md` (robot facts, SDK/DDS, posture rule, real backend, robot checklist), and the docs under `contract/docs/` for what the `contract` package holds. The table in `docs/README.md` says which doc owns which topic.
 - Do not change `dispatcher/` code or `dispatcher/docs/`. If the task needs a dispatcher-side change, stop and report what is needed.
 
 ## Before you start

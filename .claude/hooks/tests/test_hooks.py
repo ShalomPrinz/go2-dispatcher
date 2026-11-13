@@ -19,6 +19,8 @@ import ownership  # noqa: E402  (the map loader `scope.py` uses; the hooks thems
 
 OWNERSHIP = ownership.load_map()
 MAIN_ONLY = tuple(json.loads((HOOKS.parent / "ownership.json").read_text())["main"])
+# Mapped before the folder exists, so its owner can create it; the test fails once an entry's path exists.
+NOT_YET_CREATED = ("contract/", "contract/tests/")
 
 
 def git(*args: str, cwd: Path) -> None:
@@ -77,7 +79,7 @@ def decision(name: str, payload: object, tmpdir: Path) -> str:
 
 def test_scope_main_session_and_builtin_agents_denied_packages_only(repo: Path, tmpdir_env: Path) -> None:
     for agent in (None, "general-purpose"):
-        for rel in ("dispatcher/loop.py", "skills/catalog/x/SKILL.md"):
+        for rel in ("dispatcher/loop.py", "skills/catalog/x/SKILL.md", "contract/x.py"):
             reason = decision("scope.py", write(rel, repo, agent), tmpdir_env)
             assert rel in reason and "in a package" in reason
         for rel in ("docs/roadmap.md", "tests/test_x.py", ".claude/settings.json", "README.md"):
@@ -89,6 +91,8 @@ def test_scope_project_agent_allowed_in_scope_and_denied_outside(repo: Path, tmp
         assert decision("scope.py", write(rel, repo, "dispatcher-dev"), tmpdir_env) == "allow"
     reason = decision("scope.py", write("skills/x.py", repo, "dispatcher-dev"), tmpdir_env)
     assert "outside the dispatcher-dev scope" in reason and "In scope of: skills-dev" in reason
+    assert decision("scope.py", write("contract/x.py", repo, "skills-dev"), tmpdir_env) == "allow"
+    assert "In scope of: skills-dev" in decision("scope.py", write("contract/x.py", repo, "dispatcher-dev"), tmpdir_env)
     for rel in ("tests/test_x.py", "docs/README.md", ".claude/settings.json"):
         assert decision("scope.py", write(rel, repo, "dispatcher-dev"), tmpdir_env) != "allow"
 
@@ -181,11 +185,11 @@ def test_typecheck_reports_nothing_touched(repo: Path, tmpdir_env: Path) -> None
 
 
 def test_ownership_paths_exist_in_the_repo() -> None:
-    """Every map path exists; `**/name` patterns are skipped, since they cover files that may not exist yet."""
+    """Every map path exists, except `**/name` patterns (files that may not exist yet) and `NOT_YET_CREATED`."""
     assert OWNERSHIP is not None, "ownership.json missing or malformed"
     scopes, packages = OWNERSHIP
     for p in {p for ps in scopes.values() for p in ps} | set(packages) | set(MAIN_ONLY):
-        assert p.startswith("**/") or (ROOT / p).exists(), p
+        assert p.startswith("**/") or (ROOT / p).exists() != (p in NOT_YET_CREATED), p
 
 
 def test_ownership_agents_have_agent_files() -> None:
