@@ -17,16 +17,16 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Literal, get_args
 
+from contract.env import STUB_FAULT, STUB_OBJECTS, STUB_STATE_FILE, STUB_TIME_SCALE
+from contract.schema import ObstacleDistances, Posture, RobotState
 from skills import process, ramp, vision
 from skills.backend import DetectResult
-from skills.env import STUB_FAULT, STUB_OBJECTS, STUB_STATE_FILE, STUB_TIME_SCALE
-from skills.schema import ObstacleDistances, Posture, RobotState
 
 # Stub defaults: used when the env is unset (manual runs) and as the dispatcher's stub config defaults.
 DEFAULT_STATE_FILE = "logs/.stub_state.json"
 DEFAULT_TIME_SCALE = 0.1
 
-StubPosture = Literal["standing", "sitting"]  # the postures the stub can hold; a subset of schema.Posture
+StubPosture = Literal["standing", "sitting"]  # the postures the stub can hold; a subset of contract.schema.Posture
 STUB_POSTURES: tuple[StubPosture, ...] = get_args(StubPosture)
 DEFAULT_POSTURE: StubPosture = "standing"
 

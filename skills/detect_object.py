@@ -5,10 +5,11 @@ from __future__ import annotations
 import difflib
 import time
 
-from skills import backend, policy, runner, stub, vision_ipc
+from contract import policy
+from contract.schema import ErrorCode
+from skills import backend, runner, stub, vision_ipc
 from skills.coco import COCO_CLASSES
 from skills.motion import PROCESS_OVERHEAD_S
-from skills.schema import ErrorCode
 
 SUGGESTIONS_N = 3
 SUGGESTIONS_CUTOFF = 0.5

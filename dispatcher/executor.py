@@ -17,11 +17,11 @@ from typing import TYPE_CHECKING, Literal, Protocol
 
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
+from contract.env import child_env, robot_socket_path
+from contract.policy import SkillPolicy
 from skills import detect_object as vision_client
 from skills import read_state as read_state_utility
 from skills import stop_move as stop_move_utility
-from skills.env import child_env, robot_socket_path
-from skills.policy import SkillPolicy
 from skills.robot_ipc import MAX_TIMEOUT_S, Refused, RobotClient, ServiceUnavailable
 
 from . import prompts
@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 
 POLL_INTERVAL_S = 0.05  # wait-loop poll period (docs/safety.md)
 READER_JOIN_TIMEOUT_S = 2.0  # join timeout per reader thread (docs/safety.md)
-STDERR_TAIL_CHARS = 2000  # stderr kept for the log (skills/docs/skills.md)
+STDERR_TAIL_CHARS = 2000  # stderr kept for the log (contract/docs/contract.md)
 STOP_WAIT_S = 0.5  # wait for stop_sent or pong before the service counts as lost (tunable, docs/safety.md)
 LIVENESS_PERIOD_S = 0.5  # ping period on the control connection while a step runs (tunable, docs/safety.md)
 
@@ -212,7 +212,7 @@ class Executor:
             self.base_dir, robot_log_path(cfg.log.dir), robot_socket_path(cfg.log.dir), lambda: self._env(None)
         )
 
-    # --- environment and process start (skills/docs/skills.md) ----------------------------------
+    # --- environment and process start (contract/docs/contract.md) ------------------------------
 
     def _env(self, fault: str | None, lease_token: str | None = None) -> dict[str, str]:
         return child_env(
@@ -275,7 +275,7 @@ class Executor:
             return False
         return self._kill_locked(proc, cause)
 
-    # --- run (skills/docs/skills.md, docs/safety.md) -----------------------------------------------------------
+    # --- run (contract/docs/contract.md, skills/docs/skills.md, docs/safety.md) ---------------------------------
 
     def run(
         self,

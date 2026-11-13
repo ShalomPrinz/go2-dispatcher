@@ -15,7 +15,7 @@ from .. import prompts
 from .telegram_text import call_html, h, step_line, trim
 
 if TYPE_CHECKING:
-    from skills.state_store import Link
+    from contract.constants import Link
 
     from ..budget import MotionBudget
     from ..context import RequestReason, ReturnReason

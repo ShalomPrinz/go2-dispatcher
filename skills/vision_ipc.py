@@ -1,5 +1,5 @@
 """The vision service protocol and its client (skills/docs/skills.md): one JSON request and one JSON reply
-per connection, encoded as skills/ipc.py does. Standard library and skills only; imported by detect_object
+per connection, encoded as contract/wire.py does. Standard library, contract and skills only; imported by detect_object
 and by the service."""
 
 from __future__ import annotations
@@ -9,14 +9,14 @@ from dataclasses import asdict
 from multiprocessing.connection import Client
 from typing import TYPE_CHECKING
 
+from contract.env import VISION_SOCKET
+from contract.schema import ErrorCode
+from contract.wire import FAMILY, decode, encode
 from skills import runner
 from skills.backend import BackendNotConfigured, DetectorError, DetectResult, VisionUnavailable
-from skills.env import VISION_SOCKET
-from skills.ipc import FAMILY, decode, encode
-from skills.schema import ErrorCode
 
 if TYPE_CHECKING:
-    from skills.ipc import Conn
+    from contract.wire import Conn
 
 MAX_MESSAGE_BYTES = 4096
 

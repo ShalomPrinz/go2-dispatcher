@@ -1,12 +1,12 @@
-"""The executor parses the response line from skill stdout (skills/docs/skills.md)."""
+"""The executor parses the response line from skill stdout (contract/docs/contract.md)."""
 
 from __future__ import annotations
 
 import pytest
 
+from contract.schema import ErrorCode
 from dispatcher.executor import _parse_response
 from skills.runner import SkillOutcome, StateSampler, build_response, to_json
-from skills.schema import ErrorCode
 
 LINE = to_json(build_response("walk", SkillOutcome.ok(observations={}, timing={}), StateSampler(), 0.0))
 

@@ -5,15 +5,17 @@ from __future__ import annotations
 import math
 from typing import Any, NamedTuple
 
-from skills.manifest import Expectation, YawDelta
-from skills.robot_ipc import YAW_SIGN
+from contract.constants import YAW_SIGN
+from contract.manifest import Expectation, YawDelta
+from contract.schema import ErrorCode
 
 from .models import Fault, Posture, RobotState, SkillResponse, Verdict
 
 # Fault thresholds: assumed signatures, unverified on the robot (tunable) (dispatcher/docs/loop-and-context.md)
 FALLEN_TILT_RAD = 0.5  # |roll| or |pitch| above this (about 29 deg) is a fall; standing stays within 0.14 rad
 FAULT_MODES = frozenset({7})  # sport mode 7, damping: the robot is not holding itself up
-REJECTED_ERROR_CODES = frozenset({"sdk_error"})  # an SDK call returned non-zero (skills/docs/skills.md)
+# an SDK call returned non-zero; ErrorCode is a str, so the response's plain code matches (contract/docs/contract.md)
+REJECTED_ERROR_CODES = frozenset({ErrorCode.SDK_ERROR})
 
 __all__ = ["Verification", "detect_faults", "check_goal", "verify"]
 
@@ -54,7 +56,7 @@ def _yaw(yd: YawDelta, params: dict[str, Any], before: RobotState | None, after:
 
 
 def check_goal(expect: Expectation | None, params: dict[str, Any], response: SkillResponse | None) -> Verdict:
-    """Whether the step reached its declared goal (skills/docs/skills.md); every given key must hold."""
+    """Whether the step reached its declared goal (contract/docs/contract.md); every given key must hold."""
     if expect is None:
         return "unverified"
     if response is None:

@@ -7,9 +7,10 @@ from multiprocessing.connection import Listener
 
 import pytest
 
-from skills import ipc, vision_ipc, vision_service
+from contract import wire
+from contract.schema import ErrorCode
+from skills import vision_ipc, vision_service
 from skills.backend import CameraUnavailable, DetectResult, VisionUnavailable
-from skills.schema import ErrorCode
 
 
 class FakeDetector:
@@ -24,7 +25,7 @@ class FakeDetector:
 
 def serve_once(path, answer: bool) -> threading.Event:
     """Serve one connection; a silent server holds it open until the returned event is set."""
-    listener = Listener(str(path), family=ipc.FAMILY)
+    listener = Listener(str(path), family=wire.FAMILY)
     done = threading.Event()
 
     def run() -> None:

@@ -1,4 +1,4 @@
-"""The skill process environment contract (skills/docs/skills.md): every ``GO2_*`` variable the
+"""The skill process environment contract (contract/docs/contract.md): every ``GO2_*`` variable the
 executor sets, and the builder that sets them. Standard library only."""
 
 from __future__ import annotations

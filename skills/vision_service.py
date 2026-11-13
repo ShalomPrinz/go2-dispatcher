@@ -15,9 +15,10 @@ from multiprocessing.connection import Listener
 from types import FrameType
 from typing import NoReturn, Protocol
 
-from skills import backend, ipc, process, vision_ipc
+from contract import wire
+from contract.env import VISION_SOCKET
+from skills import backend, process, vision_ipc
 from skills.backend import DetectResult
-from skills.env import VISION_SOCKET
 
 READY_LINE = "ready"
 STARTUP_TIMEOUT_S = 30.0  # torch import + YOLO load + first predict + DDS init on the lab machine (tunable)
@@ -44,12 +45,12 @@ def make_detector() -> Detector:
     return StubDetector()
 
 
-def handle(conn: ipc.Conn, detector: Detector) -> None:
+def handle(conn: wire.Conn, detector: Detector) -> None:
     """Answer one request on ``conn``; a client that is gone or silent is dropped."""
     try:
         if not conn.poll(REQUEST_WAIT_S):
             return
-        request = ipc.decode(conn.recv_bytes(vision_ipc.MAX_MESSAGE_BYTES))
+        request = wire.decode(conn.recv_bytes(vision_ipc.MAX_MESSAGE_BYTES))
     except (OSError, EOFError, ValueError):
         traceback.print_exc(file=sys.stderr)
         return
@@ -62,7 +63,7 @@ def handle(conn: ipc.Conn, detector: Detector) -> None:
         traceback.print_exc(file=sys.stderr)
         reply = vision_ipc.error_reply(e)
     try:
-        conn.send_bytes(ipc.encode(reply))
+        conn.send_bytes(wire.encode(reply))
     except OSError:
         traceback.print_exc(file=sys.stderr)
 
@@ -90,7 +91,7 @@ def main() -> None:
     if os.path.exists(path):  # left by a service that was killed
         os.unlink(path)
     signal.signal(signal.SIGTERM, _on_sigterm)
-    with Listener(path, family=ipc.FAMILY) as listener:  # closing it removes the socket file
+    with Listener(path, family=wire.FAMILY) as listener:  # closing it removes the socket file
         os.chmod(path, SOCKET_MODE)
         process.write_raw_stdout(READY_LINE + "\n")
         print(f"vision service: ready on {path}", file=sys.stderr, flush=True)

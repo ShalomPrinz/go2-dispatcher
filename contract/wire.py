@@ -1,4 +1,4 @@
-"""What the vision and robot service protocols share (skills/docs/skills.md): JSON objects as UTF-8 bytes over
+"""What the vision and robot service protocols share (contract/docs/contract.md): JSON objects as UTF-8 bytes over
 multiprocessing.connection on a Unix socket, never pickle. Standard library only."""
 
 from __future__ import annotations

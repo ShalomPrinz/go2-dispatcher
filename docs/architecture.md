@@ -41,11 +41,12 @@ An operator sends a natural-language task over Telegram or the CLI. The LLM retu
 | Context assembly and the fixed texts the LLM and operator read | `context.py`, `prompts.py` | [loop-and-context.md](../dispatcher/docs/loop-and-context.md) |
 | LLM client, tool schema, infra retries | `llm.py` | [llm.md](../dispatcher/docs/llm.md) |
 | Plan validation, parameter bounds, motion budget | `llm.py`, `bounds.py`, `budget.py` | [loop-and-context.md](../dispatcher/docs/loop-and-context.md), [safety.md](safety.md) |
-| Skill registry and generated catalog; `SKILL.md` schema and parser | `registry.py`, `skills/manifest.py`, `skills/catalog/*/SKILL.md` | [skills.md](../skills/docs/skills.md) |
+| Skill registry and generated catalog; `SKILL.md` schema and parser | `registry.py`, `contract/manifest.py`, `skills/catalog/*/SKILL.md` | [skills.md](../skills/docs/skills.md), [contract.md](../contract/docs/contract.md) |
 | Executor: subprocesses, timeouts, kill, leases, stop path and fallback, state reads | `executor.py` | [safety.md](safety.md) |
 | Vision service lifecycle (start, restart before `detect_object`, stop) | `vision.py`, `skills/vision_service.py` | [running.md](running.md), [skills.md](../skills/docs/skills.md) |
 | Robot service lifecycle, state reads, motion primitives and lease (start, task-start read, state stream, stop, restart after loss) | `robot.py`, `executor.py`, `skills/robot_service.py` | [running.md](running.md), [skills.md](../skills/docs/skills.md#robot-service) |
 | Skill runtime, skills and utilities, real and stub backends, posture rule | `skills/` | [skills.md](../skills/docs/skills.md), [robot.md](../skills/docs/robot.md) |
+| Shared contract: skill response schema and error codes, policy types, process environment, wire framing, shared constants | `contract/` | [contract.md](../contract/docs/contract.md) |
 | Run log and index | `runlog.py` | [run-log.md](../dispatcher/docs/run-log.md) |
 | Configuration and `.env` | `config.py` | [configuration.md](configuration.md) |
 | Single-instance lock | `process_lock.py` | [safety.md](safety.md) |
@@ -103,9 +104,9 @@ Cross-cutting decisions. Decisions that belong to one topic are in that topic's 
 - **Runs offline by default.** Stub mode and the default test suite need no SDK, API key, network or robot; SDK, CycloneDDS and vision libraries are imported lazily, only on real-backend paths. `uv` and `pyproject.toml`, no `sys.path` changes ([setup.md](setup.md)).
 - **Every starting value is a config key or a named constant**, never inline, because almost all of them are expected to be tuned ([configuration.md](configuration.md)).
 - **Simple, inspectable mechanisms** over clever ones (for example fixed settle waits rather than motion detection, commanded rather than estimated motion budget), matching the project's scope and the student's background.
-- **Two services, `dispatcher/` and `skills/`, each holding its own source, `docs/` and `tests/`.** The dispatcher depends on skills (stub, policy base classes, COCO names, module names it starts); skills never import the dispatcher. Tests that need both services live in a root `tests/` folder ([testing.md](../tests/docs/testing.md#design-decisions)). Keeping code, unit tests and docs for one service in one folder makes that boundary visible and keeps each service's material in one place. A small shared root `docs/` holds what covers both services (project, architecture, safety, configuration, setup, running, roadmap, references); service docs live in the service's `docs/`.
-- **The service folder is the Python package** (`dispatcher`, `skills`), with `docs/` and `tests/` inside it and excluded from the wheel. Rejected: a `src` layout (packages under a top-level `src` folder), which puts two unrelated packages under one generic folder and separates them from their tests and docs; and a nested `dispatcher/dispatcher/` package folder, which adds a level without adding a boundary.
-- **Plain package names `dispatcher` and `skills`.** They match the folder and service names. The generic name `skills` could clash with another installed package; in this project's own virtual environment that is unlikely, and the short name reads naturally in imports and module strings.
+- **Three packages: `contract/`, `skills/` and `dispatcher/`, each holding its own source, `docs/` and `tests/`.** `contract` holds what the dispatcher, the skills and the services agree on (the skill response schema and error codes, the `SKILL.md` schema, the policy types, the process environment, the shared wire framing and domain constants) and imports no other project package; `skills` and `dispatcher` both import it. The dispatcher also depends on `skills` for what it starts and configures (module names, lifecycle constants, the stub, COCO names); `skills` never imports the dispatcher. Import-linter contracts enforce these directions ([testing.md](../tests/docs/testing.md#import-boundaries)). With the contract in its own package, a shared type or constant has one home that neither side's implementation modules own, so nobody imports an IPC client or a service module for a value, and a change to the agreement is visible as a change to `contract/`. Tests that need more than one package live in a root `tests/` folder ([testing.md](../tests/docs/testing.md#design-decisions)). A small shared root `docs/` holds what covers the whole system (project, architecture, safety, configuration, setup, running, roadmap, references); package docs live in the package's `docs/`. Rejected: two packages, `dispatcher/` and `skills/`, with the contract inside `skills/`; the contract modules sit among the skills, services and backends, a shared constant lives in whichever module needs it first, and the dispatcher imports implementation modules to read it.
+- **The package folder is the Python package** (`contract`, `dispatcher`, `skills`), with `docs/` and `tests/` inside it and excluded from the wheel. Rejected: a `src` layout (packages under a top-level `src` folder), which puts unrelated packages under one generic folder and separates them from their tests and docs; and a nested `dispatcher/dispatcher/` package folder, which adds a level without adding a boundary.
+- **Plain package names `contract`, `dispatcher` and `skills`.** They match the folder names. A generic name such as `skills` or `contract` could clash with another installed package; in this project's own virtual environment that is unlikely, and the short name reads naturally in imports and module strings.
 - **Skill manifests live in `skills/catalog/<name>/SKILL.md`**, next to the skill modules. The name matches the existing term: the `catalog` command and the catalog text the model sees are generated from them ([skills.md](../skills/docs/skills.md#catalog-and-registry-hash)).
 - **One `go2` command with subcommands** (`run`, `batch`, `catalog`, `state`, `bot`) and shared global options. Rejected: one console script per command (`go2-*`), which duplicates option handling and splits one tool into several names. The project and distribution name stays `go2-dispatcher`, matching the repository.
 
@@ -116,6 +117,9 @@ go2-dispatcher/
 ├── pyproject.toml, uv.lock     # packaging; extras: robot (SDK), vision (YOLO)
 ├── config.example.toml         # copy to config.toml
 ├── .env.example                # ANTHROPIC_API_KEY, TELEGRAM_BOT_TOKEN
+├── contract/                   # contract package: what dispatcher, skills and services agree on; imports no project package
+│   ├── docs/                   # contract.md
+│   └── tests/                  # unit/: contract unit tests (excluded from the wheel)
 ├── dispatcher/                 # dispatcher package; never imports the SDK
 │   ├── transports/             # build_dispatcher, CLI, Telegram
 │   ├── docs/                   # loop-and-context.md, llm.md, run-log.md
@@ -124,7 +128,7 @@ go2-dispatcher/
 │   ├── catalog/<name>/SKILL.md # the loaded skill set (config skills.dir)
 │   ├── docs/                   # skills.md, robot.md
 │   └── tests/                  # unit/, robot/ (opt-in): skills unit tests (excluded from the wheel)
-├── tests/                      # cross-service tests: integration/, shared helpers/, pytest_plugin.py (options)
+├── tests/                      # cross-package tests: integration/, shared helpers/, pytest_plugin.py (options)
 ├── docs/                       # shared documentation (index: docs/README.md)
 ├── logs/                       # run logs by provider and backend (gitignored)
 └── models/                     # YOLO weights (gitignored)

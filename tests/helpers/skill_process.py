@@ -10,8 +10,8 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from contract.env import STUB_OBJECTS
 from dispatcher.config import SECRET_ENV
-from skills.env import STUB_OBJECTS
 
 from .paths import REPO_ROOT, TEST_TIME_SCALE
 
@@ -25,7 +25,7 @@ def stub_env(
     fault: str | None = None,
     **extra: str,
 ) -> dict[str, str]:
-    """Environment like the executor's (skills/docs/skills.md) for the stub backend, rooted at tmp_path."""
+    """Environment like the executor's (contract/docs/contract.md) for the stub backend, rooted at tmp_path."""
     env = {k: v for k, v in os.environ.items() if k not in SECRET_ENV and not k.startswith("GO2_")}
     env.update(
         {

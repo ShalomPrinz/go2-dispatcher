@@ -1,5 +1,5 @@
 """Per-skill dispatcher policy: SkillPolicy and MotionCost, read by the dispatcher from each
-skill module's ``POLICY`` (skills/docs/skills.md). Standard library only."""
+skill module's ``POLICY`` (contract/docs/contract.md). Standard library only."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ class MotionCost:
 
 @dataclass(frozen=True)
 class SkillPolicy:
-    """Per-skill dispatcher policy, one module-level ``POLICY`` per skill (skills/docs/skills.md).
+    """Per-skill dispatcher policy, one module-level ``POLICY`` per skill (contract/docs/contract.md).
     ``timeout`` and ``cost`` are a constant or a function of the validated params; the dispatcher
     reads them only through ``timeout_s(params)`` and ``motion_cost(params)``."""
 

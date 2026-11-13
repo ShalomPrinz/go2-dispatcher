@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import time
 
-from skills import backend, local, policy, runner
+from contract import policy
+from contract.schema import ErrorCode
+from skills import backend, local, runner
 from skills.runner import SkillOutcome, StateSampler
-from skills.schema import ErrorCode
 
-TIMEOUT_S = 12.0  # covers one lost StopMove reply (tunable, skills/docs/skills.md)
+TIMEOUT_S = 12.0  # covers one lost StopMove reply (tunable, contract/docs/contract.md)
 SETTLE_S = 0.5
 
 POLICY = policy.SkillPolicy(name="stop_move", timeout=TIMEOUT_S)  # utility: zero cost, no observations

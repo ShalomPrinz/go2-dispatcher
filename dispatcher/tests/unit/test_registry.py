@@ -1,5 +1,5 @@
 """Registry: loading, discovery and POLICY errors, catalog golden file, registry hash
-(skills/docs/skills.md, tests/docs/testing.md)."""
+(contract/docs/contract.md, skills/docs/skills.md, tests/docs/testing.md)."""
 
 from __future__ import annotations
 
@@ -7,11 +7,11 @@ from pathlib import Path
 
 import pytest
 
+from contract.policy import SkillPolicy
 from dispatcher.llm import plan_tool_schema
 from dispatcher.models import RegistryError
 from dispatcher.prompts import system_text
 from dispatcher.registry import Registry, registry_hash
-from skills.policy import SkillPolicy
 from tests.helpers import REPO_ROOT
 
 SKILLS_DIR = REPO_ROOT / "skills" / "catalog"

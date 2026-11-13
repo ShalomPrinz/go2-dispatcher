@@ -10,8 +10,8 @@ import os
 import time
 from dataclasses import dataclass
 
-from skills.env import BACKEND
-from skills.schema import ErrorCode
+from contract.env import BACKEND
+from contract.schema import ErrorCode
 
 BACKENDS = ("real", "stub")
 
@@ -25,7 +25,7 @@ class StateUnavailable(Exception):
 
 
 class DetectorError(Exception):
-    """Base for detector failures; ``code`` is the skill error code (skills/docs/skills.md)."""
+    """Base for detector failures; ``code`` is the skill error code (contract/docs/contract.md)."""
 
     code = ErrorCode.DETECTOR_ERROR
 

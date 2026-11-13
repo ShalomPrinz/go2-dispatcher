@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from .config import Config, Provider
 
 if TYPE_CHECKING:
-    from skills.state_store import Link
+    from contract.constants import Link
 
     from .budget import MotionBudget
     from .context import PromptSurface, RequestReason, ReturnReason

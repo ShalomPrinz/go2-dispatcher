@@ -8,10 +8,10 @@ import threading
 
 import pytest
 
+from contract.env import STUB_FAULT, STUB_OBJECTS, STUB_STATE_FILE, STUB_TIME_SCALE
+from contract.schema import ObstacleDistances
 from skills import real, robot_ipc, robot_service, stub, turn, vision, walk
-from skills.env import STUB_FAULT, STUB_OBJECTS, STUB_STATE_FILE, STUB_TIME_SCALE
 from skills.robot_ipc import MoveTarget
-from skills.schema import ObstacleDistances
 from skills.state_store import StateStore
 from skills.tests.fake_clock import Clock
 

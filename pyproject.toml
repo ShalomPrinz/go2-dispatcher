@@ -37,11 +37,11 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["dispatcher", "skills"]
-exclude = ["dispatcher/docs", "dispatcher/tests", "skills/docs", "skills/tests", "skills/catalog"]
+packages = ["dispatcher", "skills", "contract"]
+exclude = ["dispatcher/docs", "dispatcher/tests", "skills/docs", "skills/tests", "skills/catalog", "contract/docs", "contract/tests"]
 
 [tool.pytest.ini_options]
-testpaths = ["dispatcher/tests", "skills/tests", "tests", ".claude/hooks/tests", ".claude/scripts/tests"]
+testpaths = ["dispatcher/tests", "skills/tests", "contract/tests", "tests", ".claude/hooks/tests", ".claude/scripts/tests"]
 addopts = "-p tests.pytest_plugin"   # options and marker gating (tests/docs/testing.md)
 timeout = 30
 markers = [
@@ -51,7 +51,7 @@ markers = [
 ]
 
 [tool.coverage.run]                     # opt-in: uv run pytest --cov (tests/docs/testing.md)
-source = ["dispatcher", "skills"]
+source = ["dispatcher", "skills", "contract"]
 branch = true
 patch = ["subprocess", "_exit"]         # measure skill and CLI subprocesses; skills end with os._exit
 
@@ -60,7 +60,7 @@ show_missing = true
 skip_covered = true
 
 [tool.importlinter]                     # import boundaries: uv run lint-imports (tests/docs/testing.md)
-root_packages = ["skills", "dispatcher", "tests"]
+root_packages = ["skills", "dispatcher", "contract", "tests"]
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
@@ -69,15 +69,31 @@ type = "forbidden"
 source_modules = ["skills"]
 forbidden_modules = ["dispatcher", "pydantic", "yaml"]
 ignore_imports = [
-  "skills.manifest -> pydantic",     # the SKILL.md parser runs in the dispatcher only
-  "skills.manifest -> yaml",
+  "contract.manifest -> pydantic",   # skills.tests may import the parser; skill code may not (protected below)
+  "contract.manifest -> yaml",
+]
+
+[[tool.importlinter.contracts]]
+name = "Contract imports no other project package"
+type = "forbidden"                      # tests is listed so no chain through tests.helpers hides one
+source_modules = ["contract"]
+forbidden_modules = ["skills", "dispatcher", "tests"]
+
+[[tool.importlinter.contracts]]
+name = "Contract imports neither pydantic nor yaml, except the SKILL.md parser"
+type = "forbidden"
+source_modules = ["contract"]
+forbidden_modules = ["pydantic", "yaml"]
+ignore_imports = [
+  "contract.manifest -> pydantic",   # the SKILL.md parser runs in the dispatcher only
+  "contract.manifest -> yaml",
 ]
 
 [[tool.importlinter.contracts]]
 name = "Only the dispatcher and skill tests import the SKILL.md parser"
-type = "protected"                      # a forbidden contract skips skills -> skills.manifest as overlapping
-protected_modules = ["skills.manifest"]
-allowed_importers = ["dispatcher", "skills.tests"]
+type = "protected"                      # the ignored imports above hide a chain through the parser; this closes it
+protected_modules = ["contract.manifest"]
+allowed_importers = ["dispatcher", "skills.tests", "contract.tests"]
 
 [[tool.importlinter.contracts]]
 name = "Only the vision service imports the detector stack"
@@ -92,7 +108,7 @@ source_modules = ["skills.walk", "skills.turn", "skills.sit", "skills.stretch", 
 forbidden_modules = ["skills.real", "skills.local", "skills.robot_service", "unitree_sdk2py", "cyclonedds"]
 
 [tool.basedpyright]                     # type check: uv run basedpyright (tests/docs/testing.md)
-include = ["dispatcher", "skills", "tests"]
+include = ["dispatcher", "skills", "contract", "tests"]
 exclude = ["**/__pycache__", "**/.*"]   # replaces the defaults; .venv and caches sit outside include anyway
 typeCheckingMode = "basic"
 pythonVersion = "3.10"

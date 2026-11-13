@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import math
 
+from contract.manifest import Expectation, YawDelta
+from contract.schema import SCHEMA_VERSION
 from dispatcher.models import Posture, RobotState, SkillError, SkillResponse
 from dispatcher.verification import verify
-from skills.manifest import Expectation, YawDelta
-from skills.schema import SCHEMA_VERSION
 
 TURN = Expectation(yaw_delta=YawDelta(param="angle_deg", direction_param="direction", tolerance_deg=10))
 SIT = Expectation(posture="sitting")

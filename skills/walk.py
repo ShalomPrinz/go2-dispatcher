@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from skills import motion, policy, ramp, runner
+from contract import policy
+from skills import motion, ramp, runner
 
 VELOCITY_MPS = 0.3
 LEAD_S = ramp.LINEAR_S  # extra command time for the start ramp (skills/docs/robot.md)

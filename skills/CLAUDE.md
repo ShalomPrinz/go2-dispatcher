@@ -1,6 +1,6 @@
 # skills/CLAUDE.md
 
-The `skills` package: the skill contract and response schema, the `SKILL.md` catalog, the skills themselves, the stub backend and fault injection, the real Go2 backend, state sampling and posture. Repo-wide rules are in the root [CLAUDE.md](../CLAUDE.md).
+The `skills` package: the `SKILL.md` catalog, the skills themselves, the robot and vision services, the stub backend and fault injection, the real Go2 backend, state sampling and posture. The contract the skills follow is the `contract` package ([contract/CLAUDE.md](../contract/CLAUDE.md)). Repo-wide rules are in the root [CLAUDE.md](../CLAUDE.md).
 
 ## Commands
 
@@ -17,7 +17,8 @@ uv run go2 --fault 1:hang run "…"              # stub fault injection: error, 
 
 | Doc | Covers |
 |---|---|
-| [skills.md](docs/skills.md) | `SKILL.md` frontmatter, catalog and registry hash, invocation, response schema, error codes, timeout and motion-cost policies, stub and fault injection, robot and vision services, adding a skill, running one by hand |
+| [skills.md](docs/skills.md) | The skills, catalog and registry hash, import rules, stub and fault injection, robot and vision services, adding a skill, running one by hand |
+| [contract.md](../contract/docs/contract.md) | `SKILL.md` frontmatter and body, invocation and environment, response schema, error codes, timeout and motion-cost policies, wire framing, shared constants |
 | [robot.md](docs/robot.md) | Robot facts, SDK and DDS usage, state sampling, posture rule, settle waits, real backend, supervised robot checklist |
 | [safety.md](../docs/safety.md) | Stop path, motion budget, bounds, supervised-operation rules |
 | [configuration.md](../docs/configuration.md) | `robot.*` and `stub.*` config keys, `.env` |
@@ -26,12 +27,12 @@ uv run go2 --fault 1:hang run "…"              # stub fault injection: error, 
 
 ## Gotchas
 
-- The docs define the skill contract; code follows [skills.md](docs/skills.md), not the other way round.
+- The docs define the skill contract; code follows [contract.md](../contract/docs/contract.md) and [skills.md](docs/skills.md), not the other way round.
 - `SKILL.md` frontmatter and body are fixed texts: any wording change changes the catalog, the registry hash and `catalog.txt`, and makes runs incomparable. Regenerate with `--update-golden` and review the diff ([skills.md](docs/skills.md#catalog-and-registry-hash)).
-- The `SKILL.md` body is model-facing and parsed against a fixed section template with a length cap; human notes go in the docs, never in a `SKILL.md` ([skills.md](docs/skills.md#skillmd-body)).
+- The `SKILL.md` body is model-facing and parsed against a fixed section template with a length cap; human notes go in the docs, never in a `SKILL.md` ([contract.md](../contract/docs/contract.md#skillmd-body)).
 - Real-backend code (`real.py`) cannot be run from an agent: no `--backend real`, no `robot.backend = "real"`, no `--run-robot`. Verify it with unit tests and the stub only ([safety.md](../docs/safety.md#supervised-operation-rules)).
 - Mark robot facts not yet checked on the robot as *unverified*. Checklist results go only in [robot.md](docs/robot.md#results), and only from a supervised session reported by a person.
-- Importing a skill module must do nothing; `skills` never imports `dispatcher`, and third-party imports live inside functions in `real.py` ([skills.md](docs/skills.md#no-side-effects-on-import)).
-- Exactly one JSON line on stdout, via `runner.emit()`; everything else goes to stderr ([skills.md](docs/skills.md#invocation)).
+- Importing a skill module must do nothing; `skills` imports `contract` but never `dispatcher` or `contract.manifest`, and third-party imports live inside functions in `real.py` ([skills.md](docs/skills.md#no-side-effects-on-import)).
+- Exactly one JSON line on stdout, via `runner.emit()`; everything else goes to stderr ([contract.md](../contract/docs/contract.md#invocation)).
 - Skills wait through `backend.sleep()`, never `time.sleep`, so the stub time scale applies ([skills.md](docs/skills.md#stub-backend)).
 - Skills apply no defaults; the dispatcher fills them. Run by hand, pass every param ([skills.md](docs/skills.md#running-a-skill-by-hand)).

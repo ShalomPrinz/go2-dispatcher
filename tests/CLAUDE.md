@@ -6,11 +6,11 @@ The test infrastructure: the pytest plugin, opt-in flags and markers, shared hel
 
 ```bash
 uv run pytest -q                               # default suite; must pass on any machine after uv sync
-uv run pytest -q dispatcher/tests skills/tests # unit tests of both packages only
+uv run pytest -q dispatcher/tests skills/tests contract/tests # package unit tests only
 uv run pytest -q tests                         # cross-service tests only
 uv run pytest -m integration                   # real subprocesses on the stub backend
 uv run pytest -q --durations=10                # slowest tests; report wall time before and after a speed change
-uv run lint-imports                            # import contracts (skills boundary); must pass before a commit
+uv run lint-imports                            # import contracts (skills and contract boundaries); must pass before a commit
 uv run pytest --cov                            # branch coverage incl. subprocesses; opt-in, about 60 % slower
 uv run pytest --update-golden                  # only after a behaviour change; then git diff dispatcher/tests/golden
 uv run pytest --run-live -s tests/integration/test_live_llm.py  # real API, needs ANTHROPIC_API_KEY; paid; only when a brief asks, never tests-dev
@@ -31,7 +31,7 @@ uv run pytest --run-robot                      # real Go2; supervised session on
 - The default suite stays offline and fast: no network, API key, SDK or robot. Anything else is marked `live_llm` or `robot` ([testing.md](docs/testing.md#writing-tests)).
 - Every test has a 30 s timeout (`pytest-timeout`); a hang shows as a timeout, not a stuck run ([testing.md](docs/testing.md#coverage)).
 - Options live in `tests/pytest_plugin.py`, loaded by `addopts`, not a root `conftest.py`, so they work for any subset ([testing.md](docs/testing.md#design-decisions)).
-- Package unit tests live in `dispatcher/tests/` and `skills/tests/`; anything spawning subprocesses or needing both packages goes in root `tests/`. `skills/tests/` never imports `dispatcher` ([testing.md](docs/testing.md#layout)).
+- Package unit tests live in `dispatcher/tests/`, `skills/tests/` and `contract/tests/`; anything spawning subprocesses or needing both packages goes in root `tests/`. `skills/tests/` never imports `dispatcher`; `contract/tests/` imports only `contract` ([testing.md](docs/testing.md#layout)).
 - Golden files change only with a behaviour change (fixed texts, renderer, `SKILL.md`), never to make a test pass. Regenerate, review the diff; it also changes the registry hash ([testing.md](docs/testing.md#golden-files)).
 - CI runs `lint-imports` and the default suite only; lint and format stay out of CI by decision ([testing.md](docs/testing.md#design-decisions)).
 - A change to how tests run (flags, markers, helpers, layout, CI) updates [testing.md](docs/testing.md) in the same change.

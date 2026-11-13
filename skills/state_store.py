@@ -1,5 +1,5 @@
 """The latest robot state message with its sequence number and arrival time, shared by the robot service and
-the utilities' own DDS reads (skills/docs/robot.md). Standard library and skills only."""
+the utilities' own DDS reads (skills/docs/robot.md). Standard library and contract only."""
 
 from __future__ import annotations
 
@@ -8,14 +8,13 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 
-from skills.schema import RobotState
+from contract.constants import Link
+from contract.schema import RobotState
 
 STATE_WAIT_S = 1.0  # longest wait for a message newer than the request (skills/docs/robot.md)
 LINK_GAP_S = 0.5  # no message for this long -> link "down" (tunable, skills/docs/robot.md)
-
-Link = Literal["up", "down"]
 
 
 @dataclass(frozen=True)

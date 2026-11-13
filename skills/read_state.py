@@ -9,9 +9,10 @@ from __future__ import annotations
 import sys
 import traceback
 
-from skills import backend, local, policy, runner
+from contract import policy
+from contract.schema import ErrorCode
+from skills import backend, local, runner
 from skills.runner import SkillOutcome, StateSampler
-from skills.schema import ErrorCode
 
 TIMEOUT_S = 10.0
 

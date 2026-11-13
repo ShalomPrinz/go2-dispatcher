@@ -1,5 +1,5 @@
 """The five skills on the stub backend, with the robot service and an armed lease: contract, stub behaviour,
-faults, orphan watchdog (skills/docs/skills.md, tests/docs/testing.md)."""
+faults, orphan watchdog (contract/docs/contract.md, skills/docs/skills.md, tests/docs/testing.md)."""
 
 from __future__ import annotations
 
@@ -12,8 +12,8 @@ import time
 import pytest
 from pydantic import TypeAdapter
 
+from contract.schema import SkillResponse
 from skills import stub
-from skills.schema import SkillResponse
 from tests.helpers import REPO_ROOT, run_module, single_response, stub_env
 from tests.integration import robot, vision
 
@@ -87,17 +87,22 @@ def test_backend_not_configured(tmp_path):
 
 
 def test_fresh_interpreter_import_is_side_effect_free():
-    """Every skills module imports without heavy modules or output (skills/docs/skills.md)."""
+    """Every skills module, and every contract module a skill loads, imports without heavy modules or output."""
     code = r"""
 import contextlib, importlib, io, json, pkgutil, sys
-import skills
-names = sorted(m.name for m in pkgutil.iter_modules(skills.__path__))
+import contract, skills
+# contract.manifest is the dispatcher-only SKILL.md parser; no skill process loads it
+names = sorted(
+    [f"skills.{m.name}" for m in pkgutil.iter_modules(skills.__path__)]
+    + [f"contract.{m.name}" for m in pkgutil.iter_modules(contract.__path__) if m.name != "manifest"]
+)
 buf = io.StringIO()
 with contextlib.redirect_stdout(buf):
-    mods = {n: importlib.import_module("skills." + n) for n in names}
+    mods = {n: importlib.import_module(n) for n in names}
 heavy = [m for m in ("unitree_sdk2py", "cv2", "ultralytics", "numpy", "cyclonedds")
          if m in sys.modules]
-policies = {n: getattr(m, "POLICY", None) and m.POLICY.name for n, m in mods.items()}
+policies = {n.removeprefix("skills."): getattr(m, "POLICY", None) and m.POLICY.name
+            for n, m in mods.items() if n.startswith("skills.")}
 print(json.dumps({"modules": names, "heavy": heavy, "out": buf.getvalue(),
                   "policies": policies}))
 """
@@ -112,24 +117,27 @@ print(json.dumps({"modules": names, "heavy": heavy, "out": buf.getvalue(),
     assert proc.returncode == 0, proc.stderr
     out = json.loads(proc.stdout.strip().splitlines()[-1])
     assert {
-        "real",
-        "stub",
-        "policy",
-        "process",
-        "runner",
-        "backend",
-        "motion",
-        "stop_move",
-        "read_state",
-        "vision_ipc",
-        "vision_service",
-        "ipc",
-        "local",
-        "robot_ipc",
-        "robot_service",
-        "state_store",
-        "real_detector",
-        *SKILLS,
+        "contract.constants",
+        "contract.env",
+        "contract.policy",
+        "contract.schema",
+        "contract.wire",
+        "skills.real",
+        "skills.stub",
+        "skills.process",
+        "skills.runner",
+        "skills.backend",
+        "skills.motion",
+        "skills.stop_move",
+        "skills.read_state",
+        "skills.vision_ipc",
+        "skills.vision_service",
+        "skills.local",
+        "skills.robot_ipc",
+        "skills.robot_service",
+        "skills.state_store",
+        "skills.real_detector",
+        *(f"skills.{n}" for n in SKILLS),
     } <= set(out["modules"])
     assert out["heavy"] == [] and out["out"] == "" and proc.stderr == ""
     for n in SKILLS:

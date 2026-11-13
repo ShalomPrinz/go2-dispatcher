@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+from contract.schema import ErrorCode
 from dispatcher import prompts
 from dispatcher.executor import _parse_response, _step_outcome
 from dispatcher.models import StopCause
 from skills.runner import SkillOutcome, StateSampler, build_response, to_json
-from skills.schema import ErrorCode
 
 
 def _reply(outcome: SkillOutcome):

@@ -22,14 +22,15 @@ uv run go2 report [FOLDER]                     # latency report from existing ru
 | [configuration.md](../docs/configuration.md) | Config keys, validation rules, exit codes, CLI overrides, `.env` |
 | [running.md](../docs/running.md) | `go2` CLI, Telegram bot, stub vs real, single-instance lock |
 | [testing.md](../tests/docs/testing.md) | Test layout, helpers and fakes, markers, golden files |
-| [skills.md](../skills/docs/skills.md) | Skill contract and response schema the executor consumes, registry hash |
+| [contract.md](../contract/docs/contract.md) | `SKILL.md` format, invocation, response schema, error codes and policies the dispatcher consumes |
+| [skills.md](../skills/docs/skills.md) | Catalog generation, registry hash, stub and fault injection, robot and vision services |
 
 ## Gotchas
 
 - Fixed texts in `prompts.py` change the golden files and make runs incomparable; only the system text (`SYSTEM_TEMPLATE`) also changes the registry hash ([skills.md](../skills/docs/skills.md#catalog-and-registry-hash)). Regenerate with `--update-golden` and review the diff.
 - Changes to `context.py` (step rendering, user message) change the `context_*.txt` golden files; a `SKILL.md` change on the skills side changes `catalog.txt`.
 - `anthropic` and `httpx` are imported lazily inside `llm.py`; a top-level `anthropic` import breaks the "CLI does not import `anthropic`" test ([llm.md](docs/llm.md#design-decisions)).
-- The dispatcher imports `skills`, never the reverse. `dispatcher/tests/` holds unit tests only; tests that spawn subprocesses or need both packages go in root `tests/` ([testing.md](../tests/docs/testing.md#layout)).
+- The dispatcher imports `contract` and `skills`, never the reverse. `dispatcher/tests/` holds unit tests only; tests that spawn subprocesses or need both packages go in root `tests/` ([testing.md](../tests/docs/testing.md#layout)).
 - No `temperature`, no forced `tool_choice` (Anthropic; OpenRouter forces it), no prompt caching: deliberate, not omissions ([llm.md](docs/llm.md#design-decisions)).
 - Nothing raw (stderr, tracebacks, provider error text) may enter the model context ([loop-and-context.md](docs/loop-and-context.md#design-decisions)).
 - A new or changed config key updates [configuration.md](../docs/configuration.md) in the same change.

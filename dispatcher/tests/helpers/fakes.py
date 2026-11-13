@@ -8,6 +8,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
+from contract.schema import SCHEMA_VERSION
 from dispatcher.executor import ExecOutcome, ExecResult
 from dispatcher.models import (
     ObstacleDistances,
@@ -21,7 +22,6 @@ from dispatcher.models import (
 )
 from dispatcher.registry import SkillDescriptor
 from dispatcher.runlog import TaskObserver
-from skills.schema import SCHEMA_VERSION
 
 FAKE_CLOCK_START = 1000.0
 

@@ -15,9 +15,10 @@ from typing import NamedTuple, cast
 
 import pytest
 
-from skills import ipc, robot_ipc, robot_service, state_store
+from contract import wire
+from contract.schema import RobotState
+from skills import robot_ipc, robot_service, state_store
 from skills.robot_ipc import LinkEvent, Refused, RobotClient, StateReply
-from skills.schema import RobotState
 from skills.state_store import StateStore
 from skills.tests.fake_clock import Clock
 
@@ -69,7 +70,7 @@ def serving(path: str, store: StateStore) -> Iterator[Served]:
     robot = Recorder()
     motion = robot_service.Motion(robot, lambda s, abort: abort.wait(s), store, sim=False)
     motion.start()
-    listener = Listener(path, family=ipc.FAMILY)
+    listener = Listener(path, family=wire.FAMILY)
 
     def accept() -> None:
         while True:
@@ -147,20 +148,20 @@ def test_stream_sends_new_samples_and_link_changes(tmp_path):
 
 def test_version_mismatch_is_refused_both_ways(service, tmp_path):
     path, _, _ = service
-    with Client(path, family=ipc.FAMILY) as conn:
-        conn.send_bytes(ipc.encode({"v": 99, "op": "hello"}))
-        reply = ipc.decode(conn.recv_bytes())
+    with Client(path, family=wire.FAMILY) as conn:
+        conn.send_bytes(wire.encode({"v": 99, "op": "hello"}))
+        reply = wire.decode(conn.recv_bytes())
         assert reply["error"]["code"] == robot_ipc.ERR_PROTOCOL_VERSION
         with pytest.raises(EOFError):  # the service closes the connection
             conn.recv_bytes()
 
     other = str(tmp_path / "other.sock")
-    with Listener(other, family=ipc.FAMILY) as listener:
+    with Listener(other, family=wire.FAMILY) as listener:
 
         def answer() -> None:
             with listener.accept() as conn:
                 conn.recv_bytes()
-                conn.send_bytes(ipc.encode({"v": 2, "op": "hello"}))
+                conn.send_bytes(wire.encode({"v": 2, "op": "hello"}))
 
         threading.Thread(target=answer, daemon=True).start()
         with pytest.raises(robot_ipc.ProtocolMismatch):
@@ -244,7 +245,7 @@ def test_deadline_ends_the_lease_and_stops():
         robot, lambda s, abort: abort.wait(s), StateStore(lambda m: m), sim=False, clock=clock
     )
     threading.Thread(target=motion._loop, daemon=True).start()
-    conn = cast(ipc.Conn, object())  # a lease binds to its connection by identity
+    conn = cast(wire.Conn, object())  # a lease binds to its connection by identity
     motion.arm("t", 0.3)
     job = motion.submit(conn, "t", motion.move(0.3, 0.0, 0.0, 10.0, None, None))
     assert until(lambda: "Move" in robot.calls, wait_s=10.0)
@@ -277,8 +278,8 @@ def test_closing_the_lease_connection_stops(service):
     path, _, robot = service
     with RobotClient.connect(path, control=True) as control:
         control.arm("t", 30.0)
-        with Client(path, family=ipc.FAMILY) as skill:  # a skill killed mid-walk: no reply is read
-            skill.send_bytes(ipc.encode(robot_ipc.message("move", token="t", vx=0.3, vy=0.0, vyaw=0.0, duration_s=10)))
+        with Client(path, family=wire.FAMILY) as skill:  # a skill killed mid-walk: no reply is read
+            skill.send_bytes(wire.encode(robot_ipc.message("move", token="t", vx=0.3, vy=0.0, vyaw=0.0, duration_s=10)))
             assert until(lambda: "Move" in robot.calls)
         assert until(lambda: stopped_after_moving(robot))
         with RobotClient.connect(path) as late, pytest.raises(Refused, match="no lease"):
@@ -359,7 +360,7 @@ def test_disarm_reports_the_failed_stop_at_the_deadline():
         robot, lambda s, abort: abort.wait(s), StateStore(lambda m: m), sim=False, clock=clock
     )
     threading.Thread(target=motion._loop, daemon=True).start()
-    conn = cast(ipc.Conn, object())  # a lease binds to its connection by identity
+    conn = cast(wire.Conn, object())  # a lease binds to its connection by identity
     motion.arm("t", 0.3)
     robot.stops = [7]
     job = motion.submit(conn, "t", motion.move(0.3, 0.0, 0.0, 10.0, None, None))
@@ -378,8 +379,8 @@ def test_disarm_waits_for_the_stop_of_a_closed_lease_connection(service):
     robot.stops, robot.stop_delay_s = [8], 0.3
     with RobotClient.connect(path, control=True) as control:
         control.arm("t", 30.0)
-        with Client(path, family=ipc.FAMILY) as skill:  # a skill killed mid-walk: no reply is read
-            skill.send_bytes(ipc.encode(robot_ipc.message("move", token="t", vx=0.3, vy=0.0, vyaw=0.0, duration_s=10)))
+        with Client(path, family=wire.FAMILY) as skill:  # a skill killed mid-walk: no reply is read
+            skill.send_bytes(wire.encode(robot_ipc.message("move", token="t", vx=0.3, vy=0.0, vyaw=0.0, duration_s=10)))
             assert until(lambda: "Move" in robot.calls)
         assert until(lambda: "StopMove" in robot.calls)
         failed = control.disarm()

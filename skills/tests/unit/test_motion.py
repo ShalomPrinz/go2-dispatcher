@@ -11,9 +11,9 @@ import threading
 
 import pytest
 
+from contract.schema import RobotState
 from skills import backend, local, motion, process, robot_ipc, robot_service, runner, stop_move
 from skills.robot_ipc import MoveResult, MoveTarget
-from skills.schema import RobotState
 from skills.state_store import StateStore
 from skills.tests.fake_clock import Clock
 

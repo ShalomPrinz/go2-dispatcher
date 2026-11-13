@@ -6,7 +6,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Any
 
-from skills.manifest import ParamSpec
+from contract.manifest import ParamSpec
 
 from . import prompts
 from .budget import MotionBudget

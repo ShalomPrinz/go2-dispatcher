@@ -1,6 +1,7 @@
-"""Skill registry: discovery, entrypoint and POLICY checks, catalog rendering, registry hash (skills/docs/skills.md).
+"""Skill registry: discovery, entrypoint and POLICY checks, catalog rendering, registry hash
+(contract/docs/contract.md, skills/docs/skills.md).
 
-SKILL.md parsing (frontmatter and body sections) and validation live in skills/manifest.py.
+SKILL.md parsing (frontmatter and body sections) and validation live in contract/manifest.py.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from skills.manifest import (
+from contract.manifest import (
     SKILL_FILE,
     Expectation,
     ParamSpec,
@@ -20,7 +21,7 @@ from skills.manifest import (
     SkillSection,
     parse_skill_file,
 )
-from skills.policy import SkillPolicy
+from contract.policy import SkillPolicy
 
 from .models import RegistryError
 

@@ -1,5 +1,5 @@
 """Shared skill helpers in process: policy, params parsing, backend selection, stdout capture
-(skills/docs/skills.md).
+(contract/docs/contract.md).
 One subprocess case per mechanism stays in tests/integration."""
 
 from __future__ import annotations
@@ -10,10 +10,11 @@ import sys
 
 import pytest
 
-from skills import backend, env, process, robot_ipc, runner, sit, turn, walk
-from skills.policy import MotionCost
+from contract import env
+from contract.policy import MotionCost
+from contract.schema import ErrorCode, RobotState
+from skills import backend, process, robot_ipc, runner, sit, turn, walk
 from skills.runner import InvalidParams, SkillOutcome, StateSampler, parse_params
-from skills.schema import ErrorCode, RobotState
 from skills.tests.fake_clock import Clock
 
 

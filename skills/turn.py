@@ -5,8 +5,10 @@ from __future__ import annotations
 import math
 from dataclasses import replace
 
-from skills import motion, policy, ramp, runner
-from skills.robot_ipc import YAW_SIGN, MoveTarget
+from contract import policy
+from contract.constants import YAW_SIGN
+from skills import motion, ramp, runner
+from skills.robot_ipc import MoveTarget
 
 YAW_RATE_RPS = 1.0  # rad/s
 CAP_FACTOR = 1.25  # cap on the closed-loop turn: nominal time x factor + CAP_S (tunable, skills/docs/robot.md)

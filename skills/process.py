@@ -1,5 +1,5 @@
 """The skill process's own resources: the saved stdout fd that carries the one response line,
-and the orphan watchdog on the parent dispatcher (skills/docs/skills.md). Standard library only."""
+and the orphan watchdog on the parent dispatcher (contract/docs/contract.md). Standard library only."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import threading
 import time
 from collections.abc import Callable
 
-from skills.env import PARENT_PID
+from contract.env import PARENT_PID
 
 WATCHDOG_POLL_S = 0.2
 ORPHAN_GRACE_S = 2.0

@@ -8,6 +8,8 @@ from typing import Any
 
 import pytest
 
+from contract.policy import MotionCost
+from contract.schema import SCHEMA_VERSION
 from dispatcher.budget import MotionBudget
 from dispatcher.context import (
     ContextInput,
@@ -31,8 +33,6 @@ from dispatcher.models import (
     TaskSummary,
 )
 from dispatcher.registry import Registry
-from skills.policy import MotionCost
-from skills.schema import SCHEMA_VERSION
 from tests.helpers import REPO_ROOT
 
 GOLDEN = REPO_ROOT / "dispatcher" / "tests" / "golden"

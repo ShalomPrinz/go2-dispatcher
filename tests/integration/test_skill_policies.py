@@ -1,5 +1,5 @@
 """Skill policies: timeouts cover the commanded motion and the SDK reply waits, motion costs
-(skills/docs/skills.md)."""
+(contract/docs/contract.md)."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ import math
 
 import pytest
 
+from contract.policy import MotionCost
 from dispatcher.registry import Registry
 from skills import detect_object, motion, read_state, robot_ipc, sit, stop_move, stretch, turn, walk
-from skills.policy import MotionCost
 from tests.helpers import REPO_ROOT
 
 REGISTRY = Registry.load(REPO_ROOT / "skills" / "catalog")

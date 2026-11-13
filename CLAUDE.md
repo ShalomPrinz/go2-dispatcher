@@ -20,7 +20,7 @@ uv run go2 run "turn left 90 degrees"          # one task on the stub (needs ANT
 uv run go2 --reset-stub                        # reset the stub posture and exit
 ```
 
-Package commands (golden files, fault injection, opt-in tests) live in the folder CLAUDE.md files: [dispatcher/CLAUDE.md](dispatcher/CLAUDE.md), [skills/CLAUDE.md](skills/CLAUDE.md), [tests/CLAUDE.md](tests/CLAUDE.md). They load when Claude works in that folder.
+Package commands (golden files, fault injection, opt-in tests) live in the folder CLAUDE.md files: [contract/CLAUDE.md](contract/CLAUDE.md), [dispatcher/CLAUDE.md](dispatcher/CLAUDE.md), [skills/CLAUDE.md](skills/CLAUDE.md), [tests/CLAUDE.md](tests/CLAUDE.md). They load when Claude works in that folder.
 
 ## Documentation rules
 
@@ -53,7 +53,7 @@ Package commands (golden files, fault injection, opt-in tests) live in the folde
 
 - The main session is an **orchestrator**: it always delegates code and doc changes to a project agent (`.claude/agents/`), one task at a time, with a self-contained brief written with the `delegate` skill (`.claude/skills/delegate/`). It does not edit `dispatcher/` or `skills/` itself. Exception: the docs under `main` in [.claude/ownership.json](.claude/ownership.json) belong to the main session, which edits them itself; the map assigns every other path.
   - `dispatcher-dev`: anything under `dispatcher/` or owned by `dispatcher/docs/`.
-  - `skills-dev`: anything under `skills/` or owned by `skills/docs/`.
+  - `skills-dev`: anything under `contract/` or `skills/`, or owned by `contract/docs/` or `skills/docs/`.
   - `tests-dev`: test infrastructure only (pytest plugin, helpers, markers, golden mechanism, coverage, CI) and `tests/docs/testing.md`. Tests of package behaviour go with the package agent.
   - `claude-config-dev`: anything under `.claude/` (agents, skills, hooks, settings). `CLAUDE.md` files go with the agent that owns the folder.
   - A task that touches both packages is split into one task per agent, run in sequence (the side that defines the contract first). Each agent stops and reports when it needs a change on the other side.

@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import os
 
+from contract.env import YOLO_WEIGHTS
 from skills import real, vision
 from skills.backend import BadFrame, CameraUnavailable, DetectResult, WeightsMissing
-from skills.env import YOLO_WEIGHTS
 
 
 class RealDetector:

@@ -30,9 +30,12 @@ CONTRACTS: tuple[tuple[str, str], ...] = (
     ("config.example.toml", "config keys (docs/configuration.md)"),
     ("dispatcher/models.py", "plan schema and step results (dispatcher/docs/loop-and-context.md)"),
     ("dispatcher/llm.py", "submit_plan tool schema and request (dispatcher/docs/llm.md)"),
-    ("skills/schema.py", "skill response and error codes (skills/docs/skills.md)"),
-    ("skills/manifest.py", "SKILL.md schema and body sections (skills/docs/skills.md)"),
-    ("skills/env.py", "skill process environment (skills/docs/skills.md)"),
+    ("contract/schema.py", "skill response and error codes (contract/docs/contract.md)"),
+    ("contract/manifest.py", "SKILL.md schema and body sections (contract/docs/contract.md)"),
+    ("contract/env.py", "skill process environment (contract/docs/contract.md)"),
+    ("contract/policy.py", "skill policy types (contract/docs/contract.md)"),
+    ("contract/wire.py", "service wire framing (contract/docs/contract.md)"),
+    ("contract/constants.py", "shared constants (contract/docs/contract.md)"),
 )
 # Safety paths for reviewer check 4 (docs/safety.md): whole files, then words on changed lines elsewhere.
 SAFETY_FILES = ("dispatcher/executor.py", "skills/stop_move.py", "skills/motion.py", "skills/process.py")

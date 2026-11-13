@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from skills import motion, policy, runner
+from contract import policy
+from skills import motion, runner
 
 TIMEOUT_S = 15.0  # (tunable)
 SETTLE_S = 3.0  # wait after StandDown so state_after is sampled at rest (tunable, skills/docs/robot.md)

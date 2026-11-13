@@ -8,9 +8,9 @@ import math
 import time
 from typing import NamedTuple
 
+from contract.schema import ErrorCode
 from skills import backend, robot_ipc, runner, stub
 from skills.robot_ipc import MoveTarget, Refused, ServiceUnavailable
-from skills.schema import ErrorCode
 
 PROCESS_OVERHEAD_S = 5.0  # process start + robot service connect + two state samples (tunable)
 MOTION_BASE_S = PROCESS_OVERHEAD_S + robot_ipc.SPORT_CLIENT_TIMEOUT_S  # plus one lost StopMove reply

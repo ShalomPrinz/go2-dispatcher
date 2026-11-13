@@ -14,10 +14,10 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from contract.env import IFACE
+from contract.schema import ObstacleDistances, Posture, RobotState
 from skills.backend import BackendNotConfigured, StateUnavailable
-from skills.env import IFACE
 from skills.robot_ipc import SPORT_CLIENT_TIMEOUT_S
-from skills.schema import ObstacleDistances, Posture, RobotState
 from skills.state_store import STATE_WAIT_S, StateStore
 
 DDS_DOMAIN_ID = 0

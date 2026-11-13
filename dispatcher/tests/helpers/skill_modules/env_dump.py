@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import os
 
-from skills import policy, runner
+from contract import policy
+from skills import runner
 
 SKILL = "env_dump"
 

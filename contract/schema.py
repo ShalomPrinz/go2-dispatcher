@@ -1,5 +1,5 @@
 """The skill response and robot state schema, defined once for skills and dispatcher
-(skills/docs/skills.md). Standard library only: skill processes never import pydantic."""
+(contract/docs/contract.md). Standard library only: skill processes never import pydantic."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ Status = Literal["ok", "error"]
 
 
 class ErrorCode(str, Enum):
-    """Skill error codes (skills/docs/skills.md); members are str, so JSON gets the plain value."""
+    """Skill error codes (contract/docs/contract.md); members are str, so JSON gets the plain value."""
 
     INVALID_PARAMS = "invalid_params"
     SDK_ERROR = "sdk_error"
@@ -92,7 +92,7 @@ class SkillResponse:
     state_before: RobotState | None = None
     state_after: RobotState | None = None
     state_error: str | None = None  # messages joined with "; "
-    timing: dict[str, float] = field(default_factory=dict)  # skills/docs/skills.md#response-schema
+    timing: dict[str, float] = field(default_factory=dict)  # contract/docs/contract.md#response-schema
 
     def __post_init__(self):  # under pydantic, a ValueError here becomes a ValidationError
         if (self.status == "error") != (self.error is not None):

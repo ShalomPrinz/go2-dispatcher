@@ -32,7 +32,7 @@ task text
 3. An invalid reply gets exactly one schema retry ([llm.md](llm.md#schema-retry)).
 4. `DONE`, `ABORT` and `ASK` end the task with the model's `message` (`DONE` without one gets `prompts.DONE_DEFAULT_MESSAGE`). `ASK` is a clarifying question: the task ends `ASKED`, and the operator's answer is a new task that sees the question in its Previous task section ([below](#user-message)). None of the three sends a `StopMove`: a step has already ended when the model is called, so after earlier steps `ASK` leaves the robot as `ABORT` does.
 5. `PLAN`: `stop_at = replan_after or len(steps)`. The whole plan is pre-checked ([below](#whole-plan-pre-check)). A rejected plan runs nothing: one failure is counted and the model is called again with reason `failure`.
-6. Steps `1..stop_at` run in order. Before each step, stop and deadline are checked; then a fresh state is read through the robot service and the step's precondition is checked on it ([below](#preconditions)); then the step's motion cost is charged; the skill subprocess starts ([skills.md](../../skills/docs/skills.md)). Before a `detect_object` step the executor first makes sure the vision service runs and waits for it to be ready; that wait counts against the task time limit, not the step timeout ([running.md](../../docs/running.md#vision-service)). A robot service lost during a step ends the task `ROBOT_SERVICE_LOST` with no further call ([below](#robot-service-lost)). A step whose stop failed with the service alive ends it `STOP_FAILED`, also with no further call: the stop of a killed step, or the fallback stop after the robot service reports that a `StopMove` it sent on its own failed ([below](#stop-failed)).
+6. Steps `1..stop_at` run in order. Before each step, stop and deadline are checked; then a fresh state is read through the robot service and the step's precondition is checked on it ([below](#preconditions)); then the step's motion cost is charged; the skill subprocess starts ([contract.md](../../contract/docs/contract.md#invocation)). Before a `detect_object` step the executor first makes sure the vision service runs and waits for it to be ready; that wait counts against the task time limit, not the step timeout ([running.md](../../docs/running.md#vision-service)). A robot service lost during a step ends the task `ROBOT_SERVICE_LOST` with no further call ([below](#robot-service-lost)). A step whose stop failed with the service alive ends it `STOP_FAILED`, also with no further call: the stop of a killed step, or the fallback stop after the robot service reports that a `StopMove` it sent on its own failed ([below](#stop-failed)).
    Every dispatched step with outcome `ok` gets a verdict from its own state samples; a step with any other outcome gets fault detection only and no verdict ([below](#verification)). A `failed` verdict on an `ok` step is a failure ([below](#what-counts)): it ends the plan like a failing outcome. The step keeps its outcome `ok`. `verified`, `unverified` and `unavailable` let the plan continue. The endings above (interrupted, service lost, `STOP_FAILED`) come first.
 7. After the plan:
    - a step failed (by its outcome or its verdict) → reason `failure`; the steps after it are listed as `[abandoned]`;
@@ -76,7 +76,7 @@ A plan is accepted only with no errors at all. Two more invalid replies are dete
 
 ## Step bounds
 
-`bounds.check_step` checks one step against its skill's `SKILL.md` declaration ([skills.md](../../skills/docs/skills.md#skillmd-frontmatter)) and collects every violation:
+`bounds.check_step` checks one step against its skill's `SKILL.md` declaration ([contract.md](../../contract/docs/contract.md#skillmd-frontmatter)) and collects every violation:
 
 1. The skill exists, else `unknown skill '{s}'; available: {sorted names}` (nothing else is checked).
 2. No undeclared params: `unknown parameter '{p}' for skill {s}`.
@@ -85,7 +85,7 @@ A plan is accepted only with no errors at all. Two more invalid replies are dete
 5. Ranges (only for params whose type passed): `parameter '{p}' for skill {s} is {v:g}, outside {min:g} to {max:g}` (or `below the minimum {min:g}` / `above the maximum {max:g}` when one side is open).
 6. Defaults are filled in for absent optional params, in frontmatter order.
 
-The filled, normalised params are what is dispatched, logged and shown in the context. Skills do no param checks of their own: these step bounds and the whole-plan pre-check are the only param validation, and the dispatcher's parse of the response line against `SkillResponse` (defined in `skills/schema.py`, re-exported by `dispatcher/models.py`) is the only full check on a skill's response shape ([skills.md](../../skills/docs/skills.md)).
+The filled, normalised params are what is dispatched, logged and shown in the context. Skills do no param checks of their own: these step bounds and the whole-plan pre-check are the only param validation, and the dispatcher's parse of the response line against `SkillResponse` (defined in `contract/schema.py`, re-exported by `dispatcher/models.py`) is the only full check on a skill's response shape ([contract.md](../../contract/docs/contract.md)).
 
 ## Whole-plan pre-check
 
@@ -98,7 +98,7 @@ A rejection is recorded as one step result with no dispatch index, counts as one
 
 ## Preconditions
 
-Before each step the loop reads a fresh state through the robot service (`Executor.fresh_state(start=False)`, the same read as at task start, but it never starts a dead service). The read becomes the last known state. Then the skill's `requires` (`SKILL.md` frontmatter, [skills.md](../../skills/docs/skills.md#expectations-and-preconditions)) is checked: the current posture must be one of `requires.posture`; a skill without `requires` is not checked.
+Before each step the loop reads a fresh state through the robot service (`Executor.fresh_state(start=False)`, the same read as at task start, but it never starts a dead service). The read becomes the last known state. Then the skill's `requires` (`SKILL.md` frontmatter, [contract.md](../../contract/docs/contract.md#expectations-and-preconditions)) is checked: the current posture must be one of `requires.posture`; a skill without `requires` is not checked.
 
 - **Service dead or unreachable** (not running, or no answer): handled like a robot service lost during a step ([below](#robot-service-lost)): the fallback `StopMove` (reason `robot_service_lost`, with `service_lost` set) and the task ends `ROBOT_SERVICE_LOST`. The step is not dispatched.
 - **Read fails otherwise** (no state message, link down): the loop sends `StopMove` (reason `state_unavailable`) and ends the task `STATE_UNAVAILABLE`, as for a failed task-start read. The step is not dispatched.
@@ -129,11 +129,11 @@ A dispatched step with any other outcome (`error`, `timeout`, `malformed`, `inte
 |---|---|---|
 | `fallen` | `state_after.imu_rpy` roll or pitch | \|roll\| or \|pitch\| > `FALLEN_TILT_RAD` = 0.5 rad (about 29°) |
 | `fault_mode` | `state_after.mode` | in `FAULT_MODES` = {7} (damping in Unitree's sport mode list) |
-| `command_rejected` | the skill's error code | `sdk_error`: an SDK call returned non-zero ([skills.md](../../skills/docs/skills.md#error-codes)) |
+| `command_rejected` | the skill's error code | `sdk_error`: an SDK call returned non-zero ([contract.md](../../contract/docs/contract.md#error-codes)) |
 
 The values are module constants in `dispatcher/verification.py`, next to the rule that reads them, like the posture-rule bounds in `skills/real.py`. 0.5 rad is about 3.5 times the largest roll or pitch in the robot's standing samples (0.14 rad) and well short of a fall on the side (π/2); mode 7 is the stub's assumed fall signature ([robot.md](../../skills/docs/robot.md#open-robot-side-questions)). Foot force is not used: `rt/sportmodestate` reports it as zeros on this robot. A stuck robot has no universal signature in `state_after` (the command is stopped by then): a stuck `turn` fails its yaw expectation, a stuck `walk` stays `unverified`.
 
-**Goal verification** is per skill, from `expect` ([skills.md](../../skills/docs/skills.md#expectations-and-preconditions)), measured on the step's `state_before` and `state_after`; every key given must hold. `posture` compares `state_after.posture` (`unknown` with no `body_height` is `unavailable`, any other mismatch `failed`); `mode` compares `state_after.mode`; `yaw_delta` compares the signed yaw change with `YAW_SIGN[direction] × angle` within the tolerance, wrapped to ±180°; `self_reported` holds when the skill's `status` is `ok`, which it is on every step that gets a verdict. Any key `failed` gives `failed`; else any key `unavailable` gives `unavailable`. `walk` stays `unverified`: there is no odometry source yet and dead reckoning from the commanded velocity is never a measurement ([roadmap.md](../../docs/roadmap.md#v2-plan)).
+**Goal verification** is per skill, from `expect` ([contract.md](../../contract/docs/contract.md#expectations-and-preconditions)), measured on the step's `state_before` and `state_after`; every key given must hold. `posture` compares `state_after.posture` (`unknown` with no `body_height` is `unavailable`, any other mismatch `failed`); `mode` compares `state_after.mode`; `yaw_delta` compares the signed yaw change with `YAW_SIGN[direction] × angle` within the tolerance, wrapped to ±180°; `self_reported` holds when the skill's `status` is `ok`, which it is on every step that gets a verdict. Any key `failed` gives `failed`; else any key `unavailable` gives `unavailable`. `walk` stays `unverified`: there is no odometry source yet and dead reckoning from the commanded velocity is never a measurement ([roadmap.md](../../docs/roadmap.md#v2-plan)).
 
 ## Step outcomes
 
@@ -142,7 +142,7 @@ Every recorded step has one outcome:
 | Outcome | `error_code` | Source | Failure? |
 |---|---|---|---|
 | `ok` | — | skill response `status = ok` | only with verdict `failed` ([above](#verification)) |
-| `error` | the skill's code ([skills.md](../../skills/docs/skills.md#error-codes)) | skill response `status = error` | yes |
+| `error` | the skill's code ([contract.md](../../contract/docs/contract.md#error-codes)) | skill response `status = error` | yes |
 | `error` | `robot_service_lost` | the robot service was lost during the step: the step was killed with it, or the skill had already exited when the loss was detected (a missed `ping` or a failed `disarm`), whatever it replied; or the step could not be armed and never started. Message `stopped: the robot control service was lost` | yes |
 | `timeout` | `timeout` | killed after `POLICY.timeout_s(params)`; message `killed after {timeout_s:g}s timeout` | yes |
 | `malformed` | `malformed` | no valid response line; message `skill process exited with code {rc} without a valid response` | yes |
@@ -244,7 +244,7 @@ Every request is built from fixed slots. No conversation is carried over; each r
 
 Slots 1–3 come from `context.PromptSurface` (built once per process); `go2 catalog` prints them exactly. The catalog is generated from the registry ([skills.md](../../skills/docs/skills.md#catalog-and-registry-hash)).
 
-`registry._render_skill` renders each skill the same way: a `name: description` line, one `  - param (...)` line per parameter (or `  - no parameters`), then one `  Heading: text` line per `SKILL.md` body section in the parsed order ([skills.md](../../skills/docs/skills.md#skillmd-body)). A multi-line section text keeps its line breaks, with each continuation line indented four spaces. The dispatcher iterates the parsed sections and never names the headings. The current catalog is `dispatcher/tests/golden/catalog.txt`.
+`registry._render_skill` renders each skill the same way: a `name: description` line, one `  - param (...)` line per parameter (or `  - no parameters`), then one `  Heading: text` line per `SKILL.md` body section in the parsed order ([contract.md](../../contract/docs/contract.md#skillmd-body)). A multi-line section text keeps its line breaks, with each continuation line indented four spaces. The dispatcher iterates the parsed sections and never names the headings. The current catalog is `dispatcher/tests/golden/catalog.txt`.
 
 ### System text
 

@@ -19,8 +19,6 @@ import ownership  # noqa: E402  (the map loader `scope.py` uses; the hooks thems
 
 OWNERSHIP = ownership.load_map()
 MAIN_ONLY = tuple(json.loads((HOOKS.parent / "ownership.json").read_text())["main"])
-# Mapped before the folder exists, so its owner can create it; the test fails once an entry's path exists.
-NOT_YET_CREATED = ("contract/", "contract/tests/")
 
 
 def git(*args: str, cwd: Path) -> None:
@@ -185,11 +183,11 @@ def test_typecheck_reports_nothing_touched(repo: Path, tmpdir_env: Path) -> None
 
 
 def test_ownership_paths_exist_in_the_repo() -> None:
-    """Every map path exists, except `**/name` patterns (files that may not exist yet) and `NOT_YET_CREATED`."""
+    """Every map path exists; `**/name` patterns are skipped, since they cover files that may not exist yet."""
     assert OWNERSHIP is not None, "ownership.json missing or malformed"
     scopes, packages = OWNERSHIP
     for p in {p for ps in scopes.values() for p in ps} | set(packages) | set(MAIN_ONLY):
-        assert p.startswith("**/") or (ROOT / p).exists() != (p in NOT_YET_CREATED), p
+        assert p.startswith("**/") or (ROOT / p).exists(), p
 
 
 def test_ownership_agents_have_agent_files() -> None:

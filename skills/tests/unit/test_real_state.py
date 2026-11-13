@@ -9,9 +9,9 @@ from types import SimpleNamespace
 
 import pytest
 
+from contract.schema import ObstacleDistances
 from skills import real
 from skills.real import POSTURE_STANDING_MIN_M, RANGE_OBSTACLE_MAX_M, derive_posture
-from skills.schema import ObstacleDistances
 
 
 def msg(**overrides):

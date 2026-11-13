@@ -6,8 +6,8 @@ from __future__ import annotations
 import pytest
 from pydantic import TypeAdapter
 
+from contract.schema import SkillResponse
 from skills import stub
-from skills.schema import SkillResponse
 from tests.helpers import run_module, single_response, stub_env
 
 pytestmark = pytest.mark.integration

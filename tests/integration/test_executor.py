@@ -10,12 +10,12 @@ import time
 
 import pytest
 
+from contract.env import vision_socket_path
 from dispatcher.executor import Executor
 from dispatcher.registry import Registry, SkillDescriptor
 from dispatcher.tests.helpers import make_config
 from dispatcher.tests.helpers.skill_modules.env_dump import POLICY as ENV_DUMP_POLICY
 from skills import stub
-from skills.env import vision_socket_path
 from tests.helpers import REPO_ROOT
 
 pytestmark = pytest.mark.integration

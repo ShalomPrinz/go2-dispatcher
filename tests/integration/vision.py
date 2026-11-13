@@ -9,8 +9,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from contract.env import STUB_STATE_FILE, VISION_SOCKET
 from skills import vision_service
-from skills.env import STUB_STATE_FILE, VISION_SOCKET
 from tests.helpers import REPO_ROOT
 
 READY_WAIT_S = 10.0

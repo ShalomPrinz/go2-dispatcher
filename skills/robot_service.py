@@ -24,9 +24,10 @@ from multiprocessing.connection import Listener
 from types import FrameType
 from typing import Any, NoReturn, Protocol, cast
 
-from skills import backend, ipc, process, robot_ipc, stub
-from skills.env import ROBOT_SOCKET, robot_lock_path
-from skills.schema import RobotState
+from contract import wire
+from contract.env import ROBOT_SOCKET, robot_lock_path
+from contract.schema import RobotState
+from skills import backend, process, robot_ipc, stub
 from skills.state_store import StateStore
 
 READY_LINE = "ready"
@@ -115,7 +116,7 @@ class Lease:
 
     token: str
     deadline: float
-    conn: ipc.Conn | None = None
+    conn: wire.Conn | None = None
 
 
 @dataclass
@@ -179,7 +180,7 @@ class Motion:
         self._sim = sim
         self._lock = threading.Lock()
         self._lease: Lease | None = None
-        self._control: ipc.Conn | None = None
+        self._control: wire.Conn | None = None
         self._job: Job | None = None
         self._jobs: queue.Queue[Job] = queue.Queue()
         self._stops_running = 0  # StopMoves decided and not yet returned
@@ -233,7 +234,7 @@ class Motion:
             self._stops_running += 1
         return self._send_stop(reason)
 
-    def _end_lease(self, reason: str, *, conn: ipc.Conn | None = None, lease: Lease | None = None) -> None:
+    def _end_lease(self, reason: str, *, conn: wire.Conn | None = None, lease: Lease | None = None) -> None:
         """End the lease (only if bound to ``conn``, or only if it is ``lease``, when given); StopMove if it was
         used for motion."""
         with self._lock:
@@ -255,18 +256,18 @@ class Motion:
 
     # --- control connection ----------------------------------------------------------------
 
-    def claim_control(self, conn: ipc.Conn) -> bool:
+    def claim_control(self, conn: wire.Conn) -> bool:
         with self._lock:
             if self._control is not None:
                 return False
             self._control = conn
             return True
 
-    def is_control(self, conn: ipc.Conn) -> bool:
+    def is_control(self, conn: wire.Conn) -> bool:
         with self._lock:
             return self._control is conn
 
-    def connection_closed(self, conn: ipc.Conn) -> None:
+    def connection_closed(self, conn: wire.Conn) -> None:
         """A connection is gone: the control connection stops the robot always, the lease's only if used."""
         with self._lock:
             control = self._control is conn
@@ -309,7 +310,7 @@ class Motion:
 
     # --- primitives --------------------------------------------------------------------------
 
-    def submit(self, conn: ipc.Conn, token: object, run: Callable[[Job], dict]) -> Job:
+    def submit(self, conn: wire.Conn, token: object, run: Callable[[Job], dict]) -> Job:
         """Queue a primitive for the lease's connection; raises Refusal without a valid lease."""
         with self._lock:
             lease = self._lease
@@ -472,9 +473,9 @@ def start_motion(name: str, store: StateStore) -> Motion:
 # --- connections ------------------------------------------------------------------
 
 
-def _send(conn: ipc.Conn, msg: dict) -> bool:
+def _send(conn: wire.Conn, msg: dict) -> bool:
     try:
-        conn.send_bytes(ipc.encode(msg))
+        conn.send_bytes(wire.encode(msg))
         return True
     except (OSError, ValueError):
         return False
@@ -524,7 +525,7 @@ def _min_seq(request: dict) -> int | None:
     return value
 
 
-def stream(conn: ipc.Conn, store: StateStore, period_s: float) -> None:
+def stream(conn: wire.Conn, store: StateStore, period_s: float) -> None:
     """Send each new message at most once per ``period_s`` and every link change, until the client goes."""
     link, _ = store.link()
     if not _send(conn, robot_ipc.message("subscribed", period_ms=round(period_s * 1000.0, 3), link=link)):
@@ -544,7 +545,7 @@ def stream(conn: ipc.Conn, store: StateStore, period_s: float) -> None:
                 return
 
 
-def run_primitive(conn: ipc.Conn, motion: Motion, request: dict, run: Callable[[Job], dict]) -> dict | None:
+def run_primitive(conn: wire.Conn, motion: Motion, request: dict, run: Callable[[Job], dict]) -> dict | None:
     """Run a primitive for this connection and return its reply; None if the connection closed meanwhile
     (the lease then ends and the robot stops)."""
     job = motion.submit(conn, request.get("token"), run)
@@ -559,7 +560,7 @@ def run_primitive(conn: ipc.Conn, motion: Motion, request: dict, run: Callable[[
     return job.reply
 
 
-def _handle(conn: ipc.Conn, request: dict, store: StateStore, backend_name: str, motion: Motion) -> dict | None:
+def _handle(conn: wire.Conn, request: dict, store: StateStore, backend_name: str, motion: Motion) -> dict | None:
     """The reply to one request; None when the connection is done. Raises Refusal or ValueError (bad_request)."""
     op = request.get("op")
     if op == "hello":
@@ -605,14 +606,14 @@ def _handle(conn: ipc.Conn, request: dict, store: StateStore, backend_name: str,
     raise ValueError(f"unknown op {op!r}")
 
 
-def serve(conn: ipc.Conn, store: StateStore, backend_name: str, motion: Motion) -> None:
+def serve(conn: wire.Conn, store: StateStore, backend_name: str, motion: Motion) -> None:
     """Answer requests on one persistent connection until the client closes it; a bad request closes it.
     However it ends, a lease bound to it ends (StopMove), and the control connection's end stops the robot."""
     try:
         with conn:
             while True:
                 try:
-                    request = ipc.decode(conn.recv_bytes(robot_ipc.MAX_MESSAGE_BYTES))
+                    request = wire.decode(conn.recv_bytes(robot_ipc.MAX_MESSAGE_BYTES))
                 except (OSError, EOFError):
                     return
                 except ValueError as e:
@@ -668,7 +669,7 @@ def main() -> None:
         os.unlink(path)
     signal.signal(signal.SIGTERM, _on_sigterm)
     try:
-        with Listener(path, family=ipc.FAMILY) as listener:  # closing it removes the socket file
+        with Listener(path, family=wire.FAMILY) as listener:  # closing it removes the socket file
             os.chmod(path, SOCKET_MODE)
             process.write_raw_stdout(READY_LINE + "\n")
             print(f"robot service: {name} ready on {path}", file=sys.stderr, flush=True)

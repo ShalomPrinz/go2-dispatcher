@@ -1,5 +1,5 @@
 """The robot service protocol and its client (skills/docs/skills.md): JSON messages on persistent connections,
-encoded as skills/ipc.py does. Standard library and skills only; imported by the service, by skills (state
+encoded as contract/wire.py does. Standard library, contract and skills only; imported by the service, by skills (state
 samples and motion primitives on one connection per process), and by the dispatcher (control connection)."""
 
 from __future__ import annotations
@@ -10,14 +10,15 @@ from dataclasses import asdict, dataclass
 from multiprocessing.connection import Client
 from typing import TYPE_CHECKING, Any, TypeGuard
 
+from contract.constants import Link
+from contract.env import LEASE_TOKEN, ROBOT_SOCKET
+from contract.schema import ObstacleDistances, RobotState
+from contract.wire import FAMILY, decode, encode
 from skills.backend import StateUnavailable
-from skills.env import LEASE_TOKEN, ROBOT_SOCKET
-from skills.ipc import FAMILY, decode, encode
-from skills.schema import ObstacleDistances, RobotState
-from skills.state_store import STATE_WAIT_S, Link, Reading
+from skills.state_store import STATE_WAIT_S, Reading
 
 if TYPE_CHECKING:
-    from skills.ipc import Conn
+    from contract.wire import Conn
 
 PROTOCOL_VERSION = 1
 MAX_MESSAGE_BYTES = 16384
@@ -71,9 +72,6 @@ def state_message(op: str, reading: Reading | None) -> dict:
     if reading is None:
         return message(op, state=None, rx_mono=None, link="down")
     return message(op, state=asdict(reading.state), rx_mono=reading.rx_mono, link=reading.link)
-
-
-YAW_SIGN = {"left": 1, "right": -1}  # turn direction to the sign of yaw_rad and vyaw (CCW +)
 
 
 @dataclass(frozen=True)

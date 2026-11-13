@@ -1,5 +1,5 @@
 """Shared skill runner: SkillOutcome, state sampling, response building, emit, run_main and
-run_skill (skills/docs/skills.md). Standard library only."""
+run_skill (contract/docs/contract.md). Standard library only."""
 
 from __future__ import annotations
 
@@ -12,15 +12,15 @@ from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
 from typing import Literal, NoReturn
 
+from contract.policy import SkillPolicy
+from contract.schema import SCHEMA_VERSION, ErrorCode, RobotState, SkillError, SkillResponse, Status
 from skills import backend, process, robot_ipc
-from skills.policy import SkillPolicy
-from skills.schema import SCHEMA_VERSION, ErrorCode, RobotState, SkillError, SkillResponse, Status
 
 
 @dataclass(frozen=True)
 class SkillOutcome:
     """What a skill body returns to run_skill; build it with ok(), error() or from_exception()
-    (skills/docs/skills.md). timing holds the body's own keys, such as exec_ms."""
+    (contract/docs/contract.md). timing holds the body's own keys, such as exec_ms."""
 
     status: Status
     observations: dict
@@ -54,7 +54,7 @@ StateReader = Callable[[], RobotState]
 @dataclass
 class StateSampler:
     """The state samples of one skill process, filled by take() and read by build_response;
-    run_main owns it, so samples taken before an exception survive (skills/docs/skills.md).
+    run_main owns it, so samples taken before an exception survive (contract/docs/contract.md).
     ``reader`` None: read through the robot service (skills), connecting outside state_ms (robot_connect_ms);
     the utilities pass their own reader and a ``prepare`` (their DDS init), run before each sample, outside
     state_ms. ``clock`` times the reads into ``seconds``."""
@@ -125,7 +125,7 @@ def build_response(
 ) -> SkillResponse:
     """The SkillResponse (schema_version=2), built from the sources of its fields; ``setup`` is the process's
     setup timing (robot_connect_ms in a skill, dds_init_ms in a utility), first in timing. Only the
-    error-iff-status rule is checked here, the dispatcher validates the rest (skills/docs/skills.md).
+    error-iff-status rule is checked here, the dispatcher validates the rest (contract/docs/contract.md).
     error_message: collapsed to one line, not length-limited."""
     error = None
     if outcome.status == "error":

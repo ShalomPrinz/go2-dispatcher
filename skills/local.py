@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from contract.schema import RobotState
 from skills import backend, stub
-from skills.schema import RobotState
 
 _stub_dds_init = False  # the stub has no DDS; an init is recorded so dds_init_ms is reported as on the robot
 

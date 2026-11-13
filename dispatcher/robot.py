@@ -15,8 +15,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any
 
+from contract.env import robot_lock_path
 from skills import robot_service
-from skills.env import robot_lock_path
 from skills.robot_ipc import LinkEvent, RobotClient, ServiceUnavailable
 
 from .models import RobotServiceError, RobotServiceLostError, RobotState, StateReadError

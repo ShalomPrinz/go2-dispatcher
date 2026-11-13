@@ -7,12 +7,12 @@ from html.parser import HTMLParser
 
 import pytest
 
+from contract.policy import MotionCost
+from contract.schema import ErrorCode
 from dispatcher import prompts
 from dispatcher.models import StepDispatch, StepOutcome, StepRef, StepResult, TaskOutcome, TaskOutcomeCode
 from dispatcher.registry import Registry
 from dispatcher.transports.telegram_text import MAX_CHARS, format_outcome, step_reason, trim
-from skills.policy import MotionCost
-from skills.schema import ErrorCode
 from tests.helpers import REPO_ROOT
 
 

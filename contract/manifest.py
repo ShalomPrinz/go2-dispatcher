@@ -1,6 +1,7 @@
-"""SKILL.md schema and parser: frontmatter and the body's section template (skills/docs/skills.md).
+"""SKILL.md schema and parser: frontmatter and the body's section template (contract/docs/contract.md).
 
-Imported only by the dispatcher process; skill entry points must not import it (it pulls in pydantic and yaml).
+Imported only by the dispatcher process; skill entry points must not import it (it pulls in pydantic and yaml,
+the one contract module that is not standard library only).
 """
 
 from __future__ import annotations
@@ -22,8 +23,8 @@ from pydantic import (
     model_validator,
 )
 
-from skills.robot_ipc import YAW_SIGN
-from skills.schema import Posture
+from contract.constants import YAW_SIGN
+from contract.schema import Posture
 
 SKILL_FILE = "SKILL.md"
 FRONTMATTER_DELIMITER = "---"
@@ -42,7 +43,7 @@ class SkillFileError(ValueError):
 
 
 class _Strict(BaseModel):
-    # strict: no coercion; extra keys are rejected (skills/docs/skills.md)
+    # strict: no coercion; extra keys are rejected (contract/docs/contract.md)
     model_config = ConfigDict(strict=True, extra="forbid", frozen=True)
 
 
@@ -118,7 +119,7 @@ class YawDelta(_Strict):
 
 
 class Expectation(_Strict):
-    """Goal expectation for a step; every key given must hold (skills/docs/skills.md).
+    """Goal expectation for a step; every key given must hold (contract/docs/contract.md).
 
     ``self_reported`` stands alone: the skill's own response is the outcome, no state is checked."""
 
@@ -145,7 +146,7 @@ class Expectation(_Strict):
 
 
 class Precondition(_Strict):
-    """Checked before dispatch: the current posture must be one of ``posture`` (skills/docs/skills.md)."""
+    """Checked before dispatch: the current posture must be one of ``posture`` (contract/docs/contract.md)."""
 
     posture: tuple[Posture, ...] = Field(strict=False)  # YAML gives a list
 

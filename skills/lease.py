@@ -8,8 +8,8 @@ import secrets
 import subprocess
 import sys
 
+from contract.env import LEASE_TOKEN
 from skills import robot_ipc
-from skills.env import LEASE_TOKEN
 
 
 def main() -> None:

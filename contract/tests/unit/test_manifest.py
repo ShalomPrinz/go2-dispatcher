@@ -1,15 +1,13 @@
-"""SKILL.md parser: accepted keys, every schema error, the body template and its sync with code constants
-(skills/docs/skills.md). Discovery, entrypoint and POLICY checks are the dispatcher registry's tests."""
+"""SKILL.md parser: accepted keys, every schema error and the body template (contract/docs/contract.md).
+Discovery, entrypoint and POLICY checks are the dispatcher registry's tests."""
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import pytest
 
-from skills import turn, walk
-from skills.manifest import (
+from contract.manifest import (
     BODY_MAX_CHARS,
     SECTION_HEADINGS,
     Expectation,
@@ -18,7 +16,6 @@ from skills.manifest import (
     parse_skill_file,
 )
 
-CATALOG = Path(__file__).resolve().parents[2] / "catalog"
 HEAD = "name: demo\nentrypoint: skills.demo\ndescription: A demo skill.\n"
 BODY = "## Use when\nAlways.\n\n## Requires\nNone.\n\n## Effect\nDoes it\nin two lines.\n\n## Limits\nNone.\n"
 
@@ -182,18 +179,3 @@ def test_body_template_errors(tmp_path, body, match):
 
 def test_sections_key_in_frontmatter_rejected(tmp_path):
     assert_error(write(tmp_path, "sections: []\n"), "sections: unknown key")
-
-
-def _number_before(text: str, unit: str) -> float:
-    m = re.search(rf"(\d+(?:\.\d+)?) {re.escape(unit)}", text)
-    assert m, f"no '<number> {unit}' in {text!r}"
-    return float(m.group(1))
-
-
-def test_prose_numbers_match_code_constants():
-    def effect(name: str) -> str:
-        sf = parse_skill_file(CATALOG / name / "SKILL.md")
-        return next(s.text for s in sf.sections if s.heading == "Effect")
-
-    assert _number_before(effect("walk"), "m/s") == walk.VELOCITY_MPS
-    assert _number_before(effect("turn"), "rad/s") == turn.YAW_RATE_RPS

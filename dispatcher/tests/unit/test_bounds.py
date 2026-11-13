@@ -6,12 +6,12 @@ import math
 
 import pytest
 
+from contract.manifest import ParamSpec
+from contract.policy import MotionCost, SkillPolicy
 from dispatcher.bounds import ERROR_MESSAGE_MAX, check_step, cut_message, precheck
 from dispatcher.budget import MotionBudget
 from dispatcher.models import Plan, PlanStep, StepRef
 from dispatcher.registry import Registry, SkillDescriptor
-from skills.manifest import ParamSpec
-from skills.policy import MotionCost, SkillPolicy
 from tests.helpers import REPO_ROOT
 
 

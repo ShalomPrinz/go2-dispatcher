@@ -18,7 +18,7 @@ Implemented: every dispatched step gets fault detection, a step with outcome `ok
 Kept on purpose; do not remove them as dead code.
 
 - `state_before` / `state_after` on every skill response and `state_after` on every `StopMove`, including the robot's own `position` estimate when published.
-- Typed `expect` and `requires` keys in `SKILL.md` frontmatter, declared for every v1 skill and not rendered into the catalog; the dispatcher evaluates them for verdicts and preconditions ([skills.md](../skills/docs/skills.md#expectations-and-preconditions)).
+- Typed `expect` and `requires` keys in `SKILL.md` frontmatter, declared for every v1 skill and not rendered into the catalog; the dispatcher evaluates them for verdicts and preconditions ([contract.md](../contract/docs/contract.md#expectations-and-preconditions)).
 - A single posture rule, `derive_posture()` in `skills/real.py`.
 - Stub robot faults (`fallen`, `stuck`, `rejected`) with the real sample's fields, which the fault-detection tests use ([skills.md](../skills/docs/skills.md#robot-faults)).
 - `skills.dir` is configurable, so other granularity tiers can be loaded.

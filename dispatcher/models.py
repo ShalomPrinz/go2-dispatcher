@@ -7,14 +7,14 @@ from typing import Any, Literal, NamedTuple
 
 from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr, model_validator
 
-from skills.policy import MotionCost
+from contract.policy import MotionCost
 
-# the response schema is owned by skills and re-exported here (skills/docs/skills.md)
-from skills.schema import ObstacleDistances as ObstacleDistances
-from skills.schema import Posture as Posture
-from skills.schema import RobotState as RobotState
-from skills.schema import SkillError as SkillError
-from skills.schema import SkillResponse as SkillResponse
+# the response schema is owned by contract and re-exported here (contract/docs/contract.md)
+from contract.schema import ObstacleDistances as ObstacleDistances
+from contract.schema import Posture as Posture
+from contract.schema import RobotState as RobotState
+from contract.schema import SkillError as SkillError
+from contract.schema import SkillResponse as SkillResponse
 
 from . import prompts
 

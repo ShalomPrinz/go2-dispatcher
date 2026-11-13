@@ -1,13 +1,11 @@
-"""The skill-side SkillResponse: one-line error messages and the error-iff-status rule
-(skills/docs/skills.md). Validation by the dispatcher is checked in
+"""The skill-side SkillResponse: one-line error messages (contract/docs/contract.md). The error-iff-status rule
+is checked in contract/tests/unit/test_schema.py, validation by the dispatcher in
 tests/integration/test_skill_response.py."""
 
 from __future__ import annotations
 
-import pytest
-
+from contract.schema import ErrorCode
 from skills.runner import SkillOutcome, StateSampler, build_response
-from skills.schema import SCHEMA_VERSION, ErrorCode, SkillError, SkillResponse
 
 
 def test_message_collapsed_not_cut():
@@ -19,10 +17,3 @@ def test_message_collapsed_not_cut():
     assert "\n" not in out and "\r" not in out and "\t" not in out
     assert out.startswith("line one line two three x")
     assert out.endswith("x" * 400)
-
-
-def test_error_iff_status_error():
-    with pytest.raises(ValueError):
-        SkillResponse(schema_version=SCHEMA_VERSION, skill="walk", status="ok", error=SkillError("x", "y"))
-    with pytest.raises(ValueError):
-        SkillResponse(schema_version=SCHEMA_VERSION, skill="walk", status="error")

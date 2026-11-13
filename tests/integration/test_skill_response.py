@@ -1,5 +1,5 @@
 """Skill output validates against the shared SkillResponse as the dispatcher parses it
-(skills/docs/skills.md)."""
+(contract/docs/contract.md)."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ import json
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
+from contract.schema import ErrorCode, RobotState, SkillResponse
 from skills.runner import SkillOutcome, StateSampler, build_response, to_json
-from skills.schema import ErrorCode, RobotState, SkillResponse
 
 ADAPTER = TypeAdapter(SkillResponse)
 STATE = RobotState(t=1.0, backend="stub", posture="standing", body_height=0.32)

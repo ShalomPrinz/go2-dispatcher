@@ -12,8 +12,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
+from contract.env import LEASE_TOKEN, ROBOT_SOCKET, STUB_STATE_FILE
 from skills import robot_service
-from skills.env import LEASE_TOKEN, ROBOT_SOCKET, STUB_STATE_FILE
 from skills.robot_ipc import RobotClient
 from tests.helpers import REPO_ROOT
 
