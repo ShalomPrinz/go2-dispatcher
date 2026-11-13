@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from multiprocessing.connection import Listener
 
 import pytest
@@ -23,8 +25,9 @@ class FakeDetector:
         return DetectResult(found=True, position="left", closeness="far", confidence=0.7)
 
 
-def serve_once(path, answer: bool) -> threading.Event:
-    """Serve one connection; a silent server holds it open until the returned event is set."""
+@contextmanager
+def serving(path, answer: bool) -> Iterator[None]:
+    """Serve one connection; a silent server holds it open until the block ends. Exit waits for the socket to close."""
     listener = Listener(str(path), family=wire.FAMILY)
     done = threading.Event()
 
@@ -35,8 +38,13 @@ def serve_once(path, answer: bool) -> threading.Event:
             else:
                 done.wait(5.0)  # answer nothing
 
-    threading.Thread(target=run, daemon=True).start()
-    return done
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        done.set()
+        thread.join(5.0)  # the listener is closed and its socket file removed before the path is reused
 
 
 def ask(path, target: str, wait_s: float = 2.0) -> DetectResult:
@@ -46,10 +54,9 @@ def ask(path, target: str, wait_s: float = 2.0) -> DetectResult:
 
 def test_result_and_error_round_trip(tmp_path):
     path = tmp_path / "v.sock"
-    serve_once(path, answer=True)
-    assert ask(path, "chair") == DetectResult(found=True, position="left", closeness="far", confidence=0.7)
-    serve_once(path, answer=True)
-    with pytest.raises(vision_ipc.ServiceError) as err:
+    with serving(path, answer=True):
+        assert ask(path, "chair") == DetectResult(found=True, position="left", closeness="far", confidence=0.7)
+    with serving(path, answer=True), pytest.raises(vision_ipc.ServiceError) as err:
         ask(path, "cup")
     assert err.value.code == ErrorCode.CAMERA_UNAVAILABLE
     assert vision_ipc.error_message(err.value) == "CameraUnavailable: GetImageSample returned 3104"
@@ -57,7 +64,5 @@ def test_result_and_error_round_trip(tmp_path):
 
 def test_silent_service_is_vision_unavailable(tmp_path):
     path = tmp_path / "v.sock"
-    done = serve_once(path, answer=False)
-    with pytest.raises(VisionUnavailable, match="no reply within 0.2s"):
+    with serving(path, answer=False), pytest.raises(VisionUnavailable, match="no reply within 0.2s"):
         ask(path, "chair", wait_s=0.2)
-    done.set()
