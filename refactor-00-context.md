@@ -4,6 +4,34 @@ Read this file first, in full. It is the shared background for a series of seven
 
 These `refactor-*.md` files are working briefs. They live only on the `refactor_prompts` branch: read them from there (`git fetch origin refactor_prompts`, then `git show origin/refactor_prompts:<file>`), never copy or commit them onto a working branch, never merge that branch, never cite them from code or docs, and never copy their wording into docs (the docs carry no process history).
 
+## Where the work lives
+
+All steps are committed on one branch, **`architecture_refactor`**, created from the default branch by step 1. Every step session works like this:
+
+1. Start: `git fetch origin architecture_refactor refactor_prompts`. Put the session's working branch on the tip of `origin/architecture_refactor` before changing anything (a fresh session branch has no commits of its own, so `git merge --ff-only origin/architecture_refactor` is enough). Check with `git log --oneline | head -20` that the earlier steps are there, and read the "Step status" section below.
+2. Work: commit each task locally, as the rules below say.
+3. End: when the step is done and the full check list is green, push the commits to the same branch as a fast-forward: `git push origin HEAD:refs/heads/architecture_refactor`. Never force-push it, never push a red or half-done step, and do not open a pull request unless the user asks.
+4. Then add the step's notes for the next session to "Step status" below, as a commit on `refactor_prompts` that changes only this file. Keep each entry short: the commits, what ended differently from what the next prompt assumes, and deferred work.
+
+## Step status
+
+### Step 1 (`refactor-01-contract.md`): done
+
+On `architecture_refactor`: `tooling: add contract/ to the ownership map and agent definitions under skills-dev` and `contract: extract the shared dispatcher/skills contract into a top-level contract package`. Registry hash `768d05c6633b8fdc` before and after; 554 passed, 1 skipped; 94 integration; 6 import contracts kept.
+
+Notes for later steps:
+
+- `contract/` modules: `schema`, `policy`, `manifest`, `env`, `wire` (was `skills/ipc.py`), `constants` (`YAW_SIGN`, and `Link` from `skills/state_store.py`, which three dispatcher modules imported only for that type). Doc: `contract/docs/contract.md`.
+- The error-code enum is `contract.schema.ErrorCode`; `SkillError` is the response's error dataclass.
+- **Deferred to step 2**: `dispatcher/config.py` still imports `skills.stub` (`StubPosture`, `FaultKind`, defaults, `parse_objects`) and `skills.coco`. It did not come apart cleanly: `parse_objects` is stub implementation and the transports call `stub.reset`.
+- **Candidates for `contract/` when the services move**: the service lifecycle constants (`READY_LINE`, `STARTUP_TIMEOUT_S`, `STOP_GRACE_S`, `EXIT_LOCKED`) stay in the service modules, because the dispatcher also uses those modules as launch targets.
+- Import contracts now: contract imports no project package (nor `tests`); contract imports neither pydantic nor yaml except `contract.manifest`; the parser is protected (importers: `dispatcher`, `skills.tests`, `contract.tests`); the three older contracts are kept. import-linter cannot express "standard library only"; the fresh-interpreter test in `tests/integration/test_skills.py` covers the heavy imports for every `skills` module and every `contract` module except `manifest`.
+- **Order that works when a step adds a package** (a commit cannot be green in between, because no shims are allowed): `claude-config-dev` first, committed alone (the ownership test requires every mapped path to exist, so it carries a self-expiring exemption for the new folder; `TYPED_ROOTS` in `.claude/hooks/typecheck.py` waits until `pyproject.toml` lists the package). Then, uncommitted and in sequence: `tests-dev` packaging in `pyproject.toml` (`lint-imports` fails until the folder exists), the package agent's move, the other package's import updates, `tests-dev` for `tests/helpers/` and the import contracts, and a `claude-config-dev` follow-up (remove the exemption, add `TYPED_ROOTS`, update the `CONTRACTS` paths in `.claude/scripts/review_preview.py`). Review and commit these together as one green commit.
+- Give the first package agent a brief that says the rest of the suite will fail on imports until the next agent runs, and ask it for the full old-to-new mapping for the next brief.
+- The reviewer blocks on process-history wording in docs ("was read from", "still", "moved to"). Tell agents to write decisions in the present tense with a present-tense rejected alternative.
+- Known flaky test, not caused by the refactor: `skills/tests/unit/test_vision_ipc.py::test_result_and_error_round_trip` fails now and then in full runs (`EADDRINUSE`: the second `serve_once` binds before the first server thread closes its listener). It passes alone. Not fixed; the fix is a separate commit when the user agrees.
+- Whole-repo `uv run basedpyright` reports 13 errors at baseline (9 missing-extra imports, 3 in `dispatcher/tests/unit/test_console_trace.py`, 1 in `tests/integration/test_live_llm.py`); compare against that, not zero.
+
 ## What this is
 
 The system works and is tested. The refactor changes its **structure**, not its behaviour: the code has outgrown the "two packages, `dispatcher/` and `skills/`" layout. An architecture review found nine faults (below). The series fixes them in an order where each step leaves the repo green, committed and usable, so the series can stop after any step.
