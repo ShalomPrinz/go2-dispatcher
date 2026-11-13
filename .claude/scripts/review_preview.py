@@ -38,7 +38,14 @@ CONTRACTS: tuple[tuple[str, str], ...] = (
     ("contract/constants.py", "shared constants (contract/docs/contract.md)"),
 )
 # Safety paths for reviewer check 4 (docs/safety.md): whole files, then words on changed lines elsewhere.
-SAFETY_FILES = ("dispatcher/executor.py", "skills/stop_move.py", "skills/motion.py", "skills/process.py")
+SAFETY_FILES = (
+    "dispatcher/executor.py",
+    "skills/motion.py",
+    "skills/stop_move.py",
+    "robot/stop_move.py",
+    "skills/process.py",
+    "contract/process.py",
+)
 SAFETY_WORDS = re.compile(
     r"\b(StopMove|stop_move|killpg|_killpg|ORPHANED|orphaned|start_orphan_watchdog|move_loop|SECRET_ENV|child_env|shutdown)\b"
 )

@@ -71,3 +71,13 @@ def test_stale_reference_changed_value_safety_and_missing_doc(repo: Path) -> Non
     assert "| `dispatcher/executor.py` | dispatcher-dev | docs/safety.md |" in out
     assert "`dispatcher/executor.py`: package code changed with no owning doc in the diff." in out
     assert "Check 4 needed" in out and "`dispatcher/executor.py`: safety file" in out
+
+
+def test_safety_files_trigger_check_4_at_old_and_new_package_paths(repo: Path) -> None:
+    moved = ("skills/stop_move.py", "robot/stop_move.py", "skills/process.py", "contract/process.py")
+    for rel in moved:
+        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+        (repo / rel).write_text("X = 1\n")
+    out = preview(repo)
+    for rel in moved:
+        assert f"`{rel}`: safety file" in out
