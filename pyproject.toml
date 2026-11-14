@@ -75,7 +75,7 @@ forbidden_modules = [
 ]
 ignore_imports = [
   "contract.manifest -> pydantic",   # skills.tests may import the parser; skill code may not (protected below)
-  "contract.manifest -> yaml",
+  "contract.manifest -> yaml",       # same reason
 ]
 
 [[tool.importlinter.contracts]]
@@ -85,7 +85,7 @@ source_modules = ["robot"]
 forbidden_modules = ["skills", "dispatcher", "vision"]
 ignore_imports = [
   "robot.stop_move -> skills.runner",   # exception, to be removed: the utilities use the skill runtime
-  "robot.read_state -> skills.runner",
+  "robot.read_state -> skills.runner",   # same reason
   "robot.tests.unit.test_stop_move -> skills.runner",   # exception, to be removed: the unit test of a utility that uses the skill runtime
 ]
 
@@ -109,10 +109,10 @@ forbidden_modules = [
   "vision.service", "vision.detectors", "vision.boxes",
 ]
 ignore_imports = [
-  "dispatcher.executor -> robot.stop_move",   # exception, to be removed: the utilities' module name and POLICY
-  "dispatcher.executor -> robot.read_state",
-  "dispatcher.transports.telegram_bot -> robot.stop_move",
-  "dispatcher.tests.unit.test_telegram_bot -> robot.stop_move",
+  "dispatcher.executor -> robot.stop_move",   # exception, to be removed: the utilities' module name and POLICY; the import also loads robot.local and robot.backends.sim
+  "dispatcher.executor -> robot.read_state",   # same reason
+  "dispatcher.transports.telegram_bot -> robot.stop_move",   # same reason
+  "dispatcher.tests.unit.test_telegram_bot -> robot.stop_move",   # same reason: the unit test of the transport reads POLICY
 ]
 
 [[tool.importlinter.contracts]]
@@ -140,7 +140,7 @@ source_modules = ["contract"]
 forbidden_modules = ["pydantic", "yaml"]
 ignore_imports = [
   "contract.manifest -> pydantic",   # the SKILL.md parser runs in the dispatcher only
-  "contract.manifest -> yaml",
+  "contract.manifest -> yaml",       # same reason
 ]
 
 [[tool.importlinter.contracts]]

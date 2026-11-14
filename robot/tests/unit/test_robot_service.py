@@ -1,7 +1,7 @@
 """The robot service protocol in process: hello, state reads with min_seq, the stream, version mismatch, the lock,
 and the lease: motion only for the armed step, a StopMove on its deadline, a stop, or the loss of its connection
 or the control connection, and the failed StopMove the disarm reports (robot/docs/service.md). The service as a
-process is tested in tests/integration/test_service.py."""
+process is tested in tests/integration/test_robot_service.py."""
 
 from __future__ import annotations
 

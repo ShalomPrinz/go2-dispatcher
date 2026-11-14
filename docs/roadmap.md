@@ -60,6 +60,17 @@ Not scheduled.
 | Reduce latency to the 4 s target if Sonnet measures above it; prompt caching is the first candidate. | No latency work; `go2 report` measures against the target ([run-log.md](../dispatcher/docs/run-log.md#latency-report-go2-report)) | Student, after the Sonnet measurement |
 | Every starting value: budgets, limits, timeouts, parameter ranges, settle waits, posture thresholds. | Marked *tunable* in [configuration.md](configuration.md) and the topic docs | Tune from logs and robot runs |
 
+## Import-contract exceptions
+
+The `ignore_imports` entries marked "exception, to be removed" in `[tool.importlinter]` in `pyproject.toml` ([testing.md](../tests/docs/testing.md#import-boundaries)). Each is removed when the backend interface is introduced and the import goes; its entry in `pyproject.toml` is deleted with it.
+
+| Exception | Imports | Owner |
+|---|---|---|
+| The utilities use the skill runtime. | `robot.stop_move`, `robot.read_state` and `robot.tests.unit.test_stop_move` import `skills.runner` ([service.md](../robot/docs/service.md#the-package)) | skills-dev |
+| The dispatcher imports the utility modules for their module name and `POLICY`, and through them loads `robot.local` and the sim backend. | `dispatcher.executor` imports `robot.stop_move` and `robot.read_state`; `dispatcher.transports.telegram_bot` and `dispatcher.tests.unit.test_telegram_bot` import `robot.stop_move` ([service.md](../robot/docs/service.md#the-package)) | dispatcher-dev, after skills-dev defines the interface |
+| The stub camera reads the sim pose and the world objects. | `vision.detectors.stub` and `vision.tests.unit.test_stub_detector` import `robot.stub_state` ([vision.md](../vision/docs/vision.md#design-decisions)) | skills-dev |
+| The real detector uses `init_dds`, the one DDS init per process. | `vision.detectors.real` imports `robot.backends.real` ([vision.md](../vision/docs/vision.md#design-decisions)) | skills-dev |
+
 ## Before experiments
 
 The gate for experiments with participants, collected from the sections above. Each item is specified where it is linked.

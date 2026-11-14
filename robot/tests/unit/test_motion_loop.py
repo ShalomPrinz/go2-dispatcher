@@ -1,6 +1,6 @@
 """The robot service's motion loop in process with a fake sport client: its move loop and actions
 (robot/docs/service.md, docs/safety.md). The stub's faults only fail the first call, so the mid-loop and cleanup
-paths are covered here. The lease is tested in test_service.py."""
+paths are covered here. The lease is tested in test_robot_service.py."""
 
 from __future__ import annotations
 
