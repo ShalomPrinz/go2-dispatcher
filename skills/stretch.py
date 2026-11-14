@@ -6,7 +6,7 @@ from contract import policy
 from skills import motion, runner
 
 TIMEOUT_S = 20.0  # (tunable)
-SETTLE_S = 6.0  # wait after Stretch so state_after is sampled at rest (tunable, skills/docs/robot.md)
+SETTLE_S = 6.0  # wait after Stretch so state_after is sampled at rest (tunable, robot/docs/robot.md)
 
 POLICY = policy.SkillPolicy(name="stretch", timeout=TIMEOUT_S)
 

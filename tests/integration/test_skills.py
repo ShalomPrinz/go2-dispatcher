@@ -13,9 +13,11 @@ import pytest
 from pydantic import TypeAdapter
 
 from contract.schema import SkillResponse
-from skills import stub
-from tests.helpers import REPO_ROOT, run_module, single_response, stub_env
+from robot import faults, stub_state
+from robot.backends import sim
+from tests.helpers import REPO_ROOT
 from tests.integration import robot, vision
+from tests.integration.skill_process import run_module, single_response, stub_env
 
 pytestmark = pytest.mark.integration
 
@@ -87,15 +89,24 @@ def test_backend_not_configured(tmp_path):
 
 
 def test_fresh_interpreter_import_is_side_effect_free():
-    """Every skills module, and every contract module a skill loads, imports without heavy modules or output."""
+    """Every skills, robot, vision and contract module imports without heavy modules or output."""
     code = r"""
 import contextlib, importlib, io, json, pkgutil, sys
-import contract, skills
+
+def modules(package):
+    # every module below the package, except its tests
+    found = []
+    for m in pkgutil.iter_modules(importlib.import_module(package).__path__):
+        if m.name == "tests":
+            continue
+        name = f"{package}.{m.name}"
+        found.append(name)
+        if m.ispkg:
+            found += modules(name)
+    return found
+
 # contract.manifest is the dispatcher-only SKILL.md parser; no skill process loads it
-names = sorted(
-    [f"skills.{m.name}" for m in pkgutil.iter_modules(skills.__path__)]
-    + [f"contract.{m.name}" for m in pkgutil.iter_modules(contract.__path__) if m.name != "manifest"]
-)
+names = sorted(n for p in ("skills", "robot", "vision", "contract") for n in modules(p) if n != "contract.manifest")
 buf = io.StringIO()
 with contextlib.redirect_stdout(buf):
     mods = {n: importlib.import_module(n) for n in names}
@@ -117,26 +128,37 @@ print(json.dumps({"modules": names, "heavy": heavy, "out": buf.getvalue(),
     assert proc.returncode == 0, proc.stderr
     out = json.loads(proc.stdout.strip().splitlines()[-1])
     assert {
+        "contract.backend",
         "contract.constants",
         "contract.env",
         "contract.policy",
+        "contract.process",
         "contract.schema",
         "contract.wire",
-        "skills.real",
-        "skills.stub",
-        "skills.process",
-        "skills.runner",
-        "skills.backend",
+        # the client surfaces a skill process loads
+        "robot.client",
+        "robot.faults",
+        "robot.protocol",
+        "robot.ramp",
+        "robot.state_store",
+        "robot.stub_state",
+        "vision.client",
+        "vision.coco",
+        "vision.protocol",
+        # the services, backends, detectors and utilities import their heavy modules lazily
+        "robot.backends.real",
+        "robot.backends.sim",
+        "robot.lease",
+        "robot.local",
+        "robot.read_state",
+        "robot.service",
+        "robot.stop_move",
+        "vision.boxes",
+        "vision.detectors.real",
+        "vision.detectors.stub",
+        "vision.service",
         "skills.motion",
-        "skills.stop_move",
-        "skills.read_state",
-        "skills.vision_ipc",
-        "skills.vision_service",
-        "skills.local",
-        "skills.robot_ipc",
-        "skills.robot_service",
-        "skills.state_store",
-        "skills.real_detector",
+        "skills.runner",
         *(f"skills.{n}" for n in SKILLS),
     } <= set(out["modules"])
     assert out["heavy"] == [] and out["out"] == "" and proc.stderr == ""
@@ -174,31 +196,31 @@ def test_turn_observations(svc):
 def test_sit_then_walk_fails(tmp_path, svc):
     resp = run_ok("sit", {}, svc.arm())
     assert resp.observations == {"sdk_ret": 0}
-    assert stub.read_posture(state_file(tmp_path)) == "sitting"
+    assert stub_state.read_posture(state_file(tmp_path)) == "sitting"
 
     proc = run_module("walk", VALID["walk"], svc.arm())
     walk = RESPONSE.validate_python(single_response(proc))
     assert proc.returncode == 1
     assert walk.error is not None
     assert walk.status == "error" and walk.error.code == "sdk_error"
-    assert walk.error.message == f"Move returned {stub.STUB_ERR_NOT_STANDING}"
-    assert walk.observations["sdk_ret"] == stub.STUB_ERR_NOT_STANDING
-    assert stub.read_posture(state_file(tmp_path)) == "sitting"
+    assert walk.error.message == f"Move returned {sim.STUB_ERR_NOT_STANDING}"
+    assert walk.observations["sdk_ret"] == sim.STUB_ERR_NOT_STANDING
+    assert stub_state.read_posture(state_file(tmp_path)) == "sitting"
 
 
 def test_sit_while_sitting_is_ok(tmp_path, svc):
-    stub.write_posture("sitting", state_file(tmp_path))
+    stub_state.write_posture("sitting", state_file(tmp_path))
     run_ok("sit", {}, svc.arm())
 
 
 def test_stretch_while_sitting_fails(tmp_path, svc):
-    stub.write_posture("sitting", state_file(tmp_path))
+    stub_state.write_posture("sitting", state_file(tmp_path))
     proc = run_module("stretch", {}, svc.arm())
     resp = RESPONSE.validate_python(single_response(proc))
     assert proc.returncode == 1
     assert resp.error is not None
     assert resp.error.code == "sdk_error"
-    assert resp.error.message == f"Stretch returned {stub.STUB_ERR_NOT_STANDING}"
+    assert resp.error.message == f"Stretch returned {sim.STUB_ERR_NOT_STANDING}"
 
 
 def test_detect_follows_the_pose(tmp_path):
@@ -248,7 +270,7 @@ def test_detect_without_vision_service(tmp_path):
 
 
 def test_vision_service_exits_when_parent_dies(tmp_path):
-    """The service shares the skills' orphan watchdog (skills/process.py)."""
+    """The service shares the skills' orphan watchdog (contract/process.py)."""
     env = stub_env(tmp_path, GO2_PARENT_PID=str(os.getppid() or 1), GO2_VISION_SOCKET=str(tmp_path / "v.sock"))
     proc = vision.start(env)
     try:
@@ -272,26 +294,26 @@ def test_fault_error(tmp_path, name):
         assert resp.error.code == "camera_unavailable"
     else:
         assert resp.error.code == "sdk_error"
-        assert resp.observations["sdk_ret"] == stub.STUB_ERR_INJECTED
+        assert resp.observations["sdk_ret"] == faults.STUB_ERR_INJECTED
 
 
 def test_fault_crash(tmp_path):
     proc = run_module("walk", VALID["walk"], stub_env(tmp_path, fault="crash"))
-    assert proc.returncode == stub.CRASH_EXIT_CODE
+    assert proc.returncode == faults.CRASH_EXIT_CODE
     assert proc.stdout == ""
 
 
 def test_fault_garbage(tmp_path):
     proc = run_module("walk", VALID["walk"], stub_env(tmp_path, fault="garbage"))
     assert proc.returncode == 0
-    assert proc.stdout == stub.GARBAGE_TEXT
+    assert proc.stdout == faults.GARBAGE_TEXT
 
 
 # --- orphan watchdog -------------------------------------------------------------------
 
 
 def test_orphan_watchdog_exits(tmp_path):
-    """The watchdog is shared (skills/process.py); one skill is enough."""
+    """The watchdog is shared (contract/process.py); one skill is enough."""
     env = stub_env(tmp_path, fault="hang", GO2_PARENT_PID=str(os.getppid() or 1))
     assert int(env["GO2_PARENT_PID"]) != os.getpid()
     t0 = time.monotonic()

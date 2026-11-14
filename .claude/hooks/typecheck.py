@@ -11,7 +11,7 @@ from pathlib import Path
 import hooklib
 
 # basedpyright `include` in pyproject.toml; explicit file arguments bypass it, so filter here.
-TYPED_ROOTS = ("contract/", "dispatcher/", "skills/", "tests/")
+TYPED_ROOTS = ("contract/", "dispatcher/", "robot/", "skills/", "tests/", "vision/")
 
 
 def start(root: Path, *cmd: str) -> subprocess.Popen[str]:

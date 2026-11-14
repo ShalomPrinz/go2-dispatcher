@@ -1,4 +1,4 @@
-"""Start the vision service for tests that run detect_object as a subprocess (skills/docs/skills.md)."""
+"""Start the vision service for tests that run detect_object as a subprocess (vision/docs/vision.md)."""
 
 from __future__ import annotations
 
@@ -10,16 +10,16 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from contract.env import STUB_STATE_FILE, VISION_SOCKET
-from skills import vision_service
 from tests.helpers import REPO_ROOT
+from vision import protocol
 
 READY_WAIT_S = 10.0
 
 
 def start(env: dict[str, str]) -> subprocess.Popen:
-    """Start ``python -m skills.vision_service`` with ``env`` and wait for its ready line."""
+    """Start ``python -m vision.service`` with ``env`` and wait for its ready line."""
     proc = subprocess.Popen(
-        [sys.executable, "-m", "skills.vision_service"],
+        [sys.executable, "-m", protocol.SERVICE_MODULE],
         env=env,
         cwd=REPO_ROOT,
         stdin=subprocess.DEVNULL,
@@ -31,7 +31,7 @@ def start(env: dict[str, str]) -> subprocess.Popen:
     assert proc.stdout is not None
     with selectors.DefaultSelector() as sel:
         sel.register(proc.stdout, selectors.EVENT_READ)
-        ready = sel.select(READY_WAIT_S) and proc.stdout.readline().strip() == vision_service.READY_LINE
+        ready = sel.select(READY_WAIT_S) and proc.stdout.readline().strip() == protocol.READY_LINE
     if not ready:
         stop(proc)
         raise AssertionError(f"vision service not ready within {READY_WAIT_S:g}s (exit {proc.returncode})")
@@ -41,7 +41,7 @@ def start(env: dict[str, str]) -> subprocess.Popen:
 def stop(proc: subprocess.Popen) -> None:
     proc.terminate()
     try:
-        proc.wait(vision_service.STOP_GRACE_S)
+        proc.wait(protocol.STOP_GRACE_S)
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait()

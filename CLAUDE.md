@@ -11,7 +11,7 @@ uv sync                                        # core + dev deps (stub mode); la
 uv run pytest -q                               # default suite: no API key, robot or network needed
 uv run ruff format .                           # format; must be clean before a commit
 uv run ruff check .                            # lint; must pass before a commit
-uv run lint-imports                            # import contracts (skills boundary); must pass before a commit
+uv run lint-imports                            # import contracts (package boundaries); must pass before a commit
 uv run basedpyright <files>                    # type check; must pass on changed files before a commit
 uv run pytest -m integration                   # real subprocesses on the stub backend
 uv run go2 catalog                             # system text, catalog, tool schema, registry hash; no key needed
@@ -20,11 +20,11 @@ uv run go2 run "turn left 90 degrees"          # one task on the stub (needs ANT
 uv run go2 --reset-stub                        # reset the stub posture and exit
 ```
 
-Package commands (golden files, fault injection, opt-in tests) live in the folder CLAUDE.md files: [contract/CLAUDE.md](contract/CLAUDE.md), [dispatcher/CLAUDE.md](dispatcher/CLAUDE.md), [skills/CLAUDE.md](skills/CLAUDE.md), [tests/CLAUDE.md](tests/CLAUDE.md). They load when Claude works in that folder.
+Package commands (golden files, fault injection, opt-in tests) live in the folder CLAUDE.md files: [contract/CLAUDE.md](contract/CLAUDE.md), [dispatcher/CLAUDE.md](dispatcher/CLAUDE.md), [robot/CLAUDE.md](robot/CLAUDE.md), [vision/CLAUDE.md](vision/CLAUDE.md), [skills/CLAUDE.md](skills/CLAUDE.md), [tests/CLAUDE.md](tests/CLAUDE.md). They load when Claude works in that folder.
 
 ## Documentation rules
 
-- The docs (`docs/`, `dispatcher/docs/`, `skills/docs/`, `tests/docs/`) are the source of truth for why the system is built as it is and for its contracts (plan schema, skill response, config keys, outcome codes, log records, fixed texts).
+- The docs (`docs/`, `contract/docs/`, `dispatcher/docs/`, `robot/docs/`, `vision/docs/`, `skills/docs/`, `tests/docs/`) are the source of truth for why the system is built as it is and for its contracts (plan schema, skill response, config keys, outcome codes, log records, fixed texts).
 - A change that affects behaviour updates the owning doc **in the same commit**. Never leave docs and code disagreeing.
 - Decisions go into the owning doc's "Design decisions" section, with the reason and any rejected alternative. There is no separate decisions log.
 - Open questions and pending work go into [docs/roadmap.md](docs/roadmap.md), each with an owner or a way to resolve it. When one is resolved, move the result into the owning doc and remove it from the roadmap.
@@ -51,9 +51,9 @@ Package commands (golden files, fault injection, opt-in tests) live in the folde
 
 ## Working pattern
 
-- The main session is an **orchestrator**: it always delegates code and doc changes to a project agent (`.claude/agents/`), one task at a time, with a self-contained brief written with the `delegate` skill (`.claude/skills/delegate/`). It does not edit `dispatcher/` or `skills/` itself. Exception: the docs under `main` in [.claude/ownership.json](.claude/ownership.json) belong to the main session, which edits them itself; the map assigns every other path.
+- The main session is an **orchestrator**: it always delegates code and doc changes to a project agent (`.claude/agents/`), one task at a time, with a self-contained brief written with the `delegate` skill (`.claude/skills/delegate/`). It does not edit a package (`contract/`, `dispatcher/`, `robot/`, `vision/`, `skills/`) itself. Exception: the docs under `main` in [.claude/ownership.json](.claude/ownership.json) belong to the main session, which edits them itself; the map assigns every other path.
   - `dispatcher-dev`: anything under `dispatcher/` or owned by `dispatcher/docs/`.
-  - `skills-dev`: anything under `contract/` or `skills/`, or owned by `contract/docs/` or `skills/docs/`.
+  - `skills-dev`: anything under `contract/`, `robot/`, `vision/` or `skills/`, or owned by their `docs/`.
   - `tests-dev`: test infrastructure only (pytest plugin, helpers, markers, golden mechanism, coverage, CI) and `tests/docs/testing.md`. Tests of package behaviour go with the package agent.
   - `claude-config-dev`: anything under `.claude/` (agents, skills, hooks, settings). `CLAUDE.md` files go with the agent that owns the folder.
   - A task that touches both packages is split into one task per agent, run in sequence (the side that defines the contract first). Each agent stops and reports when it needs a change on the other side.

@@ -12,9 +12,18 @@ from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
 from typing import Literal, NoReturn
 
+from contract import backend, process
 from contract.policy import SkillPolicy
-from contract.schema import SCHEMA_VERSION, ErrorCode, RobotState, SkillError, SkillResponse, Status
-from skills import backend, process, robot_ipc
+from contract.schema import (
+    SCHEMA_VERSION,
+    ErrorCode,
+    RobotState,
+    SkillError,
+    SkillResponse,
+    Status,
+    describe_exception,
+)
+from robot import client as robot_client
 
 
 @dataclass(frozen=True)
@@ -77,10 +86,10 @@ class StateSampler:
             if self.prepare is not None:
                 self.prepare()
             elif self.reader is None:
-                robot_ipc.session.client()
+                robot_client.session.client()
             t = self.clock()
             try:
-                state = self.reader() if self.reader is not None else robot_ipc.session.read_state()
+                state = self.reader() if self.reader is not None else robot_client.session.read_state()
             finally:
                 self.seconds += self.clock() - t
         except backend.BackendNotConfigured:
@@ -96,12 +105,6 @@ class StateSampler:
 
     def state_error(self) -> str | None:
         return "; ".join(self.errors) or None
-
-
-def describe_exception(e: BaseException) -> str:
-    """Return "<ExceptionType>: <first line of str(e)>"."""
-    first = str(e).splitlines()[0] if str(e) else ""
-    return f"{type(e).__name__}: {first}"
 
 
 Body = Callable[[dict], SkillOutcome]
@@ -208,7 +211,7 @@ def run_main(
     *,
     watchdog: bool = True,
     states: StateSampler | None = None,
-    setup: Callable[[], Mapping[str, float]] = robot_ipc.session.setup_timing,
+    setup: Callable[[], Mapping[str, float]] = robot_client.session.setup_timing,
 ) -> NoReturn:
     """Shared main() of skills and utilities: capture_stdout(), optional orphan watchdog, then
     outcome = body(states), by default with a StateSampler reading through the robot service. An exception

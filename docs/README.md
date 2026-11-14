@@ -8,7 +8,7 @@ New to the project? Read [project](project.md), then [architecture](architecture
 
 Each document owns one topic. Other documents link to the owner instead of repeating it.
 
-Docs live in seven folders: shared documents that cover the whole system in `docs/` (this folder), contract documents in `contract/docs/`, dispatcher documents in `dispatcher/docs/`, skill documents in `skills/docs/`, the test-infrastructure document in `tests/docs/`, the Claude Code hooks document in `.claude/hooks/`, and the Claude Code scripts document in `.claude/scripts/`.
+Docs live in nine folders: shared documents that cover the whole system in `docs/` (this folder), contract documents in `contract/docs/`, dispatcher documents in `dispatcher/docs/`, robot documents in `robot/docs/`, vision documents in `vision/docs/`, skill documents in `skills/docs/`, the test-infrastructure document in `tests/docs/`, the Claude Code hooks document in `.claude/hooks/`, and the Claude Code scripts document in `.claude/scripts/`.
 
 ### Shared (`docs/`)
 
@@ -31,7 +31,7 @@ The `contract` package: what the dispatcher, the skills and the services agree o
 
 | Document | Owns |
 |---|---|
-| [contract.md](../contract/docs/contract.md) | The skill contract: `SKILL.md` format (frontmatter, expectations and preconditions, body), invocation and the process environment, the common response schema, error codes, policies (timeout and motion cost), the shared wire framing and shared constants. |
+| [contract.md](../contract/docs/contract.md) | The skill contract: `SKILL.md` format (frontmatter, expectations and preconditions, body), invocation and the process environment, the common response schema, error codes, policies (timeout and motion cost), the shared wire framing, backend selection, the process helpers and shared constants. |
 
 ### Dispatcher (`dispatcher/docs/`)
 
@@ -43,14 +43,30 @@ The `dispatcher` package: the loop, the LLM layer and the run log.
 | [llm.md](../dispatcher/docs/llm.md) | The LLM layer: provider and model choice, Sonnet 5.5 parameter constraints and the request we send (auto tool choice, non-strict tools, minimal thinking via `between_tools`, no temperature, `max_tokens`), schema retry, horizon rejection (not truncation) and its monitoring rule, infrastructure retries, live-API verification status. |
 | [run-log.md](../dispatcher/docs/run-log.md) | The run log as the study dataset: files, envelope, every record type, `index.jsonl`, and how to compute each study metric from the log. |
 
-### Skills (`skills/docs/`)
+### Robot (`robot/docs/`)
 
-The `skills` package: the skills, the services and the robot side.
+The `robot` package: the robot service, its protocol and client, the real and sim backends, and the utilities.
 
 | Document | Owns |
 |---|---|
-| [skills.md](../skills/docs/skills.md) | The skills package: catalog generation and registry hash, the skills, the stub backend and fault injection, the vision service, the robot service and its lease, how to add a skill and run one by hand. |
-| [robot.md](../skills/docs/robot.md) | The Go2 EDU side: robot facts, SDK and DDS usage, state sampling and the posture rule, the real backend, settle waits, robot-side open questions (odometry, `stand` skill, `Move` while sitting), and the supervised robot checklist with its recorded results. |
+| [service.md](../robot/docs/service.md) | The robot package: its client surface, the robot service and its lease, the stub backend (sim robot and stub state file) and fault injection. |
+| [robot.md](../robot/docs/robot.md) | The Go2 EDU side: robot facts, SDK and DDS usage, state sampling and the posture rule, the real backend, settle waits, robot-side open questions (odometry, `stand` skill, `Move` while sitting), and the supervised robot checklist with its recorded results. |
+
+### Vision (`vision/docs/`)
+
+The `vision` package: the vision service, its protocol and client, and the detectors.
+
+| Document | Owns |
+|---|---|
+| [vision.md](../vision/docs/vision.md) | The vision package: its client surface, the vision service, the stub camera, and object detection on the robot (camera, YOLO weights, box classification). |
+
+### Skills (`skills/docs/`)
+
+The `skills` package: the skill runtime and the skills.
+
+| Document | Owns |
+|---|---|
+| [skills.md](../skills/docs/skills.md) | The skills package: catalog generation and registry hash, the skills, how to add a skill and run one by hand. |
 
 ### Tests (`tests/docs/`)
 
@@ -77,9 +93,9 @@ The repository root also has a short [README](../README.md) (one paragraph, quic
 - **A change that affects behaviour updates the owning document in the same commit.** If the docs and the code disagree, fix one of them; do not leave the difference standing.
 - **Decisions are recorded with their reasons in the owning document**, in a short "Design decisions" section: the decision, why, and any alternative that was seriously considered and rejected. There is no separate decisions log.
 - **Open questions and pending work live in [roadmap.md](roadmap.md)**, each with an owner or the way it gets resolved. When one is resolved, move the result into the owning document (as a fact or a design decision) and remove it from the roadmap.
-- **Describe current behaviour.** Mark starting values that are expected to be tuned as *tunable*. Mark facts not yet checked on the robot or against the live API as *unverified*. Robot checklist results go in [robot.md](../skills/docs/robot.md).
+- **Describe current behaviour.** Mark starting values that are expected to be tuned as *tunable*. Mark facts not yet checked on the robot or against the live API as *unverified*. Robot checklist results go in [robot.md](../robot/docs/robot.md).
 - **One purpose per document.** Link to the owner instead of copying; add a new document only for a topic no existing one owns, put it in the folder of the package it covers (or here if it covers more than one), and list it in the matching table above.
 - **Keep only knowledge worth maintaining.** No process history (task numbers, commit lists, review rounds), no drafting artefacts.
 - **No personal contact details** (emails, phone numbers). Names and roles only.
 - Plain, concise, technical Markdown.
-- **Folder `CLAUDE.md` files** (`contract/`, `dispatcher/`, `skills/`, `tests/`) are the agent entry point for that folder: commands, a Doc | Covers table and gotchas, linking here for everything else. They do not own topics; a rule that explains behaviour belongs in the owning document.
+- **Folder `CLAUDE.md` files** (`contract/`, `dispatcher/`, `robot/`, `vision/`, `skills/`, `tests/`) are the agent entry point for that folder: commands, a Doc | Covers table and gotchas, linking here for everything else. They do not own topics; a rule that explains behaviour belongs in the owning document.

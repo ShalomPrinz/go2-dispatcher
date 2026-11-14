@@ -25,7 +25,7 @@ from telegram.ext import (
     filters,
 )
 
-from skills import stop_move
+from robot import stop_move
 
 from .. import prompts
 from ..config import TOKEN_ENV, Config

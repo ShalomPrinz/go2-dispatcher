@@ -9,7 +9,8 @@ import pytest
 
 from contract.policy import MotionCost
 from dispatcher.registry import Registry
-from skills import detect_object, motion, read_state, robot_ipc, sit, stop_move, stretch, turn, walk
+from robot import protocol, read_state, stop_move
+from skills import detect_object, motion, sit, stretch, turn, walk
 from tests.helpers import REPO_ROOT
 
 REGISTRY = Registry.load(REPO_ROOT / "skills" / "catalog")
@@ -53,7 +54,7 @@ def test_timeout_exceeds_motion_at_max_params(name):
 def test_sport_client_timeouts_cover_a_lost_reply():
     """A lost SDK reply in the service ends as sdk_error, not a kill: overhead + one reply wait + motion or settle
     fits."""
-    budget_s = motion.PROCESS_OVERHEAD_S + robot_ipc.SPORT_CLIENT_TIMEOUT_S
+    budget_s = motion.PROCESS_OVERHEAD_S + protocol.SPORT_CLIENT_TIMEOUT_S
     for name in ("walk", "turn", "sit", "stretch"):
         p = max_params(name)
         assert REGISTRY[name].policy.timeout_s(p) >= budget_s + MOTION_S[name](p), name

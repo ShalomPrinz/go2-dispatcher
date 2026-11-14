@@ -19,8 +19,9 @@ from dispatcher.models import Plan, PlanStep
 from dispatcher.registry import Registry
 from dispatcher.runlog import INDEX_FILE, stream_path
 from dispatcher.tests.helpers import ScriptedPlanner, make_config
-from skills import stub
-from skills.robot_ipc import RobotClient, StopSent
+from robot import stub_state
+from robot.client import RobotClient
+from robot.protocol import StopSent
 from tests.helpers import REPO_ROOT
 
 pytestmark = pytest.mark.integration
@@ -39,7 +40,7 @@ def registry():
 
 def build(tmp_path, registry, items, **cfg_over):
     cfg = make_config(tmp_path, **cfg_over)
-    stub.reset(cfg.stub.initial_posture, cfg.stub.state_file)
+    stub_state.reset(cfg.stub.initial_posture, cfg.stub.state_file)
     surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
     planner = ScriptedPlanner(items, surface)
     executor = Executor(cfg, cfg.base_dir)
@@ -157,7 +158,7 @@ def test_service_crash_mid_walk_ends_the_task_and_the_next_task_restarts_it(tmp_
         stops = [r for r in recs if r["type"] == "stop_move"]
         assert len(stops) == 1 and stops[0]["ok"] and stops[0]["stop_path"] == "fallback"
         assert stops[0]["reason"] == "robot_service_lost"
-        assert stub.read_state(cfg.stub.state_file).command is None
+        assert stub_state.read_state(cfg.stub.state_file).command is None
         assert _service(d).pid is None  # the next task's fresh read starts it
 
         assert read_jsonl(stream_path(Path(o.log_path)))[-1]["type"] == "stream_error"  # the loss ended the stream too

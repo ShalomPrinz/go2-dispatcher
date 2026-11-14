@@ -48,7 +48,7 @@ class SkillError:
 
 @dataclass(frozen=True)
 class ObstacleDistances:
-    """Distance to the nearest obstacle per body direction, metres; None when unknown (skills/docs/robot.md)."""
+    """Distance to the nearest obstacle per body direction, metres; None when unknown (robot/docs/robot.md)."""
 
     __pydantic_config__ = _FORBID_EXTRA
 
@@ -97,3 +97,9 @@ class SkillResponse:
     def __post_init__(self):  # under pydantic, a ValueError here becomes a ValidationError
         if (self.status == "error") != (self.error is not None):
             raise ValueError("error must be present if and only if status == 'error'")
+
+
+def describe_exception(e: BaseException) -> str:
+    """Return "<ExceptionType>: <first line of str(e)>"."""
+    first = str(e).splitlines()[0] if str(e) else ""
+    return f"{type(e).__name__}: {first}"

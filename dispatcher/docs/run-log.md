@@ -137,7 +137,7 @@ While a task runs, the dispatcher subscribes to the robot service and writes its
 | `link` | `t_mono_ms` (null if no message ever arrived), `link`: a change; for `down` the time of the last message before the gap, for `up` of the first one after it |
 | `stream_error` | `t_mono_ms`, `detail` (`ExceptionType: message`); the stream ends |
 
-A gap shows as a `link` `down` line, no samples, then a `link` `up` line ([skills.md](../../skills/docs/skills.md#robot-service)). The stream is off every critical path: it runs on its own thread and connection, and a failure of the stream (connection lost, file error) ends only the stream, never the task. One task uses one service process, so the stream covers the task, and a [service loss](loop-and-context.md#robot-service-lost) ends both: `stream_error` is the stream's last line.
+A gap shows as a `link` `down` line, no samples, then a `link` `up` line ([service.md](../../robot/docs/service.md#robot-service)). The stream is off every critical path: it runs on its own thread and connection, and a failure of the stream (connection lost, file error) ends only the stream, never the task. One task uses one service process, so the stream covers the task, and a [service loss](loop-and-context.md#robot-service-lost) ends both: `stream_error` is the stream's last line.
 
 ## `index.jsonl`
 
@@ -172,7 +172,7 @@ Pick the folder first (`logs/anthropic/real/` for the study), then group its tas
 | Robot service losses | `stop_move` with `service_lost == true` (`service_error` says why; `reason` is the stop's cause, which is `robot_service_lost` only when the loss itself triggered the stop); tasks ended by one: `outcome == "ROBOT_SERVICE_LOST"` |
 | Failed stops | `stop_move` with `ok == false`; `task_end.stop_move_failed`; tasks ended by one with the service alive: `outcome == "STOP_FAILED"`. Failed `StopMove`s the robot service sent on its own: `stop_move` with `reason == "service_stop_failed"` (`ok` says whether the fallback then stopped the robot) |
 | Motion commanded | `step_start.dispatch.motion_cost`, `task_end.budget_used` |
-| Robot state | `step_result.response.state_before` / `state_after`; `stop_move.state_after` ([robot.md](../../skills/docs/robot.md#state-sampling)) |
+| Robot state | `step_result.response.state_before` / `state_after`; `stop_move.state_after` ([robot.md](../../robot/docs/robot.md#state-sampling)) |
 | Exact prompts | `task_start.system_text` / `catalog_text` / `tool_schema` + `llm_request.user_text` |
 | Session continuity | `session_id` links tasks of one process; `task_start.previous_task` shows what carried over |
 | State at task start | `task_start.posture`, `state_age_ms`; failed reads: `task_end.outcome == "STATE_UNAVAILABLE"` and `task_start.state_error` (a pre-step read without a usable state has `state_error` null and a `stop_move` with reason `state_unavailable`) |

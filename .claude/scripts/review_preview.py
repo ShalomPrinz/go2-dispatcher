@@ -36,14 +36,18 @@ CONTRACTS: tuple[tuple[str, str], ...] = (
     ("contract/policy.py", "skill policy types (contract/docs/contract.md)"),
     ("contract/wire.py", "service wire framing (contract/docs/contract.md)"),
     ("contract/constants.py", "shared constants (contract/docs/contract.md)"),
+    ("contract/backend.py", "backend selection and stub time scale (contract/docs/contract.md)"),
+    ("contract/process.py", "process helpers: stdout capture, orphan watchdog (contract/docs/contract.md)"),
+    ("robot/protocol.py", "robot service protocol (robot/docs/service.md)"),
+    ("vision/protocol.py", "vision service protocol (vision/docs/vision.md)"),
 )
 # Safety paths for reviewer check 4 (docs/safety.md): whole files, then words on changed lines elsewhere.
 SAFETY_FILES = (
     "dispatcher/executor.py",
     "skills/motion.py",
-    "skills/stop_move.py",
+    "robot/service.py",
+    "robot/lease.py",
     "robot/stop_move.py",
-    "skills/process.py",
     "contract/process.py",
 )
 SAFETY_WORDS = re.compile(

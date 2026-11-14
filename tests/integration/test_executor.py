@@ -15,7 +15,7 @@ from dispatcher.executor import Executor
 from dispatcher.registry import Registry, SkillDescriptor
 from dispatcher.tests.helpers import make_config
 from dispatcher.tests.helpers.skill_modules.env_dump import POLICY as ENV_DUMP_POLICY
-from skills import stub
+from robot import stub_state
 from tests.helpers import REPO_ROOT
 
 pytestmark = pytest.mark.integration
@@ -241,10 +241,10 @@ def test_child_env_has_no_secrets(executor, monkeypatch):
 
 
 def test_read_state(executor, cfg):
-    stub.write_posture("sitting", cfg.stub.state_file)
+    stub_state.write_posture("sitting", cfg.stub.state_file)
     state = executor.read_state()
     assert state is not None and state.backend == "stub" and state.posture == "sitting"
-    stub.write_posture("standing", cfg.stub.state_file)
+    stub_state.write_posture("standing", cfg.stub.state_file)
     assert executor.read_state().posture == "standing"
 
 
@@ -268,7 +268,7 @@ def test_killed_walk_stops_through_the_service(tmp_path, registry):
         and not smr.service_lost
     )
     assert smr.kill_to_stop_ms is not None and smr.kill_to_stop_ms < 1000.0
-    assert stub.read_state(cfg.stub.state_file).command is None
+    assert stub_state.read_state(cfg.stub.state_file).command is None
 
 
 def test_service_hang_falls_back(executor, registry, cfg):
@@ -280,13 +280,13 @@ def test_service_hang_falls_back(executor, registry, cfg):
     smr = res.stop_move
     assert smr is not None and smr.ok and smr.stop_path == "fallback" and smr.service_error and smr.service_lost
     assert executor.robot.pid is None  # killed; only the next task's state read starts it again
-    assert stub.read_state(cfg.stub.state_file).command is None
+    assert stub_state.read_state(cfg.stub.state_file).command is None
     assert executor.fresh_state().backend == "stub"
 
 
 def test_failed_service_stop_after_a_walk_runs_the_fallback(executor, registry, cfg):
     """stop_error: the service's own StopMove ending the walk fails; the disarm reports it, the service is kept."""
-    stub.write_posture("standing", cfg.stub.state_file)
+    stub_state.write_posture("standing", cfg.stub.state_file)
     res = run(executor, registry, "walk", {"direction": "forward", "distance_m": 0.1}, fault="stop_error")
     assert (res.outcome, res.error_code, res.service_lost) == ("error", "sdk_error", False)
     smr = res.stop_move
@@ -294,7 +294,7 @@ def test_failed_service_stop_after_a_walk_runs_the_fallback(executor, registry, 
     assert smr.service_error is not None and smr.service_error.startswith("StopMove returned 99 (")
     assert smr.stop_call_ms is not None and not smr.service_lost and smr.kill_to_stop_ms is None
     assert executor.robot.pid is not None  # the service answered, so it is kept
-    assert stub.read_state(cfg.stub.state_file).command is None
+    assert stub_state.read_state(cfg.stub.state_file).command is None
 
 
 def test_step_does_not_start_a_dead_service(executor, registry):

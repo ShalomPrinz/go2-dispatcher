@@ -1,4 +1,4 @@
-"""The vision service's lifecycle: start, ready wait, restart and stop (skills/docs/skills.md, docs/running.md)."""
+"""The vision service's lifecycle: start, ready wait, restart and stop (vision/docs/vision.md, docs/running.md)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import IO
 
-from skills import vision_service
+from vision import protocol
 
 LOG_FILE_NAME = "vision_service.log"
 WAIT_POLL_S = 0.05  # ready-wait poll period, so an operator stop ends the wait (docs/safety.md)
@@ -22,7 +22,7 @@ def log_path(log_dir: Path) -> Path:
 
 
 class VisionService:
-    """One ``python -m skills.vision_service`` process at a time, owned by the dispatcher.
+    """One ``python -m vision.service`` process at a time, owned by the dispatcher.
 
     ``start`` does not wait; ``ensure_ready`` (before each vision step) restarts a dead service and waits for
     its ready line. A failed start is never raised: the step then reports ``vision_unavailable``. Its stderr
@@ -63,7 +63,7 @@ class VisionService:
         try:
             with self._open_log() as log:
                 proc = subprocess.Popen(
-                    [sys.executable, "-m", vision_service.__name__],
+                    [sys.executable, "-m", protocol.SERVICE_MODULE],
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.PIPE,
                     stderr=log,
@@ -88,7 +88,7 @@ class VisionService:
         assert proc.stdout is not None
         try:
             for line in proc.stdout:
-                if line.strip() == vision_service.READY_LINE:
+                if line.strip() == protocol.READY_LINE:
                     ready.set()
         except (OSError, ValueError):
             pass
@@ -97,11 +97,11 @@ class VisionService:
         if proc.poll() is None:
             proc.terminate()
             try:
-                proc.wait(vision_service.STOP_GRACE_S)
+                proc.wait(protocol.STOP_GRACE_S)
             except subprocess.TimeoutExpired:
                 proc.kill()
                 proc.wait()
-                self._note(f"vision service killed after {vision_service.STOP_GRACE_S:g}s grace")
+                self._note(f"vision service killed after {protocol.STOP_GRACE_S:g}s grace")
         if proc.stdout is not None:
             proc.stdout.close()
 
@@ -137,7 +137,7 @@ class VisionService:
             started_at = self._started_at
         if proc is None:
             return time.monotonic() - t0
-        startup_deadline = started_at + vision_service.STARTUP_TIMEOUT_S
+        startup_deadline = started_at + protocol.STARTUP_TIMEOUT_S
         deadline = min(startup_deadline, t0 + max(limit_s, 0.0))
         while not ready.is_set() and not stop_event.is_set() and proc.poll() is None:
             if time.monotonic() >= deadline:
@@ -155,7 +155,7 @@ class VisionService:
             if proc.poll() is not None:
                 self._note(f"vision service exited with code {proc.returncode} before ready")
             elif time.monotonic() >= startup_deadline:
-                self._note(f"vision service not ready after {vision_service.STARTUP_TIMEOUT_S:g}s; stopping it")
+                self._note(f"vision service not ready after {protocol.STARTUP_TIMEOUT_S:g}s; stopping it")
                 self._terminate_locked(proc)
 
     def stop(self) -> None:

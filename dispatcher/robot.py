@@ -1,5 +1,5 @@
 """The robot service's lifecycle, the dispatcher's state read through it, and the per-task state stream
-(skills/docs/skills.md, docs/running.md, dispatcher/docs/run-log.md)."""
+(robot/docs/service.md, docs/running.md, dispatcher/docs/run-log.md)."""
 
 from __future__ import annotations
 
@@ -16,8 +16,9 @@ from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any
 
 from contract.env import robot_lock_path
-from skills import robot_service
-from skills.robot_ipc import LinkEvent, RobotClient, ServiceUnavailable
+from robot import protocol
+from robot.client import RobotClient, ServiceUnavailable
+from robot.protocol import LinkEvent
 
 from .models import RobotServiceError, RobotServiceLostError, RobotState, StateReadError
 
@@ -36,7 +37,7 @@ def log_path(log_dir: Path) -> Path:
 
 
 class RobotService:
-    """One ``python -m skills.robot_service`` process, owned by the dispatcher for its lifetime.
+    """One ``python -m robot.service`` process, owned by the dispatcher for its lifetime.
 
     ``start`` waits for the ready line and raises ``RobotServiceError`` on a failed start; ``read_state`` starts
     a dead service again once before it reads. Stderr and lifecycle notes go to ``log_file``, emptied at the
@@ -79,7 +80,7 @@ class RobotService:
         try:
             with self._open_log() as log:
                 proc = subprocess.Popen(
-                    [sys.executable, "-m", robot_service.__name__],
+                    [sys.executable, "-m", protocol.SERVICE_MODULE],
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.PIPE,
                     stderr=log,
@@ -98,9 +99,9 @@ class RobotService:
             return
         if proc.poll() is None:
             self._terminate(proc)
-            raise self._fail(f"not ready after {robot_service.STARTUP_TIMEOUT_S:g}s; stopped it")
+            raise self._fail(f"not ready after {protocol.STARTUP_TIMEOUT_S:g}s; stopped it")
         self._close_stdout(proc)
-        if proc.returncode == robot_service.EXIT_LOCKED:
+        if proc.returncode == protocol.EXIT_LOCKED:
             lock = robot_lock_path(self.socket_path)
             raise self._fail(f"not started: another robot service holds {lock}; stop it, or wait a few seconds")
         raise self._fail(f"exited with code {proc.returncode} before ready")
@@ -109,7 +110,7 @@ class RobotService:
     def _wait_ready(proc: subprocess.Popen) -> bool:
         """Read stdout until the ready line, EOF or ``STARTUP_TIMEOUT_S``; the service writes nothing else."""
         assert proc.stdout is not None
-        deadline = time.monotonic() + robot_service.STARTUP_TIMEOUT_S
+        deadline = time.monotonic() + protocol.STARTUP_TIMEOUT_S
         with selectors.DefaultSelector() as sel:
             sel.register(proc.stdout, selectors.EVENT_READ)
             while (left := deadline - time.monotonic()) > 0:
@@ -119,7 +120,7 @@ class RobotService:
                 if not line:
                     proc.wait()
                     return False
-                if line.strip() == robot_service.READY_LINE:
+                if line.strip() == protocol.READY_LINE:
                     return True
         return False
 
@@ -132,11 +133,11 @@ class RobotService:
         if proc.poll() is None:
             proc.terminate()
             try:
-                proc.wait(robot_service.STOP_GRACE_S)
+                proc.wait(protocol.STOP_GRACE_S)
             except subprocess.TimeoutExpired:
                 proc.kill()
                 proc.wait()
-                self._note(f"robot service killed after {robot_service.STOP_GRACE_S:g}s grace")
+                self._note(f"robot service killed after {protocol.STOP_GRACE_S:g}s grace")
         self._close_stdout(proc)
 
     # --- lifecycle -------------------------------------------------------------------------

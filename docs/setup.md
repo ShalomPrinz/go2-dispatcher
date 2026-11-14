@@ -31,7 +31,7 @@ This creates `.venv/` from `uv.lock`. Stub mode and the default tests need no SD
 
 ## Lab machine (real robot)
 
-These steps have been run on the lab machine: `uv sync --extra robot --extra vision` installs both extras with Python 3.10.12, and the real backend has run on the robot from it ([robot.md](../skills/docs/robot.md)).
+These steps have been run on the lab machine: `uv sync --extra robot --extra vision` installs both extras with Python 3.10.12, and the real backend has run on the robot from it ([robot.md](../robot/docs/robot.md)).
 
 ### 1. Robot and vision extras
 
@@ -118,7 +118,7 @@ On the lab machine, with the robot on and standing, check the real backend:
 uv run go2 --backend real state     # should return within about 1 s
 ```
 
-(or set `backend = "real"` in `config.toml`). Read [safety.md](safety.md), then work through the supervised robot checklist in [robot.md](../skills/docs/robot.md#supervised-robot-checklist) before running real tasks.
+(or set `backend = "real"` in `config.toml`). Read [safety.md](safety.md), then work through the supervised robot checklist in [robot.md](../robot/docs/robot.md#supervised-robot-checklist) before running real tasks.
 
 ## Design decisions
 

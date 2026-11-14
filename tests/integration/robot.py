@@ -1,5 +1,5 @@
 """Start the robot service for tests that run skills as subprocesses, and arm their leases on a control
-connection as the dispatcher does (skills/docs/skills.md)."""
+connection as the dispatcher does (robot/docs/service.md)."""
 
 from __future__ import annotations
 
@@ -13,8 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from contract.env import LEASE_TOKEN, ROBOT_SOCKET, STUB_STATE_FILE
-from skills import robot_service
-from skills.robot_ipc import RobotClient
+from robot import protocol
+from robot.client import RobotClient
 from tests.helpers import REPO_ROOT
 
 READY_WAIT_S = 10.0
@@ -27,9 +27,9 @@ def with_socket(env: dict[str, str]) -> dict[str, str]:
 
 
 def start(env: dict[str, str], *, wait_ready: bool = True) -> subprocess.Popen:
-    """Start ``python -m skills.robot_service`` with ``env``; by default wait for its ready line."""
+    """Start ``python -m robot.service`` with ``env``; by default wait for its ready line."""
     proc = subprocess.Popen(
-        [sys.executable, "-m", "skills.robot_service"],
+        [sys.executable, "-m", protocol.SERVICE_MODULE],
         env=env,
         cwd=REPO_ROOT,
         stdin=subprocess.DEVNULL,
@@ -43,7 +43,7 @@ def start(env: dict[str, str], *, wait_ready: bool = True) -> subprocess.Popen:
     assert proc.stdout is not None
     with selectors.DefaultSelector() as sel:
         sel.register(proc.stdout, selectors.EVENT_READ)
-        ready = sel.select(READY_WAIT_S) and proc.stdout.readline().strip() == robot_service.READY_LINE
+        ready = sel.select(READY_WAIT_S) and proc.stdout.readline().strip() == protocol.READY_LINE
     if not ready:
         stop(proc)
         raise AssertionError(f"robot service not ready within {READY_WAIT_S:g}s (exit {proc.returncode})")
@@ -53,7 +53,7 @@ def start(env: dict[str, str], *, wait_ready: bool = True) -> subprocess.Popen:
 def stop(proc: subprocess.Popen) -> None:
     proc.terminate()
     try:
-        proc.wait(robot_service.STOP_GRACE_S)
+        proc.wait(protocol.STOP_GRACE_S)
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait()

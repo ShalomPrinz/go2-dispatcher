@@ -73,11 +73,14 @@ def test_stale_reference_changed_value_safety_and_missing_doc(repo: Path) -> Non
     assert "Check 4 needed" in out and "`dispatcher/executor.py`: safety file" in out
 
 
-def test_safety_files_trigger_check_4_at_old_and_new_package_paths(repo: Path) -> None:
-    moved = ("skills/stop_move.py", "robot/stop_move.py", "skills/process.py", "contract/process.py")
-    for rel in moved:
+def test_safety_files_and_contract_surfaces_outside_the_dispatcher(repo: Path) -> None:
+    files = ("skills/motion.py", "robot/service.py", "robot/lease.py", "robot/stop_move.py", "contract/process.py")
+    for rel in (*files, "robot/protocol.py"):
         (repo / rel).parent.mkdir(parents=True, exist_ok=True)
         (repo / rel).write_text("X = 1\n")
     out = preview(repo)
-    for rel in moved:
+    for rel in files:
         assert f"`{rel}`: safety file" in out
+    assert "`robot/protocol.py`: safety file" not in out
+    assert "`robot/protocol.py`: robot service protocol (robot/docs/service.md)" in out
+    assert "`contract/process.py`: process helpers" in out

@@ -1,21 +1,20 @@
-"""Shared skill helpers in process: policy, params parsing, backend selection, stdout capture
-(contract/docs/contract.md).
+"""Shared skill helpers in process: policy, params parsing, state sampling (contract/docs/contract.md).
 One subprocess case per mechanism stays in tests/integration."""
 
 from __future__ import annotations
 
 import math
-import os
 import sys
 
 import pytest
 
-from contract import env
+from contract import env, process
 from contract.policy import MotionCost
 from contract.schema import ErrorCode, RobotState
-from skills import backend, process, robot_ipc, runner, sit, turn, walk
+from robot import client as robot_client
+from skills import runner, sit, turn, walk
 from skills.runner import InvalidParams, SkillOutcome, StateSampler, parse_params
-from skills.tests.fake_clock import Clock
+from tests.helpers.fake_clock import Clock
 
 
 @pytest.mark.parametrize(
@@ -43,15 +42,6 @@ def test_parse_params_accepts_object():
     assert parse_params(["skill", '{"a": 1}']) == {"a": 1}
 
 
-@pytest.mark.parametrize("value", [None, "", "simulator"], ids=["unset", "empty", "unknown"])
-def test_backend_not_configured(monkeypatch, value):
-    monkeypatch.delenv(env.BACKEND, raising=False)
-    if value is not None:
-        monkeypatch.setenv(env.BACKEND, value)
-    with pytest.raises(backend.BackendNotConfigured):
-        backend.backend_name()
-
-
 def test_error_code_serialises_as_plain_string():
     outcome = SkillOutcome.error(ErrorCode.SDK_ERROR, "m", observations={}, timing={})
     response = runner.build_response("walk", outcome, StateSampler(), 1.0)
@@ -63,8 +53,8 @@ def test_error_code_serialises_as_plain_string():
 def test_run_skill_keeps_state_sampled_before_an_exception(monkeypatch):
     """The state taken before the body raised survives into the error response."""
     state = RobotState(t=1.0, backend="stub", posture="standing", body_height=0.32)
-    monkeypatch.setattr(robot_ipc.session, "read_state", lambda: state)
-    monkeypatch.setattr(robot_ipc.session, "client", lambda: None)  # connected
+    monkeypatch.setattr(robot_client.session, "read_state", lambda: state)
+    monkeypatch.setattr(robot_client.session, "client", lambda: None)  # connected
     monkeypatch.setenv(env.BACKEND, "stub")
     monkeypatch.setattr(process, "capture_stdout", lambda: None)
     monkeypatch.setattr(sys, "argv", ["walk", "{}"])
@@ -98,31 +88,3 @@ def test_state_ms_excludes_dds_init(monkeypatch):
     states = StateSampler(reader=read, prepare=lambda: clock.advance(1.0), clock=clock)
     states.take("before")
     assert states.used and states.seconds == pytest.approx(0.01) and states.before is not None
-
-
-def test_capture_stdout_keeps_junk_off_the_response_line(tmp_path, monkeypatch):
-    """Junk via print() and os.write(1) after capture_stdout() goes to stderr; stdout holds only the line."""
-    out_path, err_path = tmp_path / "stdout", tmp_path / "stderr"
-    ok = SkillOutcome.ok(observations={}, timing={})
-    line = runner.to_json(runner.build_response("walk", ok, StateSampler(), 1.0)) + "\n"
-    saved = os.dup(1), os.dup(2)
-    monkeypatch.setattr(process, "_saved_stdout_fd", None)
-    with open(out_path, "wb") as out, open(err_path, "wb") as err:
-        os.dup2(out.fileno(), 1)
-        os.dup2(err.fileno(), 2)
-        try:
-            process.capture_stdout()
-            with open(1, "w", closefd=False) as fd1:
-                monkeypatch.setattr(sys, "stdout", fd1)
-                print("junk via print()", flush=True)
-            os.write(1, b"junk via os.write(1)\n")
-            process.write_raw_stdout(line)
-        finally:
-            assert process._saved_stdout_fd is not None
-            os.close(process._saved_stdout_fd)
-            os.dup2(saved[0], 1)
-            os.dup2(saved[1], 2)
-            os.close(saved[0])
-            os.close(saved[1])
-    assert out_path.read_text() == line
-    assert err_path.read_text() == "junk via print()\njunk via os.write(1)\n"

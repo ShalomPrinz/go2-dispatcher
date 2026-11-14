@@ -37,7 +37,7 @@ from dispatcher.transports.telegram_bot import (
     on_stop,
     on_text,
 )
-from skills import stop_move
+from robot import stop_move
 from tests.helpers import REPO_ROOT
 
 USER = 42

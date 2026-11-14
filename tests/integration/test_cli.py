@@ -19,8 +19,8 @@ from dispatcher.models import StopCause
 from dispatcher.registry import Registry
 from dispatcher.tests.helpers import FakeExecutor, ScriptedPlanner, exec_result, make_config, stop_move_result
 from dispatcher.transports import cli as cli_module
-from skills import stop_move as stop_move_utility
-from skills import stub
+from robot import stop_move as stop_move_utility
+from robot import stub_state
 from tests.helpers import REPO_ROOT
 
 pytestmark = pytest.mark.integration
@@ -79,10 +79,10 @@ def test_catalog(cfg_path):
 
 def test_reset_stub(cfg_path):
     state_file = cfg_path.parent / "logs" / ".stub_state.json"
-    stub.write_posture("sitting", state_file)
+    stub_state.write_posture("sitting", state_file)
     proc = cli(cfg_path, "--reset-stub")
     assert proc.returncode == 0, proc.stderr
-    assert stub.read_posture(state_file) == "standing"
+    assert stub_state.read_posture(state_file) == "standing"
 
 
 def test_cli_does_not_import_anthropic():
@@ -194,7 +194,7 @@ def test_batch_stops_after_a_failed_service_stop_ending_a_walk(tmp_path, monkeyp
     tasks = tmp_path / "tasks.txt"
     tasks.write_text("say hi\nwalk\nturn right\n", encoding="utf-8")
     cfg = make_config(tmp_path, stub={"initial_posture": "standing", "faults": [{"step": 1, "kind": "stop_error"}]})
-    stub.reset(cfg.stub.initial_posture, cfg.stub.state_file)
+    stub_state.reset(cfg.stub.initial_posture, cfg.stub.state_file)
     registry = Registry.load(REPO_ROOT / "skills" / "catalog")
     walk = {"skill": "walk", "params": {"direction": "forward", "distance_m": 0.1}}
     script = [DONE, {"status": "PLAN", "steps": [walk, TURN]}]  # no further call after the failed stop

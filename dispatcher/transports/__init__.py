@@ -6,7 +6,7 @@ import importlib
 import os
 from collections.abc import Callable
 
-from skills import stub
+from robot import stub_state
 
 from .. import process_lock
 from ..config import API_KEY_ENV, Config, load_config_and_env
@@ -68,7 +68,7 @@ def build_dispatcher(
     process_lock.acquire(cfg.log.dir)  # the root, so all provider/backend folders share one lock
     registry = Registry.load(cfg.skills.dir)
     if reset_stub and cfg.robot.backend == "stub":
-        stub.reset(cfg.stub.initial_posture, cfg.stub.state_file)
+        stub_state.reset(cfg.stub.initial_posture, cfg.stub.state_file)
     surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
     planner = make_planner(cfg, surface)
     executor = Executor(cfg, cfg.base_dir)
