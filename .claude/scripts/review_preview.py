@@ -48,6 +48,7 @@ SAFETY_FILES = (
     "robot/service.py",
     "robot/lease.py",
     "robot/stop_move.py",
+    "robot/local.py",
     "contract/process.py",
 )
 SAFETY_WORDS = re.compile(

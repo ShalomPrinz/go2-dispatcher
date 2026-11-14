@@ -74,7 +74,14 @@ def test_stale_reference_changed_value_safety_and_missing_doc(repo: Path) -> Non
 
 
 def test_safety_files_and_contract_surfaces_outside_the_dispatcher(repo: Path) -> None:
-    files = ("skills/motion.py", "robot/service.py", "robot/lease.py", "robot/stop_move.py", "contract/process.py")
+    files = (
+        "skills/motion.py",
+        "robot/service.py",
+        "robot/lease.py",
+        "robot/stop_move.py",
+        "robot/local.py",
+        "contract/process.py",
+    )
     for rel in (*files, "robot/protocol.py"):
         (repo / rel).parent.mkdir(parents=True, exist_ok=True)
         (repo / rel).write_text("X = 1\n")
