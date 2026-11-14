@@ -1,6 +1,6 @@
 # Architecture refactor: shared context
 
-Read this file first, in full. It is the shared background for a series of seven step prompts (`refactor-01-…md` to `refactor-07-…md`), each run in its own session, in order. The step prompt tells you what to do; this file tells you why, where the whole series is going, and the rules every step follows.
+Read this file first, in full. It is the shared background for a series of eight step prompts (`refactor-01-…md` to `refactor-07-…md`, with `refactor-02.5-…md` between steps 2 and 3), each run in its own session, in order. The step prompt tells you what to do; this file tells you why, where the whole series is going, and the rules every step follows.
 
 These `refactor-*.md` files are working briefs. They live only on the `refactor_prompts` branch: read them from there (`git fetch origin refactor_prompts`, then `git show origin/refactor_prompts:<file>`), never copy or commit them onto a working branch, never merge that branch, never cite them from code or docs, and never copy their wording into docs (the docs carry no process history).
 
@@ -14,6 +14,8 @@ All steps are committed on one branch, **`architecture_refactor`**, created from
 4. Then add the step's notes for the next session to "Step status" below, as a commit on `refactor_prompts` that changes only this file. Keep each entry short: the commits, what ended differently from what the next prompt assumes, and deferred work.
 
 ## Step status
+
+Paths in the step 1 and step 2 entries below are as those steps left them; step 2.5 moves `robot/` and `vision/` to `services/robot/` and `services/vision/` (module names `services.robot.…`, `services.vision.…`).
 
 ### Step 1 (`refactor-01-contract.md`): done
 
@@ -69,9 +71,11 @@ File and line references were correct before step 1. Earlier steps move code, so
 
 ```
 contract/    schema, policy, manifest, env vars, error codes, domain constants, shared wire framing
-robot/       service (server, lease/motion, state store), protocol, client,
-             backends/{real, sim, faults}, utilities (stop_move, read_state, lease)
-vision/      service, protocol/client, detectors/{real, stub}, coco, box classification
+services/    the two processes the dispatcher supervises, plus only what both of them share
+  backend/     shared by both services: backend loader, sim world state, DDS init (step 3)
+  robot/       service (server, lease/motion, state store), protocol, client,
+               backends/{real, sim, faults}, utilities (stop_move, read_state, lease)
+  vision/      service, protocol/client, detectors/{real, stub}, coco, box classification
 skills/      runtime (runner, process, motion helpers) + one folder per skill (module + SKILL.md)
 dispatcher/
   planning/    plan model, tool schema, validation, bounds, budget, verification
@@ -86,8 +90,8 @@ analysis/    report (it only reads logs)
 Dependency direction, enforced by import-linter contracts at package level (no module-name lists):
 
 - `contract` imports no other project package. Everything outside `contract.manifest` is standard library only.
-- `robot` and `vision` import `contract`, never each other's internals, never `skills` or `dispatcher`.
-- `skills` imports `contract` and the `robot` / `vision` **clients** only: never a backend, a service module, `unitree_sdk2py`, `cyclonedds`, the detector stack, pydantic or yaml.
+- `services.robot` and `services.vision` import `contract` and the shared `services.backend`, never each other, never `skills` or `dispatcher`. Each service keeps its own protocol and client: the two message sets differ, and the common framing is `contract.wire`. Anything skills also import (`contract.backend`, `contract.process`) stays in `contract`.
+- `skills` imports `contract` and the `services.robot` / `services.vision` **clients** only: never a backend, a service module, `unitree_sdk2py`, `cyclonedds`, the detector stack, pydantic or yaml.
 - `dispatcher` imports `contract`, the clients, and what it needs to start the services (module names, lifecycle constants): never a backend.
 - `analysis` imports only what it needs to read logs.
 
@@ -97,6 +101,7 @@ Dependency direction, enforced by import-linter contracts at package level (no m
 |---|---|---|---|
 | 1 | `refactor-01-contract.md` | `contract/` package; no more odd imports for shared constants | 1 (part), 5 (`sdk_error`) |
 | 2 | `refactor-02-robot-vision-packages.md` | `robot/` and `vision/` packages, moved as they are; package-level import contracts | 1 |
+| 2.5 | `refactor-02.5-services-package.md` | `robot/` and `vision/` moved under `services/`, as they are | 1 |
 | 3 | `refactor-03-backend-interface-faults.md` | one backend interface; fault injection out of `Motion` and off the wire | 2, 3 |
 | 4 | `refactor-04-skill-declarations.md` | one folder per skill, `skills/runtime/`; skills declare what the dispatcher used to know by name | 1 (rest), 5 |
 | 5 | `refactor-05-planning-llm.md` | `dispatcher/planning/` and `dispatcher/llm/`; model texts split from operator texts | 6, 8 (part) |

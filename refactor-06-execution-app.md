@@ -12,14 +12,14 @@ The executor carries the dispatcher's side of the stop path. Its behaviour must 
 
 ## Starting point
 
-Steps 1 to 5 are done: `contract/`, `robot/` (with a backend interface and a client surface), `vision/`, `skills/` (runtime plus skill folders, capabilities declared), `dispatcher/planning/`, `dispatcher/llm/`. Find these by symbol:
+Steps 1 to 5 are done: `contract/`, `services/robot/` (with a backend interface and a client surface), `services/vision/`, `skills/` (runtime plus skill folders, capabilities declared), `dispatcher/planning/`, `dispatcher/llm/`. Find these by symbol:
 
 - `Executor` in `dispatcher/executor.py` does all of: build the child environment, spawn the skill process group and read its pipes, track kills and their cause, ping the control connection for liveness while a step runs, run the stop path (`stop` on the control connection, wait for `stop_sent`, otherwise SIGKILL the service and run the `stop_move` utility), manage the control connection, run the `read_state` utility, and own the `RobotService` and `VisionService` supervisors. The `SkillExecutor` protocol next to it is what the loop depends on.
 - Symptoms to remove: private methods returning `(StopMoveResult, bool)` tuples; `service_lost` on both `ExecResult` and `StopMoveResult`; `dispatcher.py` copying `ExecResult` into `StepResult` field by field.
 - `RobotService` (`dispatcher/robot.py`) and `VisionService` (`dispatcher/vision.py`) each implement spawn, log file, readiness wait and terminate; about 80 lines are the same.
 - The composition root is `build_dispatcher` and `make_planner` in `dispatcher/transports/__init__.py`. It calls `executor.vision.start()` through the executor, and decides whether vision is needed from the registry.
 - `dispatcher/transports/cli.py` builds an `Executor` for the `state` command just to read state once.
-- `dispatcher/config.py` imports stub and COCO names from implementation packages (after step 2 these were `robot.faults`, `robot.stub_state`, `contract.backend` and `vision.coco`; step 3 moves the stub part to a client surface or `contract/`; check what is left). The supervisors start the services from `SERVICE_MODULE` in each service's `protocol.py`, with the lifecycle constants next to it.
+- `dispatcher/config.py` imports stub and COCO names from implementation packages (after step 2.5 these were `services.robot.faults`, `services.robot.stub_state`, `contract.backend` and `services.vision.coco`; step 3 moves the stub part to a client surface or `contract/`; check what is left). The supervisors start the services from `SERVICE_MODULE` in each service's `protocol.py`, with the lifecycle constants next to it. When the two supervisors share a base, the lifecycle constants both services use (`READY_LINE`, `STOP_GRACE_S`) are a candidate for a shared module under `services/`; the startup timeouts differ per service and stay with each.
 - `dispatcher/report.py` reads run logs and imports a few constants from the run log module and config.
 - Result types that step 5 left in `dispatcher/models.py` for this step.
 

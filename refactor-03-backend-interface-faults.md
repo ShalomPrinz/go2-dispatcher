@@ -4,7 +4,7 @@ Read `refactor-00-context.md` first (same branch as this file: `git show origin/
 
 ## Goal
 
-Two changes inside `robot/` and `vision/`, which step 2 created by moving code as it was:
+Two changes inside `services/robot/` and `services/vision/`, which steps 2 and 2.5 created by moving code as it was:
 
 1. **A backend interface.** The choice between the real robot and the simulation is made once, at start-up, and returns an object. No `if backend_name() == "real"` branch remains anywhere else. Adding a third backend means adding one module and one registration.
 2. **Fault injection leaves the safety-critical path.** `Motion` (lease, primitives, stop) has no knowledge of faults, of the simulation, or of which backend it runs on. The wire protocol has no `fault` field. Faults that simulate a misbehaving robot are produced by a wrapper around the sim sport client; faults that simulate a misbehaving skill process are produced in one place in the skill runtime.
@@ -13,20 +13,21 @@ This is the step with the most safety value, and the only one in the series that
 
 ## Starting point
 
-Find these by symbol; paths are as step 2 left them (see its "Step status" entry in the context file): the utilities' robot access is `robot/local.py`, the sim is `robot/backends/sim.py`, the stub state file is `robot/stub_state.py`, the stub fault code is `robot/faults.py`, and backend selection with the stub time scale is `contract/backend.py`.
+Find these by symbol; paths are as steps 2 and 2.5 left them (see their "Step status" entries in the context file; step 2.5 moved both packages under `services/`): the utilities' robot access is `services/robot/local.py`, the sim is `services/robot/backends/sim.py`, the stub state file is `services/robot/stub_state.py`, the stub fault code is `services/robot/faults.py`, and backend selection with the stub time scale is `contract/backend.py`.
 
 - Backend branches: the utilities' robot access (formerly `skills/local.py`: `init_dds`, `setup_timing`, `sport_client`, `sample_state`), the robot service's `start_source` and `start_motion`, the backend `sleep` (stub time scale), and the vision service's detector choice.
 - `Motion` in the robot service: `_stop_error`, `_rejected`, `_fault()`, the `sim` property, casts to `SimRobot`, and the `fault` argument of `move` and `action`.
 - `_service_fault` in the robot service reads `fault` from the request; the skills' motion helpers (`motion.py`) and `detect_object.py` call `inject_fault()` and pass the result on the wire.
-- The stub's fault code in `robot/faults.py` (`_FaultInjector`, `inject_fault`, `apply_service_fault`): the fault kind comes from an environment variable set per skill process; only the process's first action is faulted. Kinds fall in two groups: the skill process misbehaves (hang, crash, garbage on stdout) and the robot or service misbehaves (error, rejection, stop error, service crash, service hang). Read the stub and fault-injection doc for the exact list and semantics before designing.
-- The ten import-contract exceptions step 2 added (`pyproject.toml`, marked "exception, to be removed"; listed in `docs/roadmap.md`): the utilities import `skills.runner`; the stub camera imports `robot.stub_state`; the real detector imports `robot.backends.real` for `init_dds`; the dispatcher imports `robot.stop_move` / `robot.read_state` for the module name and `POLICY`, which also loads `robot.local` and the sim. Each is removed where its import goes, with its roadmap row.
-- `dispatcher/config.py` imports `robot.faults`, `robot.stub_state`, `contract.backend` and `vision.coco` for config validation; the transports call the stub reset.
+- The stub's fault code in `services/robot/faults.py` (`_FaultInjector`, `inject_fault`, `apply_service_fault`): the fault kind comes from an environment variable set per skill process; only the process's first action is faulted. Kinds fall in two groups: the skill process misbehaves (hang, crash, garbage on stdout) and the robot or service misbehaves (error, rejection, stop error, service crash, service hang). Read the stub and fault-injection doc for the exact list and semantics before designing.
+- The ten import-contract exceptions step 2 added, renamed by step 2.5 (`pyproject.toml`, marked "exception, to be removed"; listed in `docs/roadmap.md`): the utilities import `skills.runner`; the stub camera imports `services.robot.stub_state`; the real detector imports `services.robot.backends.real` for `init_dds`; the dispatcher imports `services.robot.stop_move` / `services.robot.read_state` for the module name and `POLICY`, which also loads `services.robot.local` and the sim. Each is removed where its import goes, with its roadmap row.
+- `dispatcher/config.py` imports `services.robot.faults`, `services.robot.stub_state`, `contract.backend` and `services.vision.coco` for config validation; the transports call the stub reset.
 
 ## Requirements for the design
 
-- **Backend interface** in `robot/backends/`: a protocol covering what the service and the utilities need (state source, sport client, one-shot state sample, set-up timing, the clock or sleep that carries the stub time scale), plus one loader that maps the configured name to an implementation. The real backend's third-party imports stay lazy. The vision detectors get the same treatment at their own size (a detector factory; do not build a framework).
+- **Backend interface** in `services/robot/backends/`: a protocol covering what the service and the utilities need (state source, sport client, one-shot state sample, set-up timing, the clock or sleep that carries the stub time scale), plus one loader that maps the configured name to an implementation. The real backend's third-party imports stay lazy. The vision detectors get the same treatment at their own size (a detector factory; do not build a framework).
+- **What both services share goes in one shared module under `services/`** (recommended name `services/backend/`; the design proposes it): the backend loader, the sim world state both read (`stub_state`: pose, posture, objects), and the one-per-process DDS init. That removes the vision-to-robot exceptions instead of moving them; robot-only parts (sport client, state source, the fault wrapper) stay in `services/robot/backends/`. Only what both services use goes there, and nothing that skills import (`contract/backend.py` and `contract/process.py` stay in `contract/` because skills use them). The import contracts then allow `services.robot` and `services.vision` to import that shared module and still forbid them each other.
 - **`Motion` is backend-agnostic**: it receives a sport client and a state store, and that is all it knows.
-- **Robot-side faults** live in `robot/backends/faults.py` (replacing `robot/faults.py`; whatever stays shared with the skill-process hook goes where that hook can import it) as a wrapper around the sim sport client (and, for service crash and hang, around whatever the wrapper needs to reach). It is constructed only by the sim backend; the real backend cannot load it. An import contract or a test enforces that.
+- **Robot-side faults** live in `services/robot/backends/faults.py` (replacing `services/robot/faults.py`; whatever stays shared with the skill-process hook goes where that hook can import it) as a wrapper around the sim sport client (and, for service crash and hang, around whatever the wrapper needs to reach). It is constructed only by the sim backend; the real backend cannot load it. An import contract or a test enforces that.
 - **Skill-process faults** (hang, crash, garbage) are triggered from one hook in the skill runtime, not from each skill or helper.
 - **The per-step fault still reaches the right place.** Today the skill process reads the environment variable and forwards service-side kinds on the wire. With the wire field gone, the wrapper needs another way to learn the fault for the current step. Candidates: the stub state file, which is already the simulation's shared cross-process state; a sim-only control message handled by the wrapper's side of the service, never by `Motion`; the lease-arm call. Recommended starting point: the stub state file, because it keeps the protocol identical on both backends. The agent researches and proposes; the user decides.
 - **Same observable fault behaviour**: every fault kind produces the same skill response, verdict, outcome and log records as before, at the same point in the step (for example the mid-walk fault still fires while a velocity command is active). `stub.faults` config and the `--fault` CLI option keep their meaning.
@@ -34,7 +35,7 @@ Find these by symbol; paths are as step 2 left them (see its "Step status" entry
 
 ## Out of scope
 
-Reshaping `skills/` (step 4), including `dispatcher/executor.py`'s import of `skills.detect_object`; verifying the real vision code on the robot (`vision/detectors/real.py` and the real branch of `vision/service.py` are unverified: keep the change there to the detector factory, and name it in the report); anything in `dispatcher/` beyond the imports and calls named above; new fault kinds; new backends; changes to the real backend's SDK calls, settle waits or timing.
+Reshaping `skills/` (step 4), including `dispatcher/executor.py`'s import of `skills.detect_object`; verifying the real vision code on the robot (`services/vision/detectors/real.py` and the real branch of `services/vision/service.py` are unverified: keep the change there to the detector factory, and name it in the report); anything in `dispatcher/` beyond the imports and calls named above; new fault kinds; new backends; changes to the real backend's SDK calls, settle waits or timing.
 
 ## Decisions to confirm with the user before implementing
 
@@ -56,9 +57,9 @@ For the reviewer on tasks 2 and 4: ask it to trace the real-backend path through
 
 ## Done when
 
-- `grep -rn "backend_name()" robot vision skills dispatcher --include=*.py` finds only the loader (and tests).
+- `grep -rn "backend_name()" services skills dispatcher --include=*.py` finds only the loader (and tests).
 - `Motion` contains none of: `fault`, `sim`, `SimRobot`, `_stop_error`, `_rejected`.
-- `grep -rn "inject_fault\|\"fault\"" skills robot/` shows no skill or helper calling the injector and no `fault` key in protocol code.
+- `grep -rn "inject_fault\|\"fault\"" skills services/robot/` shows no skill or helper calling the injector and no `fault` key in protocol code.
 - `uv run lint-imports` passes with none of step 2's ten "exception, to be removed" entries left, and the roadmap's "Import-contract exceptions" section is gone.
 - Default and integration suites pass, including every fault-injection test; the registry hash and golden files are unchanged.
 
