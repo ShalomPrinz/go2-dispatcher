@@ -47,6 +47,18 @@ Notes for later steps:
 - `dispatcher/executor.py` still imports `skills.detect_object` (fault 5; step 4).
 - The real-hardware code in `vision/detectors/real.py` and the real branch of `vision/service.py` is unverified on the robot (moved, not exercised).
 
+### Step 2.5 (`refactor-02.5-services-package.md`): done
+
+On `architecture_refactor`: `tooling: split skills-dev into contract-dev, robot-dev and vision-dev and map the services/ paths` and `architecture: move robot and vision into services/robot and services/vision under one services package`. Registry hash `768d05c6633b8fdc` before and after; 555 passed, 1 skipped; 94 integration; 9 import contracts kept; basedpyright 13 errors (baseline).
+
+Notes for later steps:
+
+- **Agents (user decision, overrides "No new dev agents" below)**: `contract-dev` owns `contract/`, `robot-dev` owns `services/robot/`, `vision-dev` owns `services/vision/`, `skills-dev` owns only `skills/`. The `services/` root files (`services/__init__.py`, `services/CLAUDE.md`) are under `main` in `.claude/ownership.json`, so the main session edits them; `packages` lists `services/robot/` and `services/vision/`, not `services/`, so the scope hook lets the main session write the root files. The user said "services is the main agent's responsibility": ask whether `services/backend/` (step 3) is also main-owned or goes to robot-dev before briefing it, and have claude-config-dev map it first.
+- **Import contracts restructured** (user decision): an `independence` contract between `services.robot` and `services.vision`, and a `forbidden` contract `services` ↛ `skills`, `dispatcher`, replace the two per-service forbidden contracts. The ten exception edges are renamed and sit on the contract they break: the three `services.robot.{stop_move,read_state}` / `test_stop_move` → `skills.runner` edges on the services contract, the three vision → robot edges on the independence contract, the four dispatcher edges on the dispatcher contract. `tests/docs/testing.md` and `docs/roadmap.md` tables match; roadmap owners are now robot-dev / vision-dev.
+- `services/` holds only `__init__.py` and `CLAUDE.md`; no `services/docs/` or `services/tests/`. The design decision is in `docs/architecture.md` ("Four top-level packages …").
+- Integration helper modules `tests/integration/robot.py` and `tests/integration/vision.py` keep their names.
+- Sub-agents with `model: sonnet` worked for the mechanical briefs; several left relative links one level short after the move. A markdown link check (every `](path)` resolves) caught them; run one after any move.
+
 ## What this is
 
 The system works and is tested. The refactor changes its **structure**, not its behaviour: the code has outgrown the "two packages, `dispatcher/` and `skills/`" layout. An architecture review found nine faults (below). The series fixes them in an order where each step leaves the repo green, committed and usable, so the series can stop after any step.
