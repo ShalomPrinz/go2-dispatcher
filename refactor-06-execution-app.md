@@ -19,7 +19,7 @@ Steps 1 to 5 are done: `contract/`, `robot/` (with a backend interface and a cli
 - `RobotService` (`dispatcher/robot.py`) and `VisionService` (`dispatcher/vision.py`) each implement spawn, log file, readiness wait and terminate; about 80 lines are the same.
 - The composition root is `build_dispatcher` and `make_planner` in `dispatcher/transports/__init__.py`. It calls `executor.vision.start()` through the executor, and decides whether vision is needed from the registry.
 - `dispatcher/transports/cli.py` builds an `Executor` for the `state` command just to read state once.
-- `dispatcher/config.py` imports stub and COCO names from implementation packages (step 3 may already have moved the stub part to a client surface or `contract/`; check what is left).
+- `dispatcher/config.py` imports stub and COCO names from implementation packages (after step 2 these were `robot.faults`, `robot.stub_state`, `contract.backend` and `vision.coco`; step 3 moves the stub part to a client surface or `contract/`; check what is left). The supervisors start the services from `SERVICE_MODULE` in each service's `protocol.py`, with the lifecycle constants next to it.
 - `dispatcher/report.py` reads run logs and imports a few constants from the run log module and config.
 - Result types that step 5 left in `dispatcher/models.py` for this step.
 

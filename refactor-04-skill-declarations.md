@@ -13,7 +13,7 @@ After steps 1 to 3: `contract/` holds the manifest schema (`SkillFrontmatter`, `
 
 The name checks to remove (find by symbol):
 
-- `needs_vision` in `dispatcher/executor.py` compares the skill's entrypoint to the `detect_object` module; it is used when running a step and at start-up (`dispatcher/transports/__init__.py`) to decide whether to start the vision service.
+- `needs_vision` in `dispatcher/executor.py` compares the skill's entrypoint to the `detect_object` module (it imports `skills.detect_object` for that); it is used when running a step and at start-up (`dispatcher/transports/__init__.py`) to decide whether to start the vision service.
 - `MOTION_SKILLS = {"walk", "turn", "sit", "stretch"}` in `dispatcher/report.py`, used for time-to-first-motion and motion step counts. The report reads logs, not the registry.
 - Anything else of the same kind: search `dispatcher/` (outside tests) for the five skill names and for `skills.` module references, and list what you find for the user before changing it. A skill declared `self_reported` already exists as a declaration; use it as the model.
 

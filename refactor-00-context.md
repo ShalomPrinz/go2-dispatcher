@@ -32,6 +32,19 @@ Notes for later steps:
 - Known flaky test, not caused by the refactor: `skills/tests/unit/test_vision_ipc.py::test_result_and_error_round_trip` fails now and then in full runs (`EADDRINUSE`: the second `serve_once` binds before the first server thread closes its listener). It passes alone. Not fixed; the fix is a separate commit when the user agrees.
 - Whole-repo `uv run basedpyright` reports 13 errors at baseline (9 missing-extra imports, 3 in `dispatcher/tests/unit/test_console_trace.py`, 1 in `tests/integration/test_live_llm.py`); compare against that, not zero.
 
+### Step 2 (`refactor-02-robot-vision-packages.md`): done
+
+On `architecture_refactor`: `tooling: add robot/ and vision/ to the ownership map and agent definitions under skills-dev`, `architecture: move robot and vision services into robot/ and vision/ packages`, `tooling: name the robot service motion loop in reviewer check 4 and add robot/local.py to the safety files`, `docs: state what the dispatcher loads through the robot utilities and list the import-contract exceptions in the roadmap`.
+
+Notes for later steps:
+
+- Where things are, differently from the target layout: the stub fault code is its own module, `robot/faults.py` (not under `robot/backends/`); the stub state file is `robot/stub_state.py`; the sim is `robot/backends/sim.py`. Backend selection and the stub time scale are `contract/backend.py`, the process helpers (stdout capture, orphan watchdog) are `contract/process.py`, because skills use both. `describe_exception` is in `contract/schema.py`.
+- The dispatcher starts the services from the `SERVICE_MODULE` strings in `robot/protocol.py` and `vision/protocol.py` (with `READY_LINE`, `STARTUP_TIMEOUT_S`, `STOP_GRACE_S`, and `EXIT_LOCKED` for the robot), not from `module.__name__`.
+- **Ten import-contract exceptions** in `[tool.importlinter]` in `pyproject.toml`, each marked "exception, to be removed" and listed in `docs/roadmap.md` ("Import-contract exceptions"). They are step 3's to remove, where the import goes: `robot.stop_move` / `robot.read_state` (and the `test_stop_move` unit test) import `skills.runner`; `vision.detectors.stub` (and its unit test) imports `robot.stub_state`; `vision.detectors.real` imports `robot.backends.real` for `init_dds`; `dispatcher.executor`, `dispatcher.transports.telegram_bot` and `test_telegram_bot` import `robot.stop_move` / `robot.read_state` for the module name and `POLICY`, which also loads `robot.local` and the sim backend.
+- `dispatcher/config.py` imports `robot.faults` (`FaultKind`), `robot.stub_state` (posture, defaults, `parse_objects`), `contract.backend` (`DEFAULT_TIME_SCALE`) and `vision.coco` (`COCO_CLASSES`). These are not under a contract exception, because the dispatcher contract forbids only `robot.backends` and the service-side modules; step 3 still moves them behind the robot client surface or `contract/`.
+- `dispatcher/executor.py` still imports `skills.detect_object` (fault 5; step 4).
+- The real-hardware code in `vision/detectors/real.py` and the real branch of `vision/service.py` is unverified on the robot (moved, not exercised).
+
 ## What this is
 
 The system works and is tested. The refactor changes its **structure**, not its behaviour: the code has outgrown the "two packages, `dispatcher/` and `skills/`" layout. An architecture review found nine faults (below). The series fixes them in an order where each step leaves the repo green, committed and usable, so the series can stop after any step.
