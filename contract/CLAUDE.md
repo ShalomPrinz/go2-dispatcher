@@ -19,9 +19,9 @@ uv run lint-imports                            # import contracts; must pass bef
 |---|---|
 | [contract.md](docs/contract.md) | The package's modules, `SKILL.md` frontmatter, expectations and preconditions, `SKILL.md` body, invocation and environment, response schema, error codes, timeout and motion-cost policies, wire framing, shared constants, `process` and `backend` |
 | [skills.md](../skills/docs/skills.md) | The skills, catalog and registry hash, adding a skill |
-| [vision.md](../vision/docs/vision.md) | The vision service (its protocol uses the wire framing) |
-| [service.md](../robot/docs/service.md) | The robot service (its protocol uses the wire framing), stub backend and fault injection |
-| [robot.md](../robot/docs/robot.md) | Robot state fields and the posture rule behind `RobotState` and `Posture` |
+| [vision.md](../services/vision/docs/vision.md) | The vision service (its protocol uses the wire framing) |
+| [service.md](../services/robot/docs/service.md) | The robot service (its protocol uses the wire framing), stub backend and fault injection |
+| [robot.md](../services/robot/docs/robot.md) | Robot state fields and the posture rule behind `RobotState` and `Posture` |
 | [loop-and-context.md](../dispatcher/docs/loop-and-context.md) | How the dispatcher uses the contract: step bounds, verification, step outcomes |
 | [testing.md](../tests/docs/testing.md) | Test layout, import boundaries |
 

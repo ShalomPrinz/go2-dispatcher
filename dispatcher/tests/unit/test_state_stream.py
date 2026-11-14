@@ -8,7 +8,7 @@ import time
 from dispatcher import robot
 from dispatcher.robot import OBSERVER_FAILED_WARNING, StateStream
 from dispatcher.tests.helpers.fakes import state
-from robot.protocol import LinkEvent, StateReply
+from services.robot.protocol import LinkEvent, StateReply
 
 
 class FakeClient:

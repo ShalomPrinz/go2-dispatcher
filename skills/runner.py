@@ -23,7 +23,7 @@ from contract.schema import (
     Status,
     describe_exception,
 )
-from robot import client as robot_client
+from services.robot import client as robot_client
 
 
 @dataclass(frozen=True)

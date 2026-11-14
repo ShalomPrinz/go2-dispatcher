@@ -18,8 +18,6 @@ sys.path.insert(0, str(HOOKS.parent))
 import ownership  # noqa: E402  (the map loader `scope.py` uses; the hooks themselves run as subprocesses)
 
 OWNERSHIP = ownership.load_map()
-# Path prefixes the map lists before the services/ move creates them (self-expiring, see the test below).
-NOT_MOVED_YET = ("services/robot/", "services/vision/", "services/__init__.py", "services/CLAUDE.md")
 MAIN_ONLY = tuple(json.loads((HOOKS.parent / "ownership.json").read_text())["main"])
 
 
@@ -83,8 +81,6 @@ def test_scope_main_session_and_builtin_agents_denied_packages_only(repo: Path, 
             "dispatcher/loop.py",
             "skills/catalog/x/SKILL.md",
             "contract/x.py",
-            "robot/x.py",
-            "vision/x.py",
             "services/robot/x.py",
         ):
             reason = decision("scope.py", write(rel, repo, agent), tmpdir_env)
@@ -100,9 +96,7 @@ def test_scope_project_agent_allowed_in_scope_and_denied_outside(repo: Path, tmp
     assert "outside the dispatcher-dev scope" in reason and "In scope of: skills-dev" in reason
     for rel, agent in (
         ("contract/x.py", "contract-dev"),
-        ("robot/backends/x.py", "robot-dev"),
         ("services/robot/backends/x.py", "robot-dev"),
-        ("vision/docs/vision.md", "vision-dev"),
         ("services/vision/docs/vision.md", "vision-dev"),
     ):
         assert decision("scope.py", write(rel, repo, agent), tmpdir_env) == "allow"
@@ -205,12 +199,7 @@ def test_ownership_paths_exist_in_the_repo() -> None:
     assert OWNERSHIP is not None, "ownership.json missing or malformed"
     scopes, packages = OWNERSHIP
     for p in {p for ps in scopes.values() for p in ps} | set(packages) | set(MAIN_ONLY):
-        assert p.startswith("**/") or p.startswith(NOT_MOVED_YET) or (ROOT / p).exists(), p
-
-
-def test_not_moved_yet_exemption_expires() -> None:
-    """Fails once the services/ move has landed: then delete `NOT_MOVED_YET`, this test and the old paths."""
-    assert any(not (ROOT / p).exists() for p in NOT_MOVED_YET), "move landed: remove NOT_MOVED_YET and the old paths"
+        assert p.startswith("**/") or (ROOT / p).exists(), p
 
 
 def test_ownership_agents_have_agent_files() -> None:

@@ -11,7 +11,7 @@ import pytest
 from contract import env, process
 from contract.policy import MotionCost
 from contract.schema import ErrorCode, RobotState
-from robot import client as robot_client
+from services.robot import client as robot_client
 from skills import runner, sit, turn, walk
 from skills.runner import InvalidParams, SkillOutcome, StateSampler, parse_params
 from tests.helpers.fake_clock import Clock

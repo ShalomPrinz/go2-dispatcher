@@ -7,12 +7,12 @@ import time
 
 from contract import backend, policy
 from contract.schema import ErrorCode
-from robot import faults
+from services.robot import faults
+from services.vision import client, protocol
+from services.vision.coco import COCO_CLASSES
+from services.vision.protocol import CameraUnavailable, DetectorError
 from skills import runner
 from skills.motion import PROCESS_OVERHEAD_S
-from vision import client, protocol
-from vision.coco import COCO_CLASSES
-from vision.protocol import CameraUnavailable, DetectorError
 
 SUGGESTIONS_N = 3
 SUGGESTIONS_CUTOFF = 0.5

@@ -19,9 +19,9 @@ from dispatcher.models import Plan, PlanStep
 from dispatcher.registry import Registry
 from dispatcher.runlog import INDEX_FILE, stream_path
 from dispatcher.tests.helpers import ScriptedPlanner, make_config
-from robot import stub_state
-from robot.client import RobotClient
-from robot.protocol import StopSent
+from services.robot import stub_state
+from services.robot.client import RobotClient
+from services.robot.protocol import StopSent
 from tests.helpers import REPO_ROOT
 
 pytestmark = pytest.mark.integration

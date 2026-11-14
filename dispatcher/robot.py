@@ -1,5 +1,5 @@
 """The robot service's lifecycle, the dispatcher's state read through it, and the per-task state stream
-(robot/docs/service.md, docs/running.md, dispatcher/docs/run-log.md)."""
+(services/robot/docs/service.md, docs/running.md, dispatcher/docs/run-log.md)."""
 
 from __future__ import annotations
 
@@ -16,9 +16,9 @@ from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any
 
 from contract.env import robot_lock_path
-from robot import protocol
-from robot.client import RobotClient, ServiceUnavailable
-from robot.protocol import LinkEvent
+from services.robot import protocol
+from services.robot.client import RobotClient, ServiceUnavailable
+from services.robot.protocol import LinkEvent
 
 from .models import RobotServiceError, RobotServiceLostError, RobotState, StateReadError
 
@@ -37,7 +37,7 @@ def log_path(log_dir: Path) -> Path:
 
 
 class RobotService:
-    """One ``python -m robot.service`` process, owned by the dispatcher for its lifetime.
+    """One ``python -m services.robot.service`` process, owned by the dispatcher for its lifetime.
 
     ``start`` waits for the ready line and raises ``RobotServiceError`` on a failed start; ``read_state`` starts
     a dead service again once before it reads. Stderr and lifecycle notes go to ``log_file``, emptied at the

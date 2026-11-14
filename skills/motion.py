@@ -1,4 +1,4 @@
-"""Shared helpers for the skills that move the robot (robot/docs/service.md): they ask the robot service for a
+"""Shared helpers for the skills that move the robot (services/robot/docs/service.md): they ask the robot service for a
 motion primitive with the step's lease token and turn its reply into a SkillOutcome. Skill processes never
 touch DDS. Standard library, contract, robot's client surface and skills only."""
 
@@ -10,10 +10,10 @@ from typing import NamedTuple
 
 from contract import backend
 from contract.schema import ErrorCode, describe_exception
-from robot import client as robot_client
-from robot import faults, protocol
-from robot.client import Refused, ServiceUnavailable
-from robot.protocol import MoveTarget
+from services.robot import client as robot_client
+from services.robot import faults, protocol
+from services.robot.client import Refused, ServiceUnavailable
+from services.robot.protocol import MoveTarget
 from skills import runner
 
 PROCESS_OVERHEAD_S = 5.0  # process start + robot service connect + two state samples (tunable)

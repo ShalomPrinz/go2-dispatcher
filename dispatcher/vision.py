@@ -1,4 +1,4 @@
-"""The vision service's lifecycle: start, ready wait, restart and stop (vision/docs/vision.md, docs/running.md)."""
+"""The vision service lifecycle: start, ready wait, restart, stop (services/vision/docs/vision.md, docs/running.md)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import IO
 
-from vision import protocol
+from services.vision import protocol
 
 LOG_FILE_NAME = "vision_service.log"
 WAIT_POLL_S = 0.05  # ready-wait poll period, so an operator stop ends the wait (docs/safety.md)
@@ -22,7 +22,7 @@ def log_path(log_dir: Path) -> Path:
 
 
 class VisionService:
-    """One ``python -m vision.service`` process at a time, owned by the dispatcher.
+    """One ``python -m services.vision.service`` process at a time, owned by the dispatcher.
 
     ``start`` does not wait; ``ensure_ready`` (before each vision step) restarts a dead service and waits for
     its ready line. A failed start is never raised: the step then reports ``vision_unavailable``. Its stderr

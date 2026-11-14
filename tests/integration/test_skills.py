@@ -13,8 +13,8 @@ import pytest
 from pydantic import TypeAdapter
 
 from contract.schema import SkillResponse
-from robot import faults, stub_state
-from robot.backends import sim
+from services.robot import faults, stub_state
+from services.robot.backends import sim
 from tests.helpers import REPO_ROOT
 from tests.integration import robot, vision
 from tests.integration.skill_process import run_module, single_response, stub_env
@@ -106,7 +106,8 @@ def modules(package):
     return found
 
 # contract.manifest is the dispatcher-only SKILL.md parser; no skill process loads it
-names = sorted(n for p in ("skills", "robot", "vision", "contract") for n in modules(p) if n != "contract.manifest")
+packages = ("skills", "services.robot", "services.vision", "contract")
+names = sorted(n for p in packages for n in modules(p) if n != "contract.manifest")
 buf = io.StringIO()
 with contextlib.redirect_stdout(buf):
     mods = {n: importlib.import_module(n) for n in names}
@@ -136,27 +137,27 @@ print(json.dumps({"modules": names, "heavy": heavy, "out": buf.getvalue(),
         "contract.schema",
         "contract.wire",
         # the client surfaces a skill process loads
-        "robot.client",
-        "robot.faults",
-        "robot.protocol",
-        "robot.ramp",
-        "robot.state_store",
-        "robot.stub_state",
-        "vision.client",
-        "vision.coco",
-        "vision.protocol",
+        "services.robot.client",
+        "services.robot.faults",
+        "services.robot.protocol",
+        "services.robot.ramp",
+        "services.robot.state_store",
+        "services.robot.stub_state",
+        "services.vision.client",
+        "services.vision.coco",
+        "services.vision.protocol",
         # the services, backends, detectors and utilities import their heavy modules lazily
-        "robot.backends.real",
-        "robot.backends.sim",
-        "robot.lease",
-        "robot.local",
-        "robot.read_state",
-        "robot.service",
-        "robot.stop_move",
-        "vision.boxes",
-        "vision.detectors.real",
-        "vision.detectors.stub",
-        "vision.service",
+        "services.robot.backends.real",
+        "services.robot.backends.sim",
+        "services.robot.lease",
+        "services.robot.local",
+        "services.robot.read_state",
+        "services.robot.service",
+        "services.robot.stop_move",
+        "services.vision.boxes",
+        "services.vision.detectors.real",
+        "services.vision.detectors.stub",
+        "services.vision.service",
         "skills.motion",
         "skills.runner",
         *(f"skills.{n}" for n in SKILLS),

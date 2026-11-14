@@ -3,12 +3,12 @@
     "dispatcher-dev": ["dispatcher/", "tests/integration/", "docs/configuration.md", "docs/safety.md", "docs/running.md", "docs/roadmap.md"],
     "skills-dev": ["skills/", "tests/integration/", "docs/safety.md", "docs/configuration.md", "docs/setup.md", "docs/roadmap.md"],
     "contract-dev": ["contract/", "tests/integration/", "docs/safety.md", "docs/configuration.md", "docs/roadmap.md"],
-    "robot-dev": ["services/robot/", "robot/", "tests/integration/", "docs/safety.md", "docs/configuration.md", "docs/setup.md", "docs/roadmap.md"],
-    "vision-dev": ["services/vision/", "vision/", "tests/integration/", "docs/configuration.md", "docs/setup.md", "docs/roadmap.md"],
-    "tests-dev": ["tests/", "**/conftest.py", "dispatcher/tests/", "skills/tests/", "contract/tests/", "robot/tests/", "vision/tests/", "services/robot/tests/", "services/vision/tests/", "pyproject.toml", ".github/workflows/tests.yml"],
+    "robot-dev": ["services/robot/", "tests/integration/", "docs/safety.md", "docs/configuration.md", "docs/setup.md", "docs/roadmap.md"],
+    "vision-dev": ["services/vision/", "tests/integration/", "docs/configuration.md", "docs/setup.md", "docs/roadmap.md"],
+    "tests-dev": ["tests/", "**/conftest.py", "dispatcher/tests/", "skills/tests/", "contract/tests/", "services/robot/tests/", "services/vision/tests/", "pyproject.toml", ".github/workflows/tests.yml"],
     "claude-config-dev": [".claude/"],
     "reviewer": []
   },
-  "packages": ["dispatcher/", "skills/", "contract/", "robot/", "vision/", "services/robot/", "services/vision/"],
+  "packages": ["dispatcher/", "skills/", "contract/", "services/robot/", "services/vision/"],
   "main": ["docs/README.md", "docs/project.md", "docs/architecture.md", "docs/references.md", "services/__init__.py", "services/CLAUDE.md"]
 }

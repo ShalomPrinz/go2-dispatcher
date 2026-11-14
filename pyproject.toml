@@ -37,11 +37,11 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["dispatcher", "skills", "contract", "robot", "vision"]
-exclude = ["dispatcher/docs", "dispatcher/tests", "skills/docs", "skills/tests", "skills/catalog", "contract/docs", "contract/tests", "robot/docs", "robot/tests", "vision/docs", "vision/tests"]
+packages = ["dispatcher", "skills", "contract", "services"]
+exclude = ["dispatcher/docs", "dispatcher/tests", "skills/docs", "skills/tests", "skills/catalog", "contract/docs", "contract/tests", "services/robot/docs", "services/robot/tests", "services/vision/docs", "services/vision/tests"]
 
 [tool.pytest.ini_options]
-testpaths = ["dispatcher/tests", "skills/tests", "contract/tests", "robot/tests", "vision/tests", "tests", ".claude/hooks/tests", ".claude/scripts/tests"]
+testpaths = ["dispatcher/tests", "skills/tests", "contract/tests", "services/robot/tests", "services/vision/tests", "tests", ".claude/hooks/tests", ".claude/scripts/tests"]
 addopts = "-p tests.pytest_plugin"   # options and marker gating (tests/docs/testing.md)
 timeout = 30
 markers = [
@@ -51,7 +51,7 @@ markers = [
 ]
 
 [tool.coverage.run]                     # opt-in: uv run pytest --cov (tests/docs/testing.md)
-source = ["dispatcher", "skills", "contract", "robot", "vision"]
+source = ["dispatcher", "skills", "contract", "services"]
 branch = true
 patch = ["subprocess", "_exit"]         # measure skill and CLI subprocesses; skills end with os._exit
 
@@ -60,7 +60,7 @@ show_missing = true
 skip_covered = true
 
 [tool.importlinter]                     # import boundaries: uv run lint-imports (tests/docs/testing.md)
-root_packages = ["skills", "dispatcher", "contract", "robot", "vision", "tests"]
+root_packages = ["skills", "dispatcher", "contract", "services", "tests"]
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
@@ -70,8 +70,8 @@ source_modules = ["skills"]
 forbidden_modules = [
   "dispatcher", "pydantic", "yaml",
   "unitree_sdk2py", "cyclonedds", "torch", "ultralytics", "cv2",
-  "robot.service", "robot.backends", "robot.local", "robot.lease", "robot.stop_move", "robot.read_state",
-  "vision.service", "vision.detectors", "vision.boxes",
+  "services.robot.service", "services.robot.backends", "services.robot.local", "services.robot.lease", "services.robot.stop_move", "services.robot.read_state",
+  "services.vision.service", "services.vision.detectors", "services.vision.boxes",
 ]
 ignore_imports = [
   "contract.manifest -> pydantic",   # skills.tests may import the parser; skill code may not (protected below)
@@ -79,25 +79,24 @@ ignore_imports = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "Robot imports neither skills, the dispatcher nor vision"
-type = "forbidden"
-source_modules = ["robot"]
-forbidden_modules = ["skills", "dispatcher", "vision"]
+name = "The robot and vision services are independent of each other"
+type = "independence"
+modules = ["services.robot", "services.vision"]
 ignore_imports = [
-  "robot.stop_move -> skills.runner",   # exception, to be removed: the utilities use the skill runtime
-  "robot.read_state -> skills.runner",   # same reason
-  "robot.tests.unit.test_stop_move -> skills.runner",   # exception, to be removed: the unit test of a utility that uses the skill runtime
+  "services.vision.detectors.stub -> services.robot.stub_state",      # exception, to be removed: the stub camera reads the sim pose and world objects
+  "services.vision.detectors.real -> services.robot.backends.real",   # exception, to be removed: init_dds, one DDS init per process
+  "services.vision.tests.unit.test_stub_detector -> services.robot.stub_state",   # exception, to be removed: the unit test of the stub camera sets the sim pose and world objects
 ]
 
 [[tool.importlinter.contracts]]
-name = "Vision imports neither skills, the dispatcher nor robot"
+name = "The services import neither skills nor the dispatcher"
 type = "forbidden"
-source_modules = ["vision"]
-forbidden_modules = ["skills", "dispatcher", "robot"]
+source_modules = ["services"]
+forbidden_modules = ["skills", "dispatcher"]
 ignore_imports = [
-  "vision.detectors.stub -> robot.stub_state",      # exception, to be removed: the stub camera reads the sim pose and world objects
-  "vision.detectors.real -> robot.backends.real",   # exception, to be removed: init_dds, one DDS init per process
-  "vision.tests.unit.test_stub_detector -> robot.stub_state",   # exception, to be removed: the unit test of the stub camera sets the sim pose and world objects
+  "services.robot.stop_move -> skills.runner",   # exception, to be removed: the utilities use the skill runtime
+  "services.robot.read_state -> skills.runner",   # same reason
+  "services.robot.tests.unit.test_stop_move -> skills.runner",   # exception, to be removed: the unit test of a utility that uses the skill runtime
 ]
 
 [[tool.importlinter.contracts]]
@@ -105,33 +104,33 @@ name = "The dispatcher imports only the client surfaces of robot and vision"
 type = "forbidden"
 source_modules = ["dispatcher"]
 forbidden_modules = [
-  "robot.service", "robot.backends", "robot.local", "robot.lease", "robot.stop_move", "robot.read_state",
-  "vision.service", "vision.detectors", "vision.boxes",
+  "services.robot.service", "services.robot.backends", "services.robot.local", "services.robot.lease", "services.robot.stop_move", "services.robot.read_state",
+  "services.vision.service", "services.vision.detectors", "services.vision.boxes",
 ]
 ignore_imports = [
-  "dispatcher.executor -> robot.stop_move",   # exception, to be removed: the utilities' module name and POLICY; the import also loads robot.local and robot.backends.sim
-  "dispatcher.executor -> robot.read_state",   # same reason
-  "dispatcher.transports.telegram_bot -> robot.stop_move",   # same reason
-  "dispatcher.tests.unit.test_telegram_bot -> robot.stop_move",   # same reason: the unit test of the transport reads POLICY
+  "dispatcher.executor -> services.robot.stop_move",   # exception, to be removed: the utilities' module name and POLICY; the import also loads services.robot.local and services.robot.backends.sim
+  "dispatcher.executor -> services.robot.read_state",   # same reason
+  "dispatcher.transports.telegram_bot -> services.robot.stop_move",   # same reason
+  "dispatcher.tests.unit.test_telegram_bot -> services.robot.stop_move",   # same reason: the unit test of the transport reads POLICY
 ]
 
 [[tool.importlinter.contracts]]
 name = "Only the vision service imports the detector stack"
 type = "protected"                      # no other process loads torch, ultralytics or cv2
-protected_modules = ["vision.detectors", "vision.service", "ultralytics", "cv2"]
-allowed_importers = ["vision.service", "vision.detectors", "vision.tests"]
+protected_modules = ["services.vision.detectors", "services.vision.service", "ultralytics", "cv2"]
+allowed_importers = ["services.vision.service", "services.vision.detectors", "services.vision.tests"]
 
 [[tool.importlinter.contracts]]
 name = "Shared test helpers import no project package"
 type = "forbidden"                      # every package's tests import tests.helpers; a project import there links the packages
 source_modules = ["tests.helpers"]
-forbidden_modules = ["dispatcher", "skills", "robot", "vision", "contract"]
+forbidden_modules = ["dispatcher", "skills", "services", "contract"]
 
 [[tool.importlinter.contracts]]
 name = "Contract imports no other project package"
 type = "forbidden"                      # tests is listed so no chain through tests.helpers hides one
 source_modules = ["contract"]
-forbidden_modules = ["skills", "dispatcher", "robot", "vision", "tests"]
+forbidden_modules = ["skills", "dispatcher", "services", "tests"]
 
 [[tool.importlinter.contracts]]
 name = "Contract imports neither pydantic nor yaml, except the SKILL.md parser"
@@ -150,7 +149,7 @@ protected_modules = ["contract.manifest"]
 allowed_importers = ["dispatcher", "skills.tests", "contract.tests"]
 
 [tool.basedpyright]                     # type check: uv run basedpyright (tests/docs/testing.md)
-include = ["dispatcher", "skills", "contract", "robot", "vision", "tests"]
+include = ["dispatcher", "skills", "contract", "services", "tests"]
 exclude = ["**/__pycache__", "**/.*"]   # replaces the defaults; .venv and caches sit outside include anyway
 typeCheckingMode = "basic"
 pythonVersion = "3.10"

@@ -1,6 +1,6 @@
 """The robot service as a process on the stub backend: skills sample state and move through it, a killed skill or
 a gone dispatcher stops the robot, the service faults, a rejected Move, a failed StopMove reported by the disarm,
-one service per socket (robot/docs/service.md)."""
+one service per socket (services/robot/docs/service.md)."""
 
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ import pytest
 from pydantic import TypeAdapter
 
 from contract.schema import SkillResponse
-from robot import faults, protocol, stub_state
-from robot.backends import sim
+from services.robot import faults, protocol, stub_state
+from services.robot.backends import sim
 from tests.helpers import REPO_ROOT
 from tests.integration import robot
 from tests.integration.skill_process import run_module, run_utility, single_response, stub_env

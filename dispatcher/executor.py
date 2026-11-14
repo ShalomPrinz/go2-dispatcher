@@ -19,10 +19,10 @@ from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from contract.env import child_env, robot_socket_path
 from contract.policy import SkillPolicy
-from robot import read_state as read_state_utility
-from robot import stop_move as stop_move_utility
-from robot.client import Refused, RobotClient, ServiceUnavailable
-from robot.protocol import MAX_TIMEOUT_S
+from services.robot import read_state as read_state_utility
+from services.robot import stop_move as stop_move_utility
+from services.robot.client import Refused, RobotClient, ServiceUnavailable
+from services.robot.protocol import MAX_TIMEOUT_S
 from skills import detect_object as vision_client
 
 from . import prompts
@@ -104,7 +104,7 @@ class StreamHandle(Protocol):
 
 
 def needs_vision(skill: SkillDescriptor) -> bool:
-    """Whether ``skill`` is a client of the vision service (vision/docs/vision.md)."""
+    """Whether ``skill`` is a client of the vision service (services/vision/docs/vision.md)."""
     return skill.entrypoint == vision_client.__name__
 
 
@@ -207,7 +207,7 @@ class Executor:
         self._kill_cause: StopCause | None = None
         self._kill_mono: float | None = None  # when the current process was killed
         self._control_lock = threading.Lock()  # one user of the control connection at a time
-        self._client: RobotClient | None = None  # the control connection (robot/docs/service.md)
+        self._client: RobotClient | None = None  # the control connection (services/robot/docs/service.md)
         self.vision = VisionService(self.base_dir, vision_log_path(cfg.log.dir), lambda: self._env(None))
         self.robot = RobotService(
             self.base_dir, robot_log_path(cfg.log.dir), robot_socket_path(cfg.log.dir), lambda: self._env(None)
@@ -276,7 +276,7 @@ class Executor:
             return False
         return self._kill_locked(proc, cause)
 
-    # --- run (contract/docs/contract.md, robot/docs/service.md, docs/safety.md) ---------------------------------
+    # --- run (contract/docs/contract.md, services/robot/docs/service.md, docs/safety.md) -----------------
 
     def run(
         self,
@@ -478,7 +478,7 @@ class Executor:
         _, response, _, _ = self._run_utility(read_state_utility)
         return response.state_after if response is not None else None
 
-    # --- control connection (robot/docs/service.md) -------------------------------------------
+    # --- control connection (services/robot/docs/service.md) -------------------------------------------
 
     def start_robot(self) -> None:
         """Start the robot service and open the control connection; raises RobotServiceError."""

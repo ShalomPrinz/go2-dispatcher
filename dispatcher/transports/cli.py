@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from robot import stub_state
+from services.robot import stub_state
 
 from .. import process_lock, prompts, report
 from ..context import PromptSurface

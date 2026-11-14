@@ -1,5 +1,5 @@
 """Start the robot service for tests that run skills as subprocesses, and arm their leases on a control
-connection as the dispatcher does (robot/docs/service.md)."""
+connection as the dispatcher does (services/robot/docs/service.md)."""
 
 from __future__ import annotations
 
@@ -13,8 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from contract.env import LEASE_TOKEN, ROBOT_SOCKET, STUB_STATE_FILE
-from robot import protocol
-from robot.client import RobotClient
+from services.robot import protocol
+from services.robot.client import RobotClient
 from tests.helpers import REPO_ROOT
 
 READY_WAIT_S = 10.0
@@ -27,7 +27,7 @@ def with_socket(env: dict[str, str]) -> dict[str, str]:
 
 
 def start(env: dict[str, str], *, wait_ready: bool = True) -> subprocess.Popen:
-    """Start ``python -m robot.service`` with ``env``; by default wait for its ready line."""
+    """Start ``python -m services.robot.service`` with ``env``; by default wait for its ready line."""
     proc = subprocess.Popen(
         [sys.executable, "-m", protocol.SERVICE_MODULE],
         env=env,

@@ -1,4 +1,4 @@
-"""The walk and turn skills driven through the robot service's motion loop over the sim (robot/docs/service.md)."""
+"""The walk and turn skills driven through the robot service motion loop on the sim (services/robot/docs/service.md)."""
 
 from __future__ import annotations
 
@@ -8,10 +8,10 @@ import threading
 import pytest
 
 from contract.env import STUB_FAULT, STUB_STATE_FILE, STUB_TIME_SCALE
-from robot import protocol, service, stub_state
-from robot.backends import sim as sim_backend
-from robot.protocol import MoveTarget
-from robot.state_store import StateStore
+from services.robot import protocol, service, stub_state
+from services.robot.backends import sim as sim_backend
+from services.robot.protocol import MoveTarget
+from services.robot.state_store import StateStore
 from skills import turn, walk
 from tests.helpers.fake_clock import Clock
 

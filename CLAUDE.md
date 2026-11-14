@@ -20,11 +20,11 @@ uv run go2 run "turn left 90 degrees"          # one task on the stub (needs ANT
 uv run go2 --reset-stub                        # reset the stub posture and exit
 ```
 
-Package commands (golden files, fault injection, opt-in tests) live in the folder CLAUDE.md files: [contract/CLAUDE.md](contract/CLAUDE.md), [dispatcher/CLAUDE.md](dispatcher/CLAUDE.md), [robot/CLAUDE.md](robot/CLAUDE.md), [vision/CLAUDE.md](vision/CLAUDE.md), [skills/CLAUDE.md](skills/CLAUDE.md), [tests/CLAUDE.md](tests/CLAUDE.md). They load when Claude works in that folder.
+Package commands (golden files, fault injection, opt-in tests) live in the folder CLAUDE.md files: [contract/CLAUDE.md](contract/CLAUDE.md), [dispatcher/CLAUDE.md](dispatcher/CLAUDE.md), [services/CLAUDE.md](services/CLAUDE.md), [services/robot/CLAUDE.md](services/robot/CLAUDE.md), [services/vision/CLAUDE.md](services/vision/CLAUDE.md), [skills/CLAUDE.md](skills/CLAUDE.md), [tests/CLAUDE.md](tests/CLAUDE.md). They load when Claude works in that folder.
 
 ## Documentation rules
 
-- The docs (`docs/`, `contract/docs/`, `dispatcher/docs/`, `robot/docs/`, `vision/docs/`, `skills/docs/`, `tests/docs/`) are the source of truth for why the system is built as it is and for its contracts (plan schema, skill response, config keys, outcome codes, log records, fixed texts).
+- The docs (`docs/`, `contract/docs/`, `dispatcher/docs/`, `services/robot/docs/`, `services/vision/docs/`, `skills/docs/`, `tests/docs/`) are the source of truth for why the system is built as it is and for its contracts (plan schema, skill response, config keys, outcome codes, log records, fixed texts).
 - A change that affects behaviour updates the owning doc **in the same commit**. Never leave docs and code disagreeing.
 - Decisions go into the owning doc's "Design decisions" section, with the reason and any rejected alternative. There is no separate decisions log.
 - Open questions and pending work go into [docs/roadmap.md](docs/roadmap.md), each with an owner or a way to resolve it. When one is resolved, move the result into the owning doc and remove it from the roadmap.
@@ -51,11 +51,11 @@ Package commands (golden files, fault injection, opt-in tests) live in the folde
 
 ## Working pattern
 
-- The main session is an **orchestrator**: it always delegates code and doc changes to a project agent (`.claude/agents/`), one task at a time, with a self-contained brief written with the `delegate` skill (`.claude/skills/delegate/`). It does not edit a package (`contract/`, `dispatcher/`, `robot/`, `vision/`, `skills/`) itself. Exception: the docs under `main` in [.claude/ownership.json](.claude/ownership.json) belong to the main session, which edits them itself; the map assigns every other path.
+- The main session is an **orchestrator**: it always delegates code and doc changes to a project agent (`.claude/agents/`), one task at a time, with a self-contained brief written with the `delegate` skill (`.claude/skills/delegate/`). It does not edit a package (`contract/`, `dispatcher/`, `services/`, `skills/`) itself. Exception: the files under `main` in [.claude/ownership.json](.claude/ownership.json) belong to the main session, which edits them itself (shared docs and the `services/` root files); the map assigns every other path.
   - `dispatcher-dev`: anything under `dispatcher/` or owned by `dispatcher/docs/`.
   - `contract-dev`: anything under `contract/` or owned by `contract/docs/`.
-  - `robot-dev`: anything under `robot/` or owned by `robot/docs/`.
-  - `vision-dev`: anything under `vision/` or owned by `vision/docs/`.
+  - `robot-dev`: anything under `robot/` or owned by `services/robot/docs/`.
+  - `vision-dev`: anything under `vision/` or owned by `services/vision/docs/`.
   - `skills-dev`: anything under `skills/` or owned by `skills/docs/`.
   - `tests-dev`: test infrastructure only (pytest plugin, helpers, markers, golden mechanism, coverage, CI) and `tests/docs/testing.md`. Tests of package behaviour go with the package agent.
   - `claude-config-dev`: anything under `.claude/` (agents, skills, hooks, settings). `CLAUDE.md` files go with the agent that owns the folder.

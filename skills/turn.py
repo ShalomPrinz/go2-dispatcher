@@ -7,12 +7,12 @@ from dataclasses import replace
 
 from contract import policy
 from contract.constants import YAW_SIGN
-from robot import ramp
-from robot.protocol import MoveTarget
+from services.robot import ramp
+from services.robot.protocol import MoveTarget
 from skills import motion, runner
 
 YAW_RATE_RPS = 1.0  # rad/s
-CAP_FACTOR = 1.25  # cap on the closed-loop turn: nominal time x factor + CAP_S (tunable, robot/docs/robot.md)
+CAP_FACTOR = 1.25  # cap on the closed-loop turn: nominal time x factor + CAP_S (tunable, services/robot/docs/robot.md)
 CAP_S = 0.5  # s, covers the start ramp (tunable)
 LEAD_S = ramp.YAW_S  # start-ramp time of an open-loop turn, when no fresh yaw is readable at the start (robot.md)
 

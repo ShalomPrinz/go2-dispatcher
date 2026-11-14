@@ -1,5 +1,5 @@
 """stop_move and read_state utilities on the stub backend
-(docs/safety.md, robot/docs/robot.md, tests/docs/testing.md)."""
+(docs/safety.md, services/robot/docs/robot.md, tests/docs/testing.md)."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ import pytest
 from pydantic import TypeAdapter
 
 from contract.schema import SkillResponse
-from robot import stub_state
-from robot.backends import sim
+from services.robot import stub_state
+from services.robot.backends import sim
 from tests.integration.skill_process import run_utility, single_response, stub_env
 
 pytestmark = pytest.mark.integration

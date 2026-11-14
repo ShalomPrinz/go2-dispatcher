@@ -1,4 +1,4 @@
-"""Start the vision service for tests that run detect_object as a subprocess (vision/docs/vision.md)."""
+"""Start the vision service for tests that run detect_object as a subprocess (services/vision/docs/vision.md)."""
 
 from __future__ import annotations
 
@@ -10,14 +10,14 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from contract.env import STUB_STATE_FILE, VISION_SOCKET
+from services.vision import protocol
 from tests.helpers import REPO_ROOT
-from vision import protocol
 
 READY_WAIT_S = 10.0
 
 
 def start(env: dict[str, str]) -> subprocess.Popen:
-    """Start ``python -m vision.service`` with ``env`` and wait for its ready line."""
+    """Start ``python -m services.vision.service`` with ``env`` and wait for its ready line."""
     proc = subprocess.Popen(
         [sys.executable, "-m", protocol.SERVICE_MODULE],
         env=env,

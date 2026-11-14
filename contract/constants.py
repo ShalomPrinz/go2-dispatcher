@@ -7,4 +7,4 @@ from typing import Literal
 
 YAW_SIGN = {"left": 1, "right": -1}  # turn direction to the sign of yaw_rad and vyaw (CCW +)
 
-Link = Literal["up", "down"]  # whether robot state messages are arriving (robot/docs/robot.md)
+Link = Literal["up", "down"]  # whether robot state messages are arriving (services/robot/docs/robot.md)

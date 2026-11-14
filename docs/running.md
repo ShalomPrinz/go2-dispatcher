@@ -20,7 +20,7 @@ Global options go **before** the command (argparse), for example `go2 --backend 
 | `--config CONFIG` | Config file (default `./config.toml`; see [configuration.md](configuration.md)). |
 | `--backend {stub,real}` | Overrides `robot.backend`. |
 | `--horizon HORIZON` | Overrides `loop.planning_horizon` (an integer). |
-| `--fault STEP:KIND` | Injects a stub fault at dispatched step `STEP`. Repeatable. Replaces `stub.faults` ([service.md](../robot/docs/service.md#fault-injection)). |
+| `--fault STEP:KIND` | Injects a stub fault at dispatched step `STEP`. Repeatable. Replaces `stub.faults` ([service.md](../services/robot/docs/service.md#fault-injection)). |
 | `--reset-stub` | Resets the stub state file to `stub.initial_posture` and exits. |
 
 | Command | Takes the lock | Resets the stub | Needs the API key | What it does |
@@ -85,7 +85,7 @@ walk forward one metre, then tell me if you see a person
 sit down
 ```
 
-Tasks run one after another in one process. The previous task's summary **carries over** from line to line, as it does between Telegram messages; the robot state does not: each task reads a fresh one through the [robot service](#robot-service). One `sit` affects every later task, because no skill can stand the robot up ([robot.md](../robot/docs/robot.md#open-robot-side-questions)). A reset per task is a future idea ([roadmap.md](roadmap.md#future-ideas)).
+Tasks run one after another in one process. The previous task's summary **carries over** from line to line, as it does between Telegram messages; the robot state does not: each task reads a fresh one through the [robot service](#robot-service). One `sit` affects every later task, because no skill can stand the robot up ([robot.md](../services/robot/docs/robot.md#open-robot-side-questions)). A reset per task is a future idea ([roadmap.md](roadmap.md#future-ideas)).
 
 ### Latency report
 
@@ -218,7 +218,7 @@ While the task's [state stream](#robot-service) runs, the last line of the newes
 | link | `🟢 Robot: link up`, or `🔴 Robot: link down` when the service sees no state messages; the rest is then the last sample before the gap |
 | posture | `RobotState.posture` |
 | motion | ground speed `hypot(vx, vy)` in m/s, 2 decimals, and `yaw_speed` in deg/s, whole degrees; `speed n/a` without `velocity` |
-| obstacles | nearest obstacle per direction from `obstacle_m` (front, back, left, right), metres to 0.1; `-` for a direction without a reading, `obstacles n/a` without `obstacle_m` ([robot.md](../robot/docs/robot.md)) |
+| obstacles | nearest obstacle per direction from `obstacle_m` (front, back, left, right), metres to 0.1; `-` for a direction without a reading, `obstacles n/a` without `obstacle_m` ([robot.md](../services/robot/docs/robot.md)) |
 
 Before the first sample it reads `🟢 Robot: link up | no state yet`. The line is rendered by `robot_line` in `dispatcher/transports/telegram_progress.py`. It is not a `PROGRESS_*` fixed text: it is never compared across runs and never reaches the model. The progress keeps only the latest sample and link, and wakes the sender only when the rendered line changed, so a robot at rest causes no edits. When a new round starts, the line moves to the new message and leaves the older one. At `task_end` the line is removed and later samples are dropped, so the final text holds only the task's lines, with no state frozen at an arbitrary moment. There is no line between tasks, and none when the task has no log file (no stream then).
 
@@ -267,19 +267,19 @@ The skill's error message, stderr and validation errors never reach Telegram; th
 | | Stub (`robot.backend = "stub"`, default) | Real (`robot.backend = "real"`) |
 |---|---|---|
 | Needs | core dependencies only | `uv sync --extra robot --extra vision`, `robot.network_interface`, YOLO weights ([setup.md](setup.md#lab-machine-real-robot)) |
-| Motion | none; the stub keeps standing/sitting and an odometry pose integrated from `Move` in `stub.state_file` ([service.md](../robot/docs/service.md#stub-backend)) | real SDK calls ([robot.md](../robot/docs/robot.md)) |
+| Motion | none; the stub keeps standing/sitting and an odometry pose integrated from `Move` in `stub.state_file` ([service.md](../services/robot/docs/service.md#stub-backend)) | real SDK calls ([robot.md](../services/robot/docs/robot.md)) |
 | Durations | real durations × `stub.time_scale` | real time |
-| `detect_object` | projects the objects in `stub.objects` from the current pose through a simulated camera ([vision.md](../vision/docs/vision.md#stub-camera)) | front camera + YOLO |
+| `detect_object` | projects the objects in `stub.objects` from the current pose through a simulated camera ([vision.md](../services/vision/docs/vision.md#stub-camera)) | front camera + YOLO |
 | Task-start state | read through the robot service (the stub is reset to `stub.initial_posture` at startup) | read through the robot service |
 | Faults | `stub.faults` / `--fault` | not allowed (config error) |
 
 The stub replaces only the SDK layer inside the skill process. Processes, timeouts, kills and StopMove run for real.
 
-`go2 --reset-stub` puts the stub back in `stub.initial_posture`. Use it after a `sit`, because there is no `stand` skill. `run`, `batch` and `go2 bot` reset the stub once at startup (through `robot.stub_state.reset`), then start the [robot service](#robot-service), as on the real robot. Each task reads its state through it. The stub is not reset between tasks.
+`go2 --reset-stub` puts the stub back in `stub.initial_posture`. Use it after a `sit`, because there is no `stand` skill. `run`, `batch` and `go2 bot` reset the stub once at startup (through `services.robot.stub_state.reset`), then start the [robot service](#robot-service), as on the real robot. Each task reads its state through it. The stub is not reset between tasks.
 
 ## Robot service
 
-Skills read robot state through a long-running robot service, the only long-lived DDS subscriber of the robot's sport state ([service.md](../robot/docs/service.md#robot-service), which owns the protocol and the lifecycle contract). The dispatcher owns the service's lifecycle, on both backends (`dispatcher/robot.py`, held by the `Executor`); on the stub its sim source reads the stub state, so the process shape is the same.
+Skills read robot state through a long-running robot service, the only long-lived DDS subscriber of the robot's sport state ([service.md](../services/robot/docs/service.md#robot-service), which owns the protocol and the lifecycle contract). The dispatcher owns the service's lifecycle, on both backends (`dispatcher/robot.py`, held by the `Executor`); on the stub its sim source reads the stub state, so the process shape is the same.
 
 - **Start.** `run`, `batch` and `go2 bot` start it at startup, after the stub reset, and wait for its ready line up to `STARTUP_TIMEOUT_S` (10 s, *tunable*). A failed start is a start-up error (exit 2) whose line names the reason and the service log: `Robot service not started: another robot service holds {log.dir}/robot.lock; stop it, or wait a few seconds (see ...)`, `Robot service not ready after 10s; stopped it (see ...)`, or `Robot service exited with code C before ready (see ...)` (code 2: a missing or unknown backend or interface). A service left by a killed dispatcher holds the lock until its orphan watchdog ends it, about 2 s later. `catalog`, `state` and `--reset-stub` never start it.
 - **Socket and lock.** `{log.dir}/robot.sock`, guarded by `{log.dir}/robot.lock`: one service per `log.dir`. Every skill process gets the socket path in `GO2_ROBOT_SOCKET` (`child_env`).
@@ -294,7 +294,7 @@ Skills read robot state through a long-running robot service, the only long-live
 
 ## Vision service
 
-`detect_object` asks a long-running vision service that holds the detector and the camera client ([vision.md](../vision/docs/vision.md#vision-service), which owns the protocol and the lifecycle contract). The dispatcher owns the service's lifecycle, on both backends (`dispatcher/vision.py`, held by the `Executor`):
+`detect_object` asks a long-running vision service that holds the detector and the camera client ([vision.md](../services/vision/docs/vision.md#vision-service), which owns the protocol and the lifecycle contract). The dispatcher owns the service's lifecycle, on both backends (`dispatcher/vision.py`, held by the `Executor`):
 
 - **Start.** `run`, `batch` and `go2 bot` start it at startup when the skill set contains a vision client (a skill whose entrypoint is `skills.detect_object`), after the robot service is ready. Startup does not wait for it; motion skills run while it warms up. `catalog`, `state` and `--reset-stub` never start it.
 - **Ready wait.** Before each `detect_object` step the executor starts the service if it is not running (never started, or exited since), then waits for its ready line up to `STARTUP_TIMEOUT_S` (30 s, *tunable*) from that start. An operator stop ends the wait at once. The wait counts against the task time limit, not against the step timeout, which starts when the skill process starts.
@@ -304,7 +304,7 @@ Skills read robot state through a long-running robot service, the only long-live
 
 ## Fault injection
 
-Stub faults (`stub.faults`, `--fault STEP:KIND`) are described in [service.md](../robot/docs/service.md#fault-injection).
+Stub faults (`stub.faults`, `--fault STEP:KIND`) are described in [service.md](../services/robot/docs/service.md#fault-injection).
 
 ## Switching skill sets
 
@@ -346,7 +346,7 @@ and exit code 2. This stops two processes from driving one robot, overwriting th
 - **The vision client is recognised by its entrypoint module (`skills.detect_object`), not by its catalog name**, so a skill set that renames the skill still gets the service. Rejected: a `SkillPolicy` flag, which would change the skills contract for one skill.
 - **The service log is one file under `log.dir`, next to the run logs, emptied per dispatcher process.** It is for diagnosing a failed start or a crash, not study data, so it stays out of the provider/backend folders. The lifecycle events go into the same file rather than the run log, because the run log has no record type for them and its records are the study's contract ([run-log.md](../dispatcher/docs/run-log.md)). Rejected: an unread pipe (the service blocks once it fills); inheriting the dispatcher's stderr (YOLO and SDK output would interleave with the CLI trace).
 - **Long polling**, so the bot needs no public address on the lab network.
-- **Task-start state is read through the robot service on both backends**, and the dispatcher changes stub state only through `robot.stub_state.reset`. Reading the stub state file directly was rejected: it couples the dispatcher to stub internals (file path and format).
+- **Task-start state is read through the robot service on both backends**, and the dispatcher changes stub state only through `services.robot.stub_state.reset`. Reading the stub state file directly was rejected: it couples the dispatcher to stub internals (file path and format).
 - **The dispatcher starts the robot service at startup and waits for it; a failed start stops the dispatcher.** Every skill's state samples and every task's first state come through it, so a dispatcher without it would run tasks blind; the lock error in particular means another process owns the robot. After startup, a service found dead at task start is started once more; if that fails, the task ends `STATE_UNAVAILABLE` ([loop-and-context.md](../dispatcher/docs/loop-and-context.md#design-decisions)) and the next task tries again. Rejected: starting it lazily like the vision service (the first task would pay the start and its state read would fail more often).
 - **`go2 state` reads with the `read_state` utility, not through the service.** It needs no running dispatcher, and when the service misbehaves it shows whether the robot link itself works.
 - **Start-up failures are typed errors; only the entry points print and exit.** `ConfigError` and `RegistryError` subclass `StartupError` (`dispatcher/models.py`); the lock, the planner choice and `build_dispatcher` raise them, and `cli.main` and the bot's `main` print the stderr line and exit 2. The entry points also own the process-lifetime hooks (`atexit` shutdown, signal handlers). Library code that printed and raised `SystemExit` was rejected: it could not be reused or tested without catching `SystemExit`, and `build_dispatcher` registered an `atexit` hook for a process it does not own. Separate subclasses for the lock and the planner were left out because no caller tells them apart.

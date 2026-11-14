@@ -111,7 +111,7 @@ What the logs imply for the baseline. Details of the harness are decided when it
 ## Current status
 
 - **v1 is implemented** and tested against the stub backend: the dispatcher loop, five skills, the stop path and limits, CLI and Telegram transports, and the run log.
-- **The real backend has run on the robot** in supervised runs with OpenRouter free models (logs in `logs/openrouter/real/`). Robot-side values not yet measured by a run stay open in the supervised checklist in [robot.md](../robot/docs/robot.md).
+- **The real backend has run on the robot** in supervised runs with OpenRouter free models (logs in `logs/openrouter/real/`). Robot-side values not yet measured by a run stay open in the supervised checklist in [robot.md](../services/robot/docs/robot.md).
 - **The Claude request has not been verified against the live API** (Sonnet 5.5 with `thinking: between_tools` and auto tool choice); the OpenRouter request has. See [llm.md](../dispatcher/docs/llm.md).
 - All numeric limits are starting values to be tuned from logs and robot runs.
 - Next: latency, measured with Claude; then the rest of the v2 plan (escalation) and experiment design. See [roadmap.md](roadmap.md).

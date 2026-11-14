@@ -22,9 +22,9 @@ from pydantic import (
 )
 
 from contract.backend import DEFAULT_TIME_SCALE
-from robot.faults import FaultKind
-from robot.stub_state import DEFAULT_POSTURE, DEFAULT_STATE_FILE, StubPosture, parse_objects
-from vision.coco import COCO_CLASSES
+from services.robot.faults import FaultKind
+from services.robot.stub_state import DEFAULT_POSTURE, DEFAULT_STATE_FILE, StubPosture, parse_objects
+from services.vision.coco import COCO_CLASSES
 
 from .models import ConfigError
 
@@ -115,7 +115,7 @@ class StubConfig(_Section):
     time_scale: FiniteFloat = Field(default=DEFAULT_TIME_SCALE, gt=0)
     initial_posture: StubPosture = DEFAULT_POSTURE
     state_file: Path = Path(DEFAULT_STATE_FILE)
-    objects: dict[str, dict[str, Any]] = {}  # world frame, metres (robot/docs/service.md)
+    objects: dict[str, dict[str, Any]] = {}  # world frame, metres (services/robot/docs/service.md)
     faults: list[FaultConfig] = []
 
     @field_validator("objects")

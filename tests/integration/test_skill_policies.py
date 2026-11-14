@@ -9,7 +9,7 @@ import pytest
 
 from contract.policy import MotionCost
 from dispatcher.registry import Registry
-from robot import protocol, read_state, stop_move
+from services.robot import protocol, read_state, stop_move
 from skills import detect_object, motion, sit, stretch, turn, walk
 from tests.helpers import REPO_ROOT
 

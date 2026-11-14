@@ -65,8 +65,8 @@ def run_module(
 def run_utility(
     name: str, params: Any, env: dict[str, str], timeout: float = SKILL_RUN_TIMEOUT_S
 ) -> subprocess.CompletedProcess:
-    """``python -m robot.<name> <params>`` for the utilities ``stop_move`` and ``read_state``."""
-    return _run(f"robot.{name}", params, env, timeout)
+    """``python -m services.robot.<name> <params>`` for the utilities ``stop_move`` and ``read_state``."""
+    return _run(f"services.robot.{name}", params, env, timeout)
 
 
 def single_response(proc: subprocess.CompletedProcess) -> dict:

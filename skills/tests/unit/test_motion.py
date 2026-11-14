@@ -1,14 +1,15 @@
 """The skills' side of motion in process: the mapping of the robot service's primitive replies to outcomes
-(robot/docs/service.md). The service's motion loop is tested in robot/tests/unit/test_motion_loop.py."""
+(services/robot/docs/service.md). The service's motion loop is tested in
+services/robot/tests/unit/test_motion_loop.py."""
 
 from __future__ import annotations
 
 import pytest
 
 from contract import backend
-from robot import client as robot_client
-from robot.client import Refused, ServiceUnavailable
-from robot.protocol import MoveResult, MoveTarget
+from services.robot import client as robot_client
+from services.robot.client import Refused, ServiceUnavailable
+from services.robot.protocol import MoveResult, MoveTarget
 from skills import motion
 
 

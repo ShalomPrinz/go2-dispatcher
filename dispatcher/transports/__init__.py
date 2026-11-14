@@ -6,7 +6,7 @@ import importlib
 import os
 from collections.abc import Callable
 
-from robot import stub_state
+from services.robot import stub_state
 
 from .. import process_lock
 from ..config import API_KEY_ENV, Config, load_config_and_env

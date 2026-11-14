@@ -48,7 +48,7 @@ class SkillError:
 
 @dataclass(frozen=True)
 class ObstacleDistances:
-    """Distance to the nearest obstacle per body direction, metres; None when unknown (robot/docs/robot.md)."""
+    """Distance to the nearest obstacle per body direction, metres; None when unknown (services/robot/docs/robot.md)."""
 
     __pydantic_config__ = _FORBID_EXTRA
 

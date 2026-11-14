@@ -5,11 +5,11 @@ from __future__ import annotations
 from dataclasses import replace
 
 from contract import policy
-from robot import ramp
+from services.robot import ramp
 from skills import motion, runner
 
 VELOCITY_MPS = 0.3
-LEAD_S = ramp.LINEAR_S  # extra command time for the start ramp (robot/docs/robot.md)
+LEAD_S = ramp.LINEAR_S  # extra command time for the start ramp (services/robot/docs/robot.md)
 # direction -> (vx, vy) as multiples of VELOCITY_MPS
 DIRECTION_VECTORS = {"forward": (1, 0), "backward": (-1, 0), "left": (0, 1), "right": (0, -1)}
 

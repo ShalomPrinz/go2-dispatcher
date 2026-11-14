@@ -24,15 +24,15 @@ uv run go2 report [FOLDER]                     # latency report from existing ru
 | [testing.md](../tests/docs/testing.md) | Test layout, helpers and fakes, markers, golden files |
 | [contract.md](../contract/docs/contract.md) | `SKILL.md` format, invocation, response schema, error codes and policies the dispatcher consumes |
 | [skills.md](../skills/docs/skills.md) | Catalog generation, registry hash, the skills |
-| [service.md](../robot/docs/service.md) | Robot service and its lease, stub backend, fault injection |
-| [vision.md](../vision/docs/vision.md) | Vision service, stub camera, object detection |
+| [service.md](../services/robot/docs/service.md) | Robot service and its lease, stub backend, fault injection |
+| [vision.md](../services/vision/docs/vision.md) | Vision service, stub camera, object detection |
 
 ## Gotchas
 
 - Fixed texts in `prompts.py` change the golden files and make runs incomparable; only the system text (`SYSTEM_TEMPLATE`) also changes the registry hash ([skills.md](../skills/docs/skills.md#catalog-and-registry-hash)). Regenerate with `--update-golden` and review the diff.
 - Changes to `context.py` (step rendering, user message) change the `context_*.txt` golden files; a `SKILL.md` change on the skills side changes `catalog.txt`.
 - `anthropic` and `httpx` are imported lazily inside `llm.py`; a top-level `anthropic` import breaks the "CLI does not import `anthropic`" test ([llm.md](docs/llm.md#design-decisions)).
-- The dispatcher imports `contract`, `skills` and the client surfaces of `robot` and `vision` (never `robot.service`, `robot.backends`, `robot.local`, `vision.service` or `vision.detectors`), never the reverse. `dispatcher/tests/` holds unit tests only; tests that spawn subprocesses or need both packages go in root `tests/` ([testing.md](../tests/docs/testing.md#layout)).
+- The dispatcher imports `contract`, `skills` and the client surfaces of `services.robot` and `services.vision` (never `services.robot.service`, `services.robot.backends`, `services.robot.local`, `services.vision.service` or `services.vision.detectors`), never the reverse. `dispatcher/tests/` holds unit tests only; tests that spawn subprocesses or need both packages go in root `tests/` ([testing.md](../tests/docs/testing.md#layout)).
 - No `temperature`, no forced `tool_choice` (Anthropic; OpenRouter forces it), no prompt caching: deliberate, not omissions ([llm.md](docs/llm.md#design-decisions)).
 - Nothing raw (stderr, tracebacks, provider error text) may enter the model context ([loop-and-context.md](docs/loop-and-context.md#design-decisions)).
 - A new or changed config key updates [configuration.md](../docs/configuration.md) in the same change.
