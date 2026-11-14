@@ -40,7 +40,10 @@ CONTRACTS: tuple[tuple[str, str], ...] = (
     ("contract/process.py", "process helpers: stdout capture, orphan watchdog (contract/docs/contract.md)"),
     ("robot/protocol.py", "robot service protocol (robot/docs/service.md)"),
     ("vision/protocol.py", "vision service protocol (vision/docs/vision.md)"),
+    ("services/robot/protocol.py", "robot service protocol (services/robot/docs/service.md)"),
+    ("services/vision/protocol.py", "vision service protocol (services/vision/docs/vision.md)"),
 )
+# The services/ paths sit beside the old robot/ and vision/ ones until the move lands; then drop the old ones.
 # Safety paths for reviewer check 4 (docs/safety.md): whole files, then words on changed lines elsewhere.
 SAFETY_FILES = (
     "dispatcher/executor.py",
@@ -49,6 +52,10 @@ SAFETY_FILES = (
     "robot/lease.py",
     "robot/stop_move.py",
     "robot/local.py",
+    "services/robot/service.py",
+    "services/robot/lease.py",
+    "services/robot/stop_move.py",
+    "services/robot/local.py",
     "contract/process.py",
 )
 SAFETY_WORDS = re.compile(

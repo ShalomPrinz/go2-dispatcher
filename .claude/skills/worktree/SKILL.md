@@ -25,7 +25,7 @@ Then run every command from **`<repo-root>-<slug>`**, on the local branch **`<sl
 `<repo-root>` — it stays on `main`, untouched.
 
 - Do not merge, rebase onto, fast-forward or otherwise touch `main`. Do not push, do not open a PR.
-- Every brief to a project agent (`dispatcher-dev`, `skills-dev`, the reviewer) names
+- Every brief to a project agent (`dispatcher-dev`, `skills-dev`, `contract-dev`, `robot-dev`, `vision-dev`, the reviewer) names
   `<repo-root>-<slug>` as its working directory, so it neither edits nor tests `<repo-root>`.
 - The stub stays the backend; the safety rules in CLAUDE.md apply unchanged.
 

@@ -81,8 +81,10 @@ def test_safety_files_and_contract_surfaces_outside_the_dispatcher(repo: Path) -
         "robot/stop_move.py",
         "robot/local.py",
         "contract/process.py",
+        "services/robot/service.py",
+        "services/robot/lease.py",
     )
-    for rel in (*files, "robot/protocol.py"):
+    for rel in (*files, "robot/protocol.py", "services/vision/protocol.py"):
         (repo / rel).parent.mkdir(parents=True, exist_ok=True)
         (repo / rel).write_text("X = 1\n")
     out = preview(repo)
@@ -91,3 +93,4 @@ def test_safety_files_and_contract_surfaces_outside_the_dispatcher(repo: Path) -
     assert "`robot/protocol.py`: safety file" not in out
     assert "`robot/protocol.py`: robot service protocol (robot/docs/service.md)" in out
     assert "`contract/process.py`: process helpers" in out
+    assert "`services/vision/protocol.py`: vision service protocol (services/vision/docs/vision.md)" in out
