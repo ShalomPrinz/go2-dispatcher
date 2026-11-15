@@ -8,8 +8,8 @@ import time
 from contract import policy
 from contract.runtime import SkillOutcome, ms_since
 from contract.schema import ErrorCode
+from contract.vision import COCO_CLASSES
 from services.vision import client, protocol
-from services.vision.coco import COCO_CLASSES
 from services.vision.protocol import CameraUnavailable, DetectorError
 from skills.runtime import faults, runner
 from skills.runtime.motion import PROCESS_OVERHEAD_S

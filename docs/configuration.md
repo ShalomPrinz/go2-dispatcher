@@ -101,7 +101,7 @@ objects = { chair = { x = 2.0, y = -1.0 }, "cell phone" = { x = 1.5, y = 0.5, he
 faults = [ { step = 2, kind = "hang" } ]
 ```
 
-The 80 class names are in `services/vision/coco.py` (`COCO_CLASSES`).
+The 80 class names are in `contract/vision.py` (`COCO_CLASSES`).
 
 ### `[log]`
 

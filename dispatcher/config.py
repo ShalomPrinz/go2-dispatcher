@@ -24,7 +24,7 @@ from pydantic import (
 from contract.backend import DEFAULT_TIME_SCALE
 from contract.faults import FaultKind
 from contract.stub import DEFAULT_POSTURE, DEFAULT_STATE_FILE, StubPosture, parse_objects
-from services.vision.coco import COCO_CLASSES
+from contract.vision import COCO_CLASSES
 
 from .models import ConfigError
 

@@ -1,4 +1,4 @@
-"""COCO class names detectable by detect_object (services/vision/docs/vision.md), in YOLO order."""
+"""COCO class names detectable by detect_object (contract/docs/contract.md), in YOLO order."""
 
 _NAMES = (
     "person,bicycle,car,motorcycle,airplane,bus,train,truck,boat,traffic light,"

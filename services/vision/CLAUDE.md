@@ -1,6 +1,6 @@
 # services/vision/CLAUDE.md
 
-The `vision` package: the vision service, its protocol and client, the real detector (front camera + YOLO), the stub camera, the box classification and the COCO class list. The contract it follows is the `contract` package ([contract/CLAUDE.md](../../contract/CLAUDE.md)). Repo-wide rules are in the root [CLAUDE.md](../../CLAUDE.md).
+The `vision` package: the vision service, its protocol and client, the real detector (front camera + YOLO), the stub camera, and the box classification. The contract it follows is the `contract` package ([contract/CLAUDE.md](../../contract/CLAUDE.md)). Repo-wide rules are in the root [CLAUDE.md](../../CLAUDE.md).
 
 ## Commands
 
@@ -30,7 +30,7 @@ uv run lint-imports                            # import contracts; must pass bef
 
 - Real-backend code (`detectors/real.py`) cannot be run from an agent: no `--backend real`, no `robot.backend = "real"`, no `--run-robot`. Verify it with unit tests and the stub only ([safety.md](../../docs/safety.md#supervised-operation-rules)).
 - Mark camera and detector facts not yet checked on the robot as *unverified* ([vision.md](docs/vision.md#object-detection)).
-- `skills` and `dispatcher` import only `services.vision.protocol`, `services.vision.client` and `services.vision.coco`; these modules never import a detector, the service or a third-party package ([vision.md](docs/vision.md#the-package)).
+- `skills` and `dispatcher` import only `services.vision.protocol` and `services.vision.client`; these modules never import a detector, the service or a third-party package ([vision.md](docs/vision.md#the-package)).
 - `vision` imports `contract` and `services.backend` only: `detectors/stub.py` reads the pose from `services.backend.stub_state` (world objects come from `contract.stub`) and `detectors/real.py` calls `services.backend.dds.init_dds` ([vision.md](docs/vision.md#design-decisions)). `vision` and `robot` never import each other.
 - Third-party imports (`ultralytics`, `cv2`, `numpy`, `unitree_sdk2py`) live inside methods in `detectors/real.py`; importing any `vision` module needs only the standard library.
 - The weights file is never downloaded automatically; a missing file is `weights_missing`.
