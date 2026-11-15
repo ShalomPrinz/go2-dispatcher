@@ -74,7 +74,7 @@ The `skills` package: the skill runtime and the skills.
 
 | Document | Owns |
 |---|---|
-| [skills.md](../skills/docs/skills.md) | The skills package: catalog generation and registry hash, the skills, how to add a skill and run one by hand. |
+| [skills.md](../skills/docs/skills.md) | The skills package: the skill runtime (`skills/runtime/`), one folder per skill, catalog generation and registry hash, the skills, how to add a skill and run one by hand. |
 
 ### Tests (`tests/docs/`)
 
