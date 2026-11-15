@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from dispatcher.context import PromptSurface
+from dispatcher.context import build_prompt_surface
 from dispatcher.dispatcher import Dispatcher
 from dispatcher.models import ObstacleDistances, RobotState
 from dispatcher.planning.plan import Plan, PlanStep
@@ -71,7 +71,7 @@ class Phone:
 
 
 def make_dispatcher(cfg, registry, progress, items, results):
-    surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
+    surface = build_prompt_surface(registry, cfg.loop.planning_horizon)
     return Dispatcher(cfg, registry, ScriptedPlanner(items, surface), FakeExecutor(results), observer=progress)
 
 

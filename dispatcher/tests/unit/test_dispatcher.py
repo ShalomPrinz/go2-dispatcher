@@ -9,17 +9,11 @@ from pathlib import Path
 import pytest
 
 from dispatcher import operator_messages, prompts
-from dispatcher.context import PromptSurface
+from dispatcher.context import build_prompt_surface
 from dispatcher.dispatcher import Dispatcher
 from dispatcher.executor import STDERR_TAIL_CHARS, ExecOutcome
-from dispatcher.models import (
-    BusyError,
-    LLMInterrupted,
-    LLMUnavailable,
-    ObstacleDistances,
-    Posture,
-    StopCause,
-)
+from dispatcher.llm.client import LLMInterrupted, LLMUnavailable
+from dispatcher.models import BusyError, ObstacleDistances, Posture, StopCause
 from dispatcher.planning.plan import Plan, PlanStep
 from dispatcher.registry import Registry
 from dispatcher.runlog import RunLog, RunLogFactory
@@ -76,7 +70,7 @@ class Rig:
         **cfg,
     ):
         self.cfg = make_config(tmp_path, **cfg)
-        surface = PromptSurface.build(registry, self.cfg.loop.planning_horizon)
+        surface = build_prompt_surface(registry, self.cfg.loop.planning_horizon)
         self.planner = ScriptedPlanner(items, surface, on_call=on_call)
         self.executor = executor or FakeExecutor(results, fresh=state(posture))
         self.clock = FakeClock()

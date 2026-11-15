@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from dispatcher import prompts
-from dispatcher.context import PromptSurface
+from dispatcher.context import build_prompt_surface
 from dispatcher.dispatcher import Dispatcher
 from dispatcher.executor import Executor
 from dispatcher.planning.plan import Plan, PlanStep
@@ -42,7 +42,7 @@ def registry():
 def build(tmp_path, registry, items, **cfg_over):
     cfg = make_config(tmp_path, **cfg_over)
     stub_state.reset(cfg.stub.initial_posture, cfg.stub.state_file)
-    surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
+    surface = build_prompt_surface(registry, cfg.loop.planning_horizon)
     planner = ScriptedPlanner(items, surface)
     executor = Executor(cfg, cfg.base_dir)
     d = Dispatcher(cfg, registry, planner, executor)  # the first fresh read starts the robot service

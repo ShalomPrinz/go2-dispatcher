@@ -7,10 +7,10 @@ import os
 
 import pytest
 
-from dispatcher.context import PromptSurface
+from dispatcher.context import build_prompt_surface
 from dispatcher.dispatcher import Dispatcher
 from dispatcher.executor import Executor
-from dispatcher.llm import AnthropicPlanner
+from dispatcher.llm.anthropic_planner import AnthropicPlanner
 from dispatcher.registry import Registry
 from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR, make_config
 from services.backend import stub_state
@@ -27,7 +27,7 @@ def test_live_turn_and_find_chair(tmp_path):
     cfg = make_config(tmp_path, stub={"objects": {"chair": {"x": 0.0, "y": 2.0}}})
     stub_state.reset(cfg.stub.initial_posture, cfg.stub.state_file)
     registry = Registry.load(BUILTIN_SKILLS_DIR)
-    surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
+    surface = build_prompt_surface(registry, cfg.loop.planning_horizon)
     d = Dispatcher(
         cfg,
         registry,

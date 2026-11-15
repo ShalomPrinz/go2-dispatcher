@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from contract.constants import Link
 
     from ..context import RequestReason, ReturnReason
-    from ..llm import LLMResult
+    from ..llm.client import LLMResult
     from ..models import (
         Posture,
         PreconditionFailure,

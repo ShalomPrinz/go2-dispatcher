@@ -15,12 +15,10 @@ from . import operator_messages
 from .config import Config
 from .context import ContextInput, Feedback, RequestReason, ReturnReason, build_user_message, schema_retry_message
 from .executor import STDERR_TAIL_CHARS, SkillExecutor
-from .llm import LLMResult, PlannerClient
+from .llm.client import LLMInterrupted, LLMResult, LLMUnavailable, PlannerClient
 from .models import (
     KILLED_OUTCOMES,
     BusyError,
-    LLMInterrupted,
-    LLMUnavailable,
     Posture,
     PreconditionFailure,
     RobotServiceLostError,

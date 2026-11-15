@@ -6,9 +6,9 @@ import io
 
 import pytest
 
-from dispatcher.context import PromptSurface
+from dispatcher.context import build_prompt_surface
 from dispatcher.dispatcher import Dispatcher
-from dispatcher.llm import LLMResult
+from dispatcher.llm.client import LLMResult
 from dispatcher.planning.plan import Plan, PlanStep
 from dispatcher.registry import Registry
 from dispatcher.runlog import NullLog, TeeLog
@@ -73,7 +73,7 @@ def test_thinking_then_thought_for(registry):
 
 def test_dispatcher_feeds_the_trace(tmp_path, registry):
     cfg = make_config(tmp_path)
-    surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
+    surface = build_prompt_surface(registry, cfg.loop.planning_horizon)
     walk = PlanStep(skill="walk", params={"direction": "forward", "distance_m": 0.5})
     planner = ScriptedPlanner([Plan(status="PLAN", steps=[walk]), Plan(status="DONE", message="ok")], surface)
     out = io.StringIO()
@@ -97,7 +97,7 @@ def test_dispatcher_feeds_the_trace(tmp_path, registry):
 
 def test_observer_hears_stop_only_after_the_kill(tmp_path, registry):
     cfg = make_config(tmp_path)
-    surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
+    surface = build_prompt_surface(registry, cfg.loop.planning_horizon)
     walk = PlanStep(skill="walk", params={"direction": "forward", "distance_m": 0.5})
     planner = ScriptedPlanner([Plan(status="PLAN", steps=[walk])], surface)
     kills_seen: list[int] = []
@@ -118,7 +118,7 @@ def test_observer_hears_stop_only_after_the_kill(tmp_path, registry):
 
 def test_message_not_on_a_plan_line_is_printed_before_the_summary(tmp_path, registry):
     cfg = make_config(tmp_path)
-    surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
+    surface = build_prompt_surface(registry, cfg.loop.planning_horizon)
     walk = PlanStep(skill="walk", params={"direction": "forward", "distance_m": 0.5})
     planner = ScriptedPlanner([Plan(status="PLAN", steps=[walk])], surface)
 

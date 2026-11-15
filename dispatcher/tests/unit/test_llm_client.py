@@ -5,13 +5,13 @@ from __future__ import annotations
 import json
 import threading
 
-import httpx2 as httpx  # the SDK's HTTP library (see llm.py)
+import httpx2 as httpx  # the SDK's HTTP library (see llm/anthropic_planner.py)
 import pytest
 
 from dispatcher import prompts
-from dispatcher.context import PromptSurface
-from dispatcher.llm import AnthropicPlanner, LLMResult
-from dispatcher.models import LLMInterrupted, LLMUnavailable
+from dispatcher.llm.anthropic_planner import AnthropicPlanner
+from dispatcher.llm.client import LLMInterrupted, LLMResult, LLMUnavailable
+from dispatcher.llm.surface import PromptSurface
 from dispatcher.planning.schema import TOOL_NAME, plan_tool_schema
 from dispatcher.planning.validation import PlanCheck, check_reply
 from dispatcher.tests.helpers import make_config

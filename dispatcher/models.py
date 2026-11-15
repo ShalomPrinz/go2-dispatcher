@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Literal, NamedTuple
 
-from pydantic import StrictInt
+from pydantic import BaseModel, ConfigDict, StrictInt
 
 from contract.policy import MotionCost
 
@@ -17,7 +17,13 @@ from contract.schema import SkillError as SkillError
 from contract.schema import SkillResponse as SkillResponse
 
 from . import prompts
-from .planning.plan import _Model
+
+
+class Model(BaseModel):
+    """Shared base for the dispatcher's pydantic models: unknown fields are rejected."""
+
+    model_config = ConfigDict(extra="forbid")
+
 
 # --- Exceptions (docs/architecture.md) -------------------------------------------------------
 
@@ -48,22 +54,6 @@ class RobotServiceLostError(StateReadError):
 
 class BusyError(Exception):
     """run_task called while a task is running."""
-
-
-class LLMUnavailable(Exception):
-    """Infra retries exhausted, or a non-retryable API error."""
-
-    def __init__(self, detail: str):
-        super().__init__(detail)
-        self.detail = detail
-
-
-class LLMInterrupted(Exception):
-    """Stop (``OPERATOR``) or task deadline (``TASK_TIME_LIMIT``) hit while waiting to retry an LLM call."""
-
-    def __init__(self, cause: StopCause):
-        super().__init__(cause)
-        self.cause = StopCause(cause)
 
 
 # --- StepResult (dispatcher/docs/run-log.md) --------------------------------------------------------
@@ -121,7 +111,7 @@ KILLED_OUTCOMES = frozenset(k.outcome for k in _KILLS.values())  # posture unkno
 StopPath = Literal["service", "fallback"]
 
 
-class StopMoveResult(_Model):
+class StopMoveResult(Model):
     """One run of the stop path: the service's ``stop``, or the fresh-process ``stop_move`` (docs/safety.md)."""
 
     ok: bool
@@ -138,7 +128,7 @@ class StopMoveResult(_Model):
     stderr_tail: str | None = None  # fallback: the stop_move process's stderr
 
 
-class StepDispatch(_Model):
+class StepDispatch(Model):
     """What the dispatcher decided for a dispatched step; built once per step (dispatcher/docs/run-log.md)."""
 
     index: StrictInt  # 1-based count of dispatched steps in the task
@@ -147,7 +137,7 @@ class StepDispatch(_Model):
     fault: str | None = None  # stub fault kind injected, if any
 
 
-class StepRef(_Model):
+class StepRef(Model):
     """Which plan step this is; every recorded step has one, built once (dispatcher/docs/run-log.md)."""
 
     call_index: StrictInt  # LLM call that produced the plan (1-based)
@@ -160,7 +150,7 @@ Verdict = Literal["verified", "failed", "unverified", "unavailable"]
 Fault = Literal["fallen", "fault_mode", "command_rejected"]
 
 
-class StepResult(_Model):
+class StepResult(Model):
     ref: StepRef
     dispatch: StepDispatch | None = None  # None if not dispatched (rejected)
     outcome: StepOutcome
@@ -201,7 +191,7 @@ TaskOutcomeCode = Literal[
 ]
 
 
-class TaskOutcome(_Model):
+class TaskOutcome(Model):
     run_id: str
     task: str
     outcome: TaskOutcomeCode
@@ -220,21 +210,21 @@ class TaskOutcome(_Model):
         return [s for s in self.steps if s.dispatch is not None]
 
 
-class TaskSummary(_Model):
+class TaskSummary(Model):
     task: str
     outcome: TaskOutcomeCode
     message: str
     last_step: StepResult | None  # last dispatched step, if any
 
 
-class StartState(_Model):
+class StartState(Model):
     """The task-start state read through the robot service (dispatcher/docs/loop-and-context.md)."""
 
     age_ms: float | None  # age of the state message at the read; None when the read failed
     error: str | None = None  # why the read failed; the task then ends STATE_UNAVAILABLE
 
 
-class PreconditionFailure(_Model):
+class PreconditionFailure(Model):
     """A step not dispatched because the robot's state did not meet its ``requires``
     (dispatcher/docs/loop-and-context.md)."""
 

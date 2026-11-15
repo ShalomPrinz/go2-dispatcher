@@ -10,10 +10,13 @@ from services.robot import stub
 
 from .. import process_lock
 from ..config import API_KEY_ENV, Config, load_config_and_env
-from ..context import PromptSurface
+from ..context import build_prompt_surface
 from ..dispatcher import Dispatcher
 from ..executor import Executor, needs_vision
-from ..llm import AnthropicPlanner, OpenRouterPlanner, PlannerClient
+from ..llm.anthropic_planner import AnthropicPlanner
+from ..llm.client import PlannerClient
+from ..llm.openrouter_planner import OpenRouterPlanner
+from ..llm.surface import PromptSurface
 from ..models import ConfigError, RegistryError, StartupError
 from ..registry import Registry
 from ..runlog import TaskObserver
@@ -69,7 +72,7 @@ def build_dispatcher(
     registry = Registry.load(cfg.skills.dir)
     if reset_stub and cfg.robot.backend == "stub":
         stub.reset_stub(cfg.stub.initial_posture, cfg.stub.state_file)
-    surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
+    surface = build_prompt_surface(registry, cfg.loop.planning_horizon)
     planner = make_planner(cfg, surface)
     executor = Executor(cfg, cfg.base_dir)
     executor.start_robot()  # waits for ready, opens the control connection; raises RobotServiceError (docs/running.md)

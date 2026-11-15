@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from dispatcher.llm import LLMResult
+from dispatcher.llm.client import LLMResult
+from dispatcher.llm.surface import PromptSurface
 from dispatcher.planning.plan import Plan
 from dispatcher.planning.schema import TOOL_NAME
-
-if TYPE_CHECKING:
-    from dispatcher.context import PromptSurface
 
 SCRIPTED_USAGE = {"input_tokens": 100, "output_tokens": 20}
 

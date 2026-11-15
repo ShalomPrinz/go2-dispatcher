@@ -21,8 +21,9 @@ from .config import Config, Provider
 if TYPE_CHECKING:
     from contract.constants import Link
 
-    from .context import PromptSurface, RequestReason, ReturnReason
-    from .llm import LLMResult
+    from .context import RequestReason, ReturnReason
+    from .llm.client import LLMResult
+    from .llm.surface import PromptSurface
     from .models import (
         Posture,
         PreconditionFailure,

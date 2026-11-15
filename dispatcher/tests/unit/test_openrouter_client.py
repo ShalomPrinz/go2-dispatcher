@@ -9,9 +9,9 @@ import httpx
 import pytest
 
 from dispatcher import prompts
-from dispatcher.context import PromptSurface
-from dispatcher.llm import OPENROUTER_URL, LLMResult, OpenRouterPlanner
-from dispatcher.models import LLMUnavailable
+from dispatcher.llm.client import LLMResult, LLMUnavailable
+from dispatcher.llm.openrouter_planner import OPENROUTER_URL, OpenRouterPlanner
+from dispatcher.llm.surface import PromptSurface
 from dispatcher.planning.schema import TOOL_NAME, plan_tool_schema
 from dispatcher.planning.validation import PlanCheck, check_reply
 from dispatcher.tests.helpers import make_config

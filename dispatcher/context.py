@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from . import prompts
+from .llm.surface import PromptSurface
 from .models import ObstacleDistances, RobotState, StepResult, TaskSummary
 from .planning.bounds import cut_message
 from .planning.budget import MotionBudget
@@ -27,28 +28,18 @@ RemainingTag = Literal["pending", "abandoned"]
 # --- prompt surface (dispatcher/docs/loop-and-context.md) ----------------------------------
 
 
-@dataclass(frozen=True)
-class PromptSurface:
-    """The fixed request parts, built once per process: sent by the Dispatcher, copied into the run log."""
-
-    system: tuple[str, str]
-    catalog_text: str
-    tool_schema: dict[str, Any]
-    registry_hash: str
-    skills: tuple[str, ...]
-
-    @classmethod
-    def build(cls, registry: Registry, horizon: int) -> PromptSurface:
-        catalog_text = registry.catalog_text()
-        system_text, skills_text = prompts.system_blocks(horizon, catalog_text)
-        tool_schema = plan_tool_schema(horizon)
-        return cls(
-            system=(system_text, skills_text),
-            catalog_text=catalog_text,
-            tool_schema=tool_schema,
-            registry_hash=registry_hash(system_text, catalog_text, tool_schema),
-            skills=tuple(registry.names()),
-        )
+def build_prompt_surface(registry: Registry, horizon: int) -> PromptSurface:
+    """The fixed request parts for ``registry`` and ``horizon``, built once per process."""
+    catalog_text = registry.catalog_text()
+    system_text, skills_text = prompts.system_blocks(horizon, catalog_text)
+    tool_schema = plan_tool_schema(horizon)
+    return PromptSurface(
+        system=(system_text, skills_text),
+        catalog_text=catalog_text,
+        tool_schema=tool_schema,
+        registry_hash=registry_hash(system_text, catalog_text, tool_schema),
+        skills=tuple(registry.names()),
+    )
 
 
 # --- step-line rendering (dispatcher/docs/loop-and-context.md) -----------------------------

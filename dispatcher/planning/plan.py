@@ -4,22 +4,20 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr, model_validator
+from pydantic import StrictInt, StrictStr, model_validator
+
+from ..models import Model
 
 # the single source of the statuses; the submit_plan enum is derived from it (dispatcher/docs/loop-and-context.md)
 PlanStatus = Literal["PLAN", "DONE", "ABORT", "ASK"]
 
 
-class _Model(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class PlanStep(_Model):
+class PlanStep(Model):
     skill: StrictStr
     params: dict[str, Any] = {}
 
 
-class Plan(_Model):
+class Plan(Model):
     status: PlanStatus
     steps: list[PlanStep] = []
     replan_after: StrictInt | None = None  # 1-based step index within this plan

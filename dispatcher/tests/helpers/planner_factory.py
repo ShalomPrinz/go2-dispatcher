@@ -7,15 +7,13 @@ from __future__ import annotations
 
 import json
 import os
-from typing import TYPE_CHECKING
+
+from dispatcher.llm.surface import PromptSurface
 
 try:
     from .planner import ScriptedPlanner
 except ImportError:  # imported as a top-level module (dispatcher/tests/helpers on PYTHONPATH)
     from planner import ScriptedPlanner  # type: ignore[no-redef]
-
-if TYPE_CHECKING:
-    from dispatcher.context import PromptSurface
 
 SCRIPT_ENV = "GO2_TEST_SCRIPT"
 

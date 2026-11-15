@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from dispatcher.context import PromptSurface
+from dispatcher.context import build_prompt_surface
 from dispatcher.models import StartupError
 from dispatcher.registry import Registry
 from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR, make_config
@@ -19,7 +19,7 @@ from dispatcher.transports import (
 
 @pytest.fixture(scope="module")
 def surface():
-    return PromptSurface.build(Registry.load(BUILTIN_SKILLS_DIR), 5)
+    return build_prompt_surface(Registry.load(BUILTIN_SKILLS_DIR), 5)
 
 
 @pytest.fixture

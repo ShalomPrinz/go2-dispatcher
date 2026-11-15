@@ -16,7 +16,7 @@ from typing import Any
 from services.robot.stub import reset_stub
 
 from .. import process_lock, report
-from ..context import PromptSurface
+from ..context import build_prompt_surface
 from ..dispatcher import Dispatcher
 from ..executor import Executor
 from ..models import ConfigError, StartupError, TaskOutcome
@@ -115,7 +115,7 @@ def _overrides(args: argparse.Namespace) -> dict[str, Any]:
 
 def cmd_catalog(cfg) -> int:
     registry = Registry.load(cfg.skills.dir)
-    surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
+    surface = build_prompt_surface(registry, cfg.loop.planning_horizon)
     print(surface.system[0])
     print()
     print(surface.system[1])
