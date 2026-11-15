@@ -148,7 +148,7 @@ name = "Planning imports no run-time, provider or transport package"
 type = "forbidden"                      # it may import contract, dispatcher.registry, dispatcher.prompts and dispatcher.models; dispatcher.llm is covered by the independence contract
 source_modules = ["dispatcher.planning"]
 forbidden_modules = [
-  "dispatcher.context", "dispatcher.runlog", "dispatcher.executor", "dispatcher.robot", "dispatcher.vision",
+  "dispatcher.context", "dispatcher.runlog", "dispatcher.executor", "dispatcher.execution",
   "dispatcher.transports", "dispatcher.dispatcher", "anthropic", "httpx",
 ]
 
@@ -157,8 +157,8 @@ name = "Llm imports no planning, context, registry, run-time or transport module
 type = "forbidden"                      # dispatcher.planning is covered by the independence contract
 source_modules = ["dispatcher.llm"]
 forbidden_modules = [
-  "dispatcher.context", "dispatcher.registry", "dispatcher.runlog", "dispatcher.executor", "dispatcher.robot",
-  "dispatcher.vision", "dispatcher.transports", "dispatcher.dispatcher",
+  "dispatcher.context", "dispatcher.registry", "dispatcher.runlog", "dispatcher.executor", "dispatcher.execution",
+  "dispatcher.transports", "dispatcher.dispatcher",
 ]
 
 [[tool.importlinter.contracts]]

@@ -11,9 +11,9 @@ from pathlib import Path
 
 import pytest
 
+from dispatcher.execution.state_stream import STREAM_PERIOD_S
 from dispatcher.executor import Executor
 from dispatcher.models import RobotServiceError
-from dispatcher.robot import STREAM_PERIOD_S
 from dispatcher.tests.helpers import make_config
 from tests.helpers import REPO_ROOT
 from tests.integration import robot

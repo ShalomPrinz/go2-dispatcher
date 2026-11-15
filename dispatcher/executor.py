@@ -23,12 +23,13 @@ from services.robot.protocol import MAX_TIMEOUT_S, READ_STATE, STOP_MOVE, Utilit
 
 from . import prompts
 from .config import SECRET_ENV, Config
+from .execution.robot_service import RobotSupervisor
+from .execution.robot_service import log_path as robot_log_path
+from .execution.state_stream import StateStream
+from .execution.vision_service import VisionSupervisor
+from .execution.vision_service import log_path as vision_log_path
 from .models import RobotServiceError, RobotState, SkillResponse, StateReadError, StopCause, StopMoveResult
 from .registry import SkillDescriptor
-from .robot import RobotService, StateStream
-from .robot import log_path as robot_log_path
-from .vision import VisionService
-from .vision import log_path as vision_log_path
 
 if TYPE_CHECKING:
     from .runlog import TaskObserver
@@ -204,8 +205,8 @@ class Executor:
         self._kill_mono: float | None = None  # when the current process was killed
         self._control_lock = threading.Lock()  # one user of the control connection at a time
         self._client: RobotClient | None = None  # the control connection (services/robot/docs/service.md)
-        self.vision = VisionService(self.base_dir, vision_log_path(cfg.log.dir), lambda: self._env(None))
-        self.robot = RobotService(
+        self.vision = VisionSupervisor(self.base_dir, vision_log_path(cfg.log.dir), lambda: self._env(None))
+        self.robot = RobotSupervisor(
             self.base_dir, robot_log_path(cfg.log.dir), robot_socket_path(cfg.log.dir), lambda: self._env(None)
         )
 

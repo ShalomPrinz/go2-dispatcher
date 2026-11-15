@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 import time
 
-from dispatcher import robot
-from dispatcher.robot import OBSERVER_FAILED_WARNING, StateStream
+from dispatcher.execution import state_stream
+from dispatcher.execution.state_stream import OBSERVER_FAILED_WARNING, StateStream
 from dispatcher.tests.helpers.fakes import state
 from services.robot.protocol import LinkEvent, StateReply
 
@@ -50,7 +50,7 @@ def test_raising_observer_does_not_break_the_stream(tmp_path, monkeypatch, capsy
         LinkEvent("down", 1.0),
         StateReply(state("standing"), 2.0, "up"),
     ]
-    monkeypatch.setattr(robot.RobotClient, "connect", classmethod(lambda cls, path: FakeClient(events)))
+    monkeypatch.setattr(state_stream.RobotClient, "connect", classmethod(lambda cls, path: FakeClient(events)))
     observer = RaisingObserver()
     path = tmp_path / "s.state_stream.jsonl"
     stream = StateStream("unused.sock", path, 0.0, observer)  # type: ignore[arg-type]
