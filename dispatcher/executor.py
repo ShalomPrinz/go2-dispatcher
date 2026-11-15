@@ -13,11 +13,12 @@ import threading
 import time
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING, Literal, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol, cast
 
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from contract.env import child_env, robot_socket_path
+from contract.faults import ROBOT_FAULTS, SKILL_FAULTS, RobotFault, write_fault
 from contract.policy import SkillPolicy
 from services.robot import read_state as read_state_utility
 from services.robot import stop_move as stop_move_utility
@@ -292,13 +293,16 @@ class Executor:
             remaining_task_s -= self.vision.ensure_ready(stop_event, remaining_task_s)
         t0 = time.monotonic()
         token = secrets.token_hex(16)
+        if fault in ROBOT_FAULTS:  # the sim takes it at this arm (services/robot/docs/service.md#fault-injection)
+            self._write_robot_fault(fault)
         try:
             with self._control_lock:
                 self._control().arm(token, min(timeout_s, MAX_TIMEOUT_S))
         except _SERVICE_ERRORS as e:
             stop = self._fallback(StopCause.ROBOT_SERVICE_LOST, t0, None, service_error=_error_text(e), lose=True)
             return self._not_started(stop, duration_ms=_ms(t0))
-        proc = self._popen(skill.entrypoint, params, self._env(fault, lease_token=token))
+        skill_fault = fault if fault in SKILL_FAULTS else None
+        proc = self._popen(skill.entrypoint, params, self._env(skill_fault, lease_token=token))
         readers = _Readers(proc)
         with self._lock:
             self._current = proc
@@ -362,6 +366,13 @@ class Executor:
             stderr_tail=readers.stderr_tail,
             response=response,
         )
+
+    def _write_robot_fault(self, kind: str) -> None:
+        """Put ``kind`` in the stub fault file for the next arm; faults are stub-only (config-validated)."""
+        if self.cfg.robot.backend != "stub":
+            raise RuntimeError(f"stub fault {kind!r} under the {self.cfg.robot.backend} backend")
+        self.cfg.stub.state_file.parent.mkdir(parents=True, exist_ok=True)
+        write_fault(self.cfg.stub.state_file, cast(RobotFault, kind))
 
     @staticmethod
     def _not_started(stop: StopMoveResult, *, duration_ms: float) -> ExecResult:

@@ -19,7 +19,7 @@ from contract import faults
 from contract.schema import SkillResponse
 from services.backend import stub_state
 from services.robot import protocol
-from services.robot.backends import sim
+from services.robot.backends.faults import SDK_ERR_CLIENT_SEND
 from tests.helpers import REPO_ROOT
 from tests.integration import robot
 from tests.integration.skill_process import run_module, run_utility, single_response, stub_env
@@ -102,7 +102,7 @@ def test_service_stops_the_robot_when_the_dispatcher_dies(tmp_path):
 
 def test_service_crash_leaves_the_robot_moving_until_the_fallback_stop(tmp_path):
     with robot.running(stub_env(tmp_path, GO2_STUB_TIME_SCALE="1")) as svc:
-        proc = run_module("walk", LONG_WALK, {**svc.arm(), "GO2_STUB_FAULT": "service_crash"})
+        proc = run_module("walk", LONG_WALK, svc.arm(fault="service_crash"))
         assert svc.proc.wait(timeout=5) == faults.CRASH_EXIT_CODE
     resp = RESPONSE.validate_python(single_response(proc))
     assert resp.error is not None and resp.error.code == "robot_unavailable"
@@ -114,9 +114,7 @@ def test_service_crash_leaves_the_robot_moving_until_the_fallback_stop(tmp_path)
 def test_failed_stop_ending_a_walk_is_reported_by_the_disarm(tmp_path):
     """stop_error: the walk's closing StopMove and the lease-end one fail, the robot keeps moving, the disarm tells."""
     with robot.running(stub_env(tmp_path)) as svc:
-        proc = run_module(
-            "walk", {"direction": "forward", "distance_m": 0.1}, {**svc.arm(), "GO2_STUB_FAULT": "stop_error"}
-        )
+        proc = run_module("walk", {"direction": "forward", "distance_m": 0.1}, svc.arm(fault="stop_error"))
         failed = svc.control.disarm()
     resp = RESPONSE.validate_python(single_response(proc))
     assert resp.error is not None and (resp.error.code, resp.error.message) == ("sdk_error", "StopMove returned 99")
@@ -130,15 +128,15 @@ def test_failed_stop_ending_a_walk_is_reported_by_the_disarm(tmp_path):
 def test_rejected_move_ends_the_walk_as_an_sdk_error(tmp_path):
     """rejected: the service's Move fails with the SDK's send code, the skill reports it as on the robot."""
     with robot.running(stub_env(tmp_path)) as svc:
-        proc = run_module("walk", LONG_WALK, {**svc.arm(), "GO2_STUB_FAULT": "rejected"})
+        proc = run_module("walk", LONG_WALK, svc.arm(fault="rejected"))
     resp = RESPONSE.validate_python(single_response(proc))
     assert resp.error is not None and (resp.error.code, resp.error.message) == ("sdk_error", "Move returned 3102")
-    assert resp.observations["sdk_ret"] == sim.SDK_ERR_CLIENT_SEND and command(tmp_path) is None
+    assert resp.observations["sdk_ret"] == SDK_ERR_CLIENT_SEND and command(tmp_path) is None
 
 
 def test_service_hang_stops_the_whole_service(tmp_path):
     with robot.running(stub_env(tmp_path, GO2_STUB_TIME_SCALE="1")) as svc:
-        walk = start_skill("walk", LONG_WALK, {**svc.arm(), "GO2_STUB_FAULT": "service_hang"})
+        walk = start_skill("walk", LONG_WALK, svc.arm(fault="service_hang"))
         try:
             stopped = until(lambda: Path(f"/proc/{svc.proc.pid}/stat").read_text().split()[2] == "T")
         finally:

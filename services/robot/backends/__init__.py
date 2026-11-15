@@ -25,6 +25,16 @@ class SportClient(Protocol):
 Wait = Callable[[float, threading.Event], Any]  # the motion clock: wait seconds or until the event is set
 
 
+class ArmHook(Protocol):
+    """The robot service's arm, in two steps around ending the old lease (services/robot/docs/service.md)."""
+
+    def clear(self) -> None:
+        """Before the old lease ends (and its StopMove, if it was used, is sent)."""
+
+    def arm(self) -> None:
+        """After the old lease ended, before the new one exists; a ValueError refuses the arm."""
+
+
 class RobotBackend(Protocol):
     """One robot backend: the utilities' own access (init_dds, setup_timing, sport_client, sample_state) and the
     robot service's (start_source, motion)."""
@@ -51,8 +61,8 @@ class RobotBackend(Protocol):
         coming."""
         ...
 
-    def motion(self, store: StateStore) -> tuple[SportClient, Wait]:
-        """The service's one sport client and its motion clock."""
+    def motion(self, store: StateStore) -> tuple[SportClient, Wait, ArmHook]:
+        """The service's one sport client, its motion clock and its arm hook."""
         ...
 
     def sleep(self, seconds: float) -> None:

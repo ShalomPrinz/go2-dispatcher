@@ -27,12 +27,22 @@ def test_unknown_backend_is_not_configured(monkeypatch, name):
     assert backends.setup_timing() == {}
 
 
-def test_real_loads_without_the_sdk_or_the_sim():
-    """In a fresh process: load() on real imports neither the SDK nor any stub code."""
+STUB_MODULES = (
+    "unitree_sdk2py",
+    "services.robot.backends.sim",
+    "services.robot.backends.faults",
+    "services.backend.stub_state",
+    "contract.stub",
+    "contract.faults",
+)
+
+
+def test_real_loads_without_the_sdk_the_sim_or_fault_code():
+    """In a fresh process: load() on real, and the robot service module, import neither the SDK nor any stub code."""
     code = (
-        "import json, sys; from services.robot import backends; r = backends.load(); "
-        "print(json.dumps([type(r).__name__, r.name, sorted(m for m in sys.modules if m.startswith("
-        "('unitree_sdk2py', 'services.robot.backends.sim', 'services.backend.stub_state', 'contract.stub')))]))"
+        "import json, sys; from services.robot import backends, service; r = backends.load(); "
+        f"stub = sorted(m for m in sys.modules if m.startswith({STUB_MODULES!r})); "
+        "print(json.dumps([type(r).__name__, r.name, stub]))"
     )
     env = {"GO2_BACKEND": "real", "PATH": ""}
     out = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True, check=True)

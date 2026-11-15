@@ -44,7 +44,7 @@ On the stub backend the `robot` package simulates the robot and owns the state f
 
 `StubDetector`, served by the [vision service](#vision-service) with the service's own env: `detect(target)` waits `DETECT_S`, then projects the object listed under `target` in `GO2_STUB_OBJECTS` through a pinhole camera `CAMERA_OFFSET_M` ahead of the body centre (`CAMERA_WIDTH_PX` × `CAMERA_HEIGHT_PX`, horizontal field of view `CAMERA_HFOV_DEG`, square pixels; [front camera](#object-detection)). The box centre-x fraction is `0.5 − f × tan(bearing) / width`, so a positive bearing (left) gives a small x; the box height fraction is `f × height_m / depth / height`, clipped to 1, where depth is the distance along the camera axis. The box goes to the real detector's classifier, `boxes.classify_box`. Not found when the target is not listed, is behind the camera, is outside the horizontal field of view, or its box height fraction is below `MIN_BOX_H`. Confidence is deterministic: `CONFIDENCE_MIN` + (`CONFIDENCE_MAX` − `CONFIDENCE_MIN`) × box height fraction.
 
-The stub's camera fault is applied in the skill process, before the request, so the service never sees it ([fault injection](../../robot/docs/service.md#fault-injection)).
+The vision service applies no faults. A `detect_object` step's `error` fault is applied in the skill (`skills.faults.injected_error()`), which returns the `camera_unavailable` response without asking the service; `hang`, `crash` and `garbage` fire from the skill runtime hook before the skill body ([skill faults](../../../skills/docs/skills.md#skill-faults)).
 
 ## Object detection
 

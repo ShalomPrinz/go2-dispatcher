@@ -17,8 +17,8 @@ uv run lint-imports                            # import contracts; must pass bef
 |---|---|
 | [vision.md](docs/vision.md) | The package's modules and client surface, the vision service and its protocol, the lifecycle contract, the stub camera, object detection on the real backend, the front camera |
 | [contract.md](../../contract/docs/contract.md) | Response schema, error codes, process environment, `process` and `backend`, wire framing |
-| [skills.md](../../skills/docs/skills.md) | The `detect_object` skill, running the service and a skill by hand |
-| [service.md](../robot/docs/service.md) | The stub world: objects, fault injection |
+| [skills.md](../../skills/docs/skills.md) | The `detect_object` skill, skill faults (including `detect_object`'s), running the service and a skill by hand |
+| [service.md](../robot/docs/service.md) | The stub world: objects |
 | [backend.md](../backend/docs/backend.md) | The stub state file (pose) and DDS init, shared with `robot` |
 | [robot.md](../robot/docs/robot.md) | Robot facts, SDK and DDS usage, the camera calls, supervised robot checklist |
 | [safety.md](../../docs/safety.md) | Supervised-operation rules |

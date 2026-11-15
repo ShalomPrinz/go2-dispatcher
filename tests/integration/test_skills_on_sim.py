@@ -27,9 +27,7 @@ def state(tmp_path, monkeypatch):
     return path
 
 
-def run_move(
-    vx: float, vy: float, vyaw: float, duration_s: float, target=None, *, publish: bool, fault: str | None = None
-) -> dict:
+def run_move(vx: float, vy: float, vyaw: float, duration_s: float, target=None, *, publish: bool) -> dict:
     """One move primitive on the robot service's loop over SimRobot; ``publish``: a state after every tick, as the
     sim service does, else no state at all."""
     sim, store = sim_backend.SimRobot(), StateStore(lambda msg: msg, clock=Clock())
@@ -41,9 +39,9 @@ def run_move(
 
     if publish:
         store.put(sim_backend.sample_state())
-    m = service.Motion(sim, wait, store, sim=True)
+    m = service.Motion(sim, wait, store, lambda: None)
     threading.Thread(target=m._loop, daemon=True).start()
-    job = service.Job(run=m.move(vx, vy, vyaw, duration_s, target, fault))
+    job = service.Job(run=m.move(vx, vy, vyaw, duration_s, target))
     m._jobs.put(job)
     assert job.done.wait(5) and job.reply is not None
     return job.reply

@@ -41,7 +41,7 @@ def project(pose: Pose, obj: WorldObject) -> DetectResult:
 
 
 class StubDetector:
-    """The vision service's stub camera; faults are applied in the skill process (inject_fault)."""
+    """The vision service's stub camera; it applies no faults (skills/docs/skills.md)."""
 
     def warm_up(self) -> None:
         pass

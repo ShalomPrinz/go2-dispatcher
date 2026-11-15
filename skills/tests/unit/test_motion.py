@@ -37,7 +37,7 @@ class FakeSession:
 def session(monkeypatch):
     """Install a FakeSession answering ``reply``; record backend sleeps."""
     sleeps: list[float] = []
-    monkeypatch.setenv("GO2_BACKEND", "real")  # no stub faults
+    monkeypatch.delenv("GO2_STUB_FAULT", raising=False)
     monkeypatch.setattr(backend, "sleep", sleeps.append)
 
     def install(reply):

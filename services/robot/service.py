@@ -22,15 +22,12 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from multiprocessing.connection import Listener
 from types import FrameType
-from typing import NoReturn, cast
+from typing import NoReturn
 
 from contract import backend, process, wire
 from contract.env import ROBOT_SOCKET, robot_lock_path
-from contract.faults import ROBOT_FAULTS, STUB_ERR_INJECTED
-from contract.stub import CONDITIONS, Condition
-from services.robot import backends, faults, protocol
-from services.robot.backends import SportClient, Wait
-from services.robot.backends import sim as sim_backend
+from services.robot import backends, protocol
+from services.robot.backends import ArmHook, SportClient, Wait
 from services.robot.state_store import StateStore
 
 LEASE_POLL_S = 0.02  # how often the lease deadline is checked (tunable)
@@ -116,22 +113,23 @@ class YawTracker:
 class Motion:
     """The sport client, the lease and the motion loop thread. ``_lock`` guards the lease, the control
     connection, the running job and the StopMove record, and serialises every Move and every action's commit
-    with the abort. ``clock`` sets and checks the lease deadline; StopMove timing always uses real time."""
+    with the abort. ``arm_hook`` is the backend's arm hook. ``clock`` sets and checks the lease deadline; StopMove
+    timing always uses real time."""
 
     def __init__(
         self,
         client: SportClient,
         wait: Wait,
         store: StateStore,
+        arm_hook: ArmHook,
         *,
-        sim: bool,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._client = client
         self._wait = wait
         self._clock = clock
         self._store = store
-        self._sim = sim
+        self._arm_hook = arm_hook
         self._lock = threading.Lock()
         self._lease: Lease | None = None
         self._control: wire.Conn | None = None
@@ -140,8 +138,6 @@ class Motion:
         self._stops_running = 0  # StopMoves decided and not yet returned
         self._stops_done = threading.Condition(self._lock)
         self._stop_failed: protocol.StopFailure | None = None  # the lease's latest StopMove, if it failed
-        self._stop_error = False  # the sim's stop_error fault: every StopMove fails until the next arm
-        self._rejected = False  # the sim's rejected fault: every Move and action fails until the next arm
 
     def start(self) -> None:
         threading.Thread(target=self._loop, name="motion-loop", daemon=True).start()
@@ -159,7 +155,7 @@ class Motion:
         """StopMove for a stop already counted in ``_stops_running``; records it and wakes a waiting disarm."""
         t = time.monotonic()
         try:
-            ret: int | None = STUB_ERR_INJECTED if self._stop_error else self._client.StopMove()
+            ret: int | None = self._client.StopMove()
         except Exception:
             traceback.print_exc(file=sys.stderr)
             ret = None
@@ -233,10 +229,14 @@ class Motion:
             self._end_lease("lease connection closed", conn=conn)
 
     def arm(self, token: str, timeout_s: float) -> None:
+        """End any lease and install the new one, with the backend's arm hook around the end; a ValueError from
+        ``arm_hook.arm`` leaves no lease."""
         with self._lock:
-            self._stop_failed, self._stop_error, self._rejected = None, False, False
+            self._stop_failed = None
+            self._arm_hook.clear()
         self._end_lease("re-armed")
         with self._lock:
+            self._arm_hook.arm()
             self._lease = Lease(token=token, deadline=self._clock() + timeout_s)
 
     def disarm(self) -> protocol.StopFailure | None:
@@ -301,18 +301,6 @@ class Motion:
     def _aborted(job: Job) -> dict:
         return protocol.error_message(protocol.ERR_ABORTED, f"the lease ended: {job.abort_reason}")
 
-    def _fault(self, fault: str | None) -> None:
-        if fault == "stop_error":
-            with self._lock:
-                self._stop_error = True
-        elif fault == "rejected":
-            with self._lock:
-                self._rejected = True
-        elif fault in CONDITIONS:  # accepted only on the sim backend (_service_fault)
-            cast(sim_backend.SimRobot, self._client).inject(cast(Condition, fault))
-        elif fault is not None:
-            faults.apply_service_fault(fault)
-
     def move(
         self,
         vx: float,
@@ -320,7 +308,6 @@ class Motion:
         vyaw: float,
         duration_s: float,
         target: protocol.MoveTarget | None,
-        fault: str | None,
     ) -> Callable[[Job], dict]:
         """The move primitive: Move every CMD_PERIOD_S for ``duration_s``, then StopMove. With ``target``,
         ``duration_s`` is the cap: StopMove once the measured yaw change is within YAW_STOP_MARGIN_RAD of it; without
@@ -343,13 +330,11 @@ class Motion:
                 with self._lock:
                     if job.abort.is_set():
                         break
-                    ret = sim_backend.SDK_ERR_CLIENT_SEND if self._rejected else self._client.Move(vx, vy, vyaw)
+                    ret = self._client.Move(vx, vy, vyaw)
                 if ret != 0:
                     move_ret = ret
                     break
                 sent += 1
-                if sent == 1:
-                    self._fault(fault)  # mid-walk: the robot has a velocity command
                 self._wait(period, job.abort)
                 if target is None or yaw is None:
                     continue
@@ -370,16 +355,15 @@ class Motion:
 
         return run
 
-    def action(self, name: str, fault: str | None) -> Callable[[Job], dict]:
+    def action(self, name: str) -> Callable[[Job], dict]:
         """The action primitive: one call that waits for its reply, so it is committed under the lock but sent
         outside it; a stop never waits on the reply, and one that lands during the call gets a trailing StopMove."""
 
         def run(job: Job) -> dict:
-            self._fault(fault)
             with self._lock:
                 if job.abort.is_set():
                     return self._aborted(job)
-                call = (lambda: sim_backend.SDK_ERR_API_TIMEOUT) if self._rejected else getattr(self._client, name)
+                call = getattr(self._client, name)
             ret = call()
             if job.abort.is_set():
                 self.stop_move(f"lease ended during {name}")  # the stop may have reached the robot first
@@ -387,10 +371,6 @@ class Motion:
             return protocol.message("action", ret=ret)
 
         return run
-
-    @property
-    def sim(self) -> bool:
-        return self._sim
 
 
 class Refusal(Exception):
@@ -403,10 +383,9 @@ class Refusal(Exception):
 
 
 def start_motion(robot: backends.RobotBackend, store: StateStore) -> Motion:
-    """The service's one sport client and motion clock, from the backend, in a started Motion."""
-    client, wait = robot.motion(store)
-    sim = isinstance(client, sim_backend.SimRobot)  # stub faults only (services/robot/docs/service.md#fault-injection)
-    motion = Motion(client, wait, store, sim=sim)
+    """The service's one sport client, motion clock and arm hook, from the backend, in a started Motion."""
+    client, wait, arm_hook = robot.motion(store)
+    motion = Motion(client, wait, store, arm_hook)
     motion.start()
     return motion
 
@@ -450,13 +429,6 @@ def _target(request: dict) -> protocol.MoveTarget | None:
     if not isinstance(target, dict) or set(target) != {"yaw_rad", "lead_s"}:
         raise ValueError(f"target must be an object with yaw_rad and lead_s, got {target!r}")
     return protocol.MoveTarget(yaw_rad=_finite(target, "yaw_rad"), lead_s=_number(target, "lead_s"))
-
-
-def _service_fault(request: dict, motion: Motion) -> str | None:
-    fault = request.get("fault")
-    if fault is not None and (not motion.sim or fault not in ROBOT_FAULTS):
-        raise ValueError(f"fault {fault!r} is not a service fault of the sim backend")
-    return fault
 
 
 def _min_seq(request: dict) -> int | None:
@@ -537,13 +509,13 @@ def _handle(conn: wire.Conn, request: dict, store: StateStore, backend_name: str
         duration_s, target = _timeout(request, "duration_s"), _target(request)
         if target is not None and vyaw == 0:
             raise ValueError("a yaw target needs a non-zero vyaw")
-        run = motion.move(vx, vy, vyaw, duration_s, target, _service_fault(request, motion))
+        run = motion.move(vx, vy, vyaw, duration_s, target)
         return run_primitive(conn, motion, request, run)
     if op == "action":
         name = request.get("name")
         if name not in protocol.ACTIONS:
             raise ValueError(f"name must be one of {', '.join(protocol.ACTIONS)}, got {name!r}")
-        return run_primitive(conn, motion, request, motion.action(name, _service_fault(request, motion)))
+        return run_primitive(conn, motion, request, motion.action(name))
     raise ValueError(f"unknown op {op!r}")
 
 

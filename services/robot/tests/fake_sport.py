@@ -34,3 +34,13 @@ class FakeClient:
     def Stretch(self):
         self.calls.append("Stretch")
         return 0
+
+
+class NoArmHook:
+    """The real backend's arm hook: nothing."""
+
+    def clear(self) -> None:
+        pass
+
+    def arm(self) -> None:
+        pass

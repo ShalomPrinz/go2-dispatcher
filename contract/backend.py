@@ -19,7 +19,7 @@ class BackendNotConfigured(Exception):
     """GO2_BACKEND missing or unknown; mapped to code ``backend_not_configured``."""
 
 
-def backend_name() -> str:
+def _name() -> str:
     """The configured backend name; raises BackendNotConfigured."""
     name = os.environ.get(BACKEND, "")
     if name not in BACKENDS:
@@ -31,12 +31,12 @@ def backend_name() -> str:
 
 def check() -> None:
     """Validate the configured backend; raises BackendNotConfigured."""
-    backend_name()
+    _name()
 
 
 def select(table: Mapping[str, T]) -> T:
     """The ``table`` entry for the configured backend; raises BackendNotConfigured if unset or absent."""
-    name = backend_name()
+    name = _name()
     if name not in table:
         raise BackendNotConfigured(f"{BACKEND}={name!r} is not one of {', '.join(table)}")
     return table[name]

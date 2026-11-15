@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from contract.env import LEASE_TOKEN, ROBOT_SOCKET, STUB_STATE_FILE
+from contract.faults import RobotFault, write_fault
 from services.robot import protocol
 from services.robot.client import RobotClient
 from tests.helpers import REPO_ROOT
@@ -69,8 +70,13 @@ class Service:
     env: dict[str, str]
     control: RobotClient
 
-    def arm(self, env: dict[str, str] | None = None, timeout_s: float = ARM_TIMEOUT_S) -> dict[str, str]:
-        """Arm a lease for one skill run; returns ``env`` (default: the service's) with its token."""
+    def arm(
+        self, env: dict[str, str] | None = None, timeout_s: float = ARM_TIMEOUT_S, *, fault: RobotFault | None = None
+    ) -> dict[str, str]:
+        """Arm a lease for one skill run, with ``fault`` in the stub fault file as the dispatcher writes it; returns
+        ``env`` (default: the service's) with its token."""
+        if fault is not None:
+            write_fault(Path(self.env[STUB_STATE_FILE]), fault)
         token = uuid.uuid4().hex
         self.control.arm(token, timeout_s)
         return {**(env or self.env), LEASE_TOKEN: token}

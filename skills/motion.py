@@ -13,9 +13,10 @@ from contract.faults import STUB_ERR_INJECTED
 from contract.runtime import SkillOutcome, ms_since
 from contract.schema import ErrorCode, describe_exception
 from services.robot import client as robot_client
-from services.robot import faults, protocol
+from services.robot import protocol
 from services.robot.client import Refused, ServiceUnavailable
 from services.robot.protocol import MoveTarget
+from skills import faults
 
 PROCESS_OVERHEAD_S = 5.0  # process start + robot service connect + two state samples (tunable)
 MOTION_BASE_S = PROCESS_OVERHEAD_S + protocol.SPORT_CLIENT_TIMEOUT_S  # plus one lost StopMove reply
@@ -33,11 +34,6 @@ class Velocity(NamedTuple):
 def motion_timeout(motion_s: float) -> float:
     """Process timeout for a skill commanding ``motion_s`` seconds of motion."""
     return MOTION_BASE_S + MOTION_FACTOR * motion_s
-
-
-def _fault() -> str | None:
-    """The stub fault for this skill's first primitive: "error", a service fault to forward, or None."""
-    return faults.inject_fault() if backend.backend_name() == "stub" else None
 
 
 def _refused(e: Refused | ServiceUnavailable, obs: dict, timing: dict) -> SkillOutcome:
@@ -58,17 +54,15 @@ def move(velocity: Velocity, duration_s: float, target: MoveTarget | None = None
     Observations: ``duration_s`` (Moves sent x period), ``sdk_ret`` (the failing Move's code, else the
     StopMove's) and, with a target, ``closed_loop`` (False if the service fell back to open loop) and
     ``turned_deg`` (the measured yaw change at the stop, unsigned degrees; None after a fallback)."""
-    fault = _fault()
-    if fault == "error":
+    if faults.injected_error():
         obs = {"duration_s": 0.0, "sdk_ret": STUB_ERR_INJECTED}
         return SkillOutcome.error(
             ErrorCode.SDK_ERROR, f"Move returned {STUB_ERR_INJECTED}", observations=obs, timing={}
         )
-    extra = {"fault": fault} if fault else {}
     t = time.monotonic()
     try:
         client = robot_client.session.client()
-        result = client.move(*velocity, duration_s, token=robot_client.lease_token(), target=target, **extra)
+        result = client.move(*velocity, duration_s, token=robot_client.lease_token(), target=target)
     except (Refused, ServiceUnavailable) as e:
         return _refused(e, {}, {"exec_ms": ms_since(t)})
     timing = {"exec_ms": ms_since(t)}
@@ -96,16 +90,14 @@ def move(velocity: Velocity, duration_s: float, target: MoveTarget | None = None
 def single_action(call: str, settle_s: float) -> SkillOutcome:
     """Ask the robot service to run ``call`` (one of protocol.ACTIONS); on success wait ``settle_s`` (via
     backend.sleep) so state_after is sampled after the motion ends."""
-    fault = _fault()
-    if fault == "error":
+    if faults.injected_error():
         obs = {"sdk_ret": STUB_ERR_INJECTED}
         return SkillOutcome.error(
             ErrorCode.SDK_ERROR, f"{call} returned {STUB_ERR_INJECTED}", observations=obs, timing={}
         )
-    extra = {"fault": fault} if fault else {}
     t = time.monotonic()
     try:
-        ret = robot_client.session.client().action(call, token=robot_client.lease_token(), **extra)
+        ret = robot_client.session.client().action(call, token=robot_client.lease_token())
     except (Refused, ServiceUnavailable) as e:
         return _refused(e, {}, {"exec_ms": ms_since(t)})
     obs = {"sdk_ret": ret}

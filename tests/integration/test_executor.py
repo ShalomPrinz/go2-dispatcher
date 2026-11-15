@@ -297,6 +297,15 @@ def test_failed_service_stop_after_a_walk_runs_the_fallback(executor, registry, 
     assert stub_state.read_state(cfg.stub.state_file).command is None
 
 
+def test_robot_fault_reaches_only_its_step(executor, registry, cfg):
+    """stuck goes in the fault file for its step's arm; the next step is armed clean and turns."""
+    stub_state.write_posture("standing", cfg.stub.state_file)
+    stuck = run(executor, registry, fault="stuck")
+    clean = run(executor, registry)
+    assert stuck.outcome == "ok" and stuck.response is not None and stuck.response.observations["turned_deg"] == 0.0
+    assert clean.outcome == "ok" and clean.response is not None and clean.response.observations["turned_deg"] > 20.0
+
+
 def test_step_does_not_start_a_dead_service(executor, registry):
     """A step never starts the service: it cannot be armed, so it counts as a loss and never runs."""
     res = executor.run(

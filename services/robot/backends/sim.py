@@ -14,6 +14,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from contract.backend import stub_sleep, time_scale
+from contract.faults import clear_fault
 from contract.schema import ObstacleDistances, Posture, RobotState
 from contract.stub import Condition, WorldObject, objects
 from services.backend.stub_state import (
@@ -25,7 +26,7 @@ from services.backend.stub_state import (
     write_state,
 )
 from services.robot import ramp
-from services.robot.backends import SportClient, Wait
+from services.robot.backends import ArmHook, SportClient, Wait
 from services.robot.state_store import StateStore
 
 STUB_ERR_NOT_STANDING = 1
@@ -46,10 +47,6 @@ FOOT_FORCE = (0.0, 0.0, 0.0, 0.0)  # rt/sportmodestate reports zeros on the robo
 FALLEN_ROLL_RAD = math.pi / 2
 FALLEN_BODY_HEIGHT_M = 0.10
 MODE_FALLEN = 7  # damping in Unitree's sport mode list
-# The rejected fault's codes, the Unitree SDK's (unitree_sdk2py/rpc/internal.py): Move is sent without a reply, so a
-# failed send is the only non-zero code it returns; actions wait for a reply and time out.
-SDK_ERR_CLIENT_SEND = 3102
-SDK_ERR_API_TIMEOUT = 3104
 
 # Simulated range_obstacle (services/robot/docs/service.md): each object is a disc, rays leave the body centre.
 OBSTACLE_RADIUS_M = 0.15  # (tunable)
@@ -263,15 +260,20 @@ class SimBackend:
         thread.start()
         return store, thread
 
-    def motion(self, store: StateStore) -> tuple[SportClient, Wait]:
-        """The service's SimRobot; its motion clock publishes a state after each motion step."""
+    def motion(self, store: StateStore) -> tuple[SportClient, Wait, ArmHook]:
+        """The service's SimRobot, wrapped to apply robot faults; its motion clock publishes a state after each
+        motion step; each arm takes the fault file's robot fault for the new lease. A stale fault file is dropped."""
+        from services.robot.backends.faults import FaultFileArm, FaultySportClient
+
         sim = SimRobot()
+        client = FaultySportClient(sim)
+        clear_fault(sim.path)
 
         def wait(seconds: float, abort: threading.Event) -> None:
             sim.wait(seconds, abort)
             _publish(store)  # the pose moved: a fresh message, as the robot sends several per tick
 
-        return sim, wait
+        return client, wait, FaultFileArm(client, sim.path)
 
     def sleep(self, seconds: float) -> None:
         stub_sleep(seconds)

@@ -8,7 +8,7 @@ import os
 import time
 from dataclasses import asdict
 from multiprocessing.connection import Client
-from typing import TYPE_CHECKING, Any, TypeGuard
+from typing import TYPE_CHECKING, TypeGuard
 
 from contract.constants import Link
 from contract.env import LEASE_TOKEN, ROBOT_SOCKET
@@ -226,13 +226,12 @@ class RobotClient:
         *,
         token: str | None,
         target: MoveTarget | None = None,
-        **extra: Any,
     ) -> MoveResult:
         """Move at body-frame (vx, vy, vyaw) for ``duration_s``, then StopMove, in the service's motion loop; with
         ``target``, StopMove once it is reached, ``duration_s`` being the cap. Raises Refused (no lease, aborted,
         SDK exception) or ServiceUnavailable."""
         fields = {"target": asdict(target)} if target is not None else {}
-        request = message("move", token=token, vx=vx, vy=vy, vyaw=vyaw, duration_s=duration_s, **fields, **extra)
+        request = message("move", token=token, vx=vx, vy=vy, vyaw=vyaw, duration_s=duration_s, **fields)
         reply = self._request(request, "move", duration_s + SPORT_CLIENT_TIMEOUT_S + REPLY_WAIT_S)
         duration, move_ret, stop_ret = reply.get("duration_s"), reply.get("move_ret"), reply.get("stop_ret")
         measured = reply.get("measured")
@@ -256,9 +255,9 @@ class RobotClient:
             yaw_rad=None if yaw is None else float(yaw),
         )
 
-    def action(self, name: str, *, token: str | None, **extra: Any) -> int:
+    def action(self, name: str, *, token: str | None) -> int:
         """Run one sport client action (``ACTIONS``) in the service; returns its code. Raises as move()."""
-        reply = self._request(message("action", token=token, name=name, **extra), "action", ACTION_WAIT_S)
+        reply = self._request(message("action", token=token, name=name), "action", ACTION_WAIT_S)
         ret = reply.get("ret")
         if not _is_int(ret):
             raise ServiceUnavailable(f"malformed reply: {reply!r}")

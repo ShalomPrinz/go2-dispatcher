@@ -91,6 +91,26 @@ source_modules = ["services.backend"]
 forbidden_modules = ["services.robot", "services.vision", "skills", "dispatcher"]
 
 [[tool.importlinter.contracts]]
+name = "The real backend loads no sim or fault code"
+type = "forbidden"                      # a real robot process never loads fault injection (services/robot/docs/service.md)
+source_modules = ["services.robot.backends.real"]
+forbidden_modules = ["services.robot.backends.sim", "services.robot.backends.faults", "contract.faults"]
+allow_indirect_imports = true           # load() imports both backends lazily; the runtime proof is a subprocess test (tests/docs/testing.md)
+
+[[tool.importlinter.contracts]]
+name = "The robot service gets faults only through the backend object"
+type = "forbidden"
+source_modules = ["services.robot.service"]
+forbidden_modules = ["services.robot.backends.faults", "contract.faults"]
+allow_indirect_imports = true           # same reason
+
+[[tool.importlinter.contracts]]
+name = "Only the sim backend and robot tests import the robot fault code"
+type = "protected"                      # direct imports only; the two contracts above and the subprocess test cover chains
+protected_modules = ["services.robot.backends.faults"]
+allowed_importers = ["services.robot.backends.sim", "services.robot.tests", "tests.integration"]
+
+[[tool.importlinter.contracts]]
 name = "The services import neither skills nor the dispatcher"
 type = "forbidden"
 source_modules = ["services"]

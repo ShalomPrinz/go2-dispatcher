@@ -5,14 +5,13 @@ from __future__ import annotations
 import difflib
 import time
 
-from contract import backend, policy
+from contract import policy
 from contract.runtime import SkillOutcome, ms_since
 from contract.schema import ErrorCode
-from services.robot import faults
 from services.vision import client, protocol
 from services.vision.coco import COCO_CLASSES
 from services.vision.protocol import CameraUnavailable, DetectorError
-from skills import runner
+from skills import faults, runner
 from skills.motion import PROCESS_OVERHEAD_S
 
 SUGGESTIONS_N = 3
@@ -52,7 +51,7 @@ def body(params: dict) -> SkillOutcome:
     t = time.monotonic()
     try:
         with conn:
-            if backend.backend_name() == "stub" and faults.inject_fault() == "error":
+            if faults.injected_error():
                 raise CameraUnavailable("injected camera fault")
             found = client.detect(conn, target, REPLY_WAIT_S)
     except DetectorError as e:

@@ -16,7 +16,7 @@ from contract import faults
 from contract.schema import SkillResponse
 from services.backend import stub_state
 from services.robot.backends import sim
-from services.robot.faults import GARBAGE_TEXT
+from skills.faults import GARBAGE_TEXT
 from tests.helpers import REPO_ROOT
 from tests.integration import robot, vision
 from tests.integration.skill_process import run_module, single_response, stub_env
@@ -143,7 +143,6 @@ print(json.dumps({"modules": names, "heavy": heavy, "out": buf.getvalue(),
         "contract.wire",
         # the client surfaces a skill process loads
         "services.robot.client",
-        "services.robot.faults",
         "services.robot.protocol",
         "services.robot.ramp",
         "services.robot.state_store",
@@ -156,6 +155,7 @@ print(json.dumps({"modules": names, "heavy": heavy, "out": buf.getvalue(),
         "services.robot.stub",
         # the services, backends, detectors and utilities import their heavy modules lazily
         "services.robot.backends",
+        "services.robot.backends.faults",
         "services.robot.backends.real",
         "services.robot.backends.sim",
         "services.robot.lease",
@@ -166,6 +166,7 @@ print(json.dumps({"modules": names, "heavy": heavy, "out": buf.getvalue(),
         "services.vision.detectors.real",
         "services.vision.detectors.stub",
         "services.vision.service",
+        "skills.faults",
         "skills.motion",
         "skills.runner",
         *(f"skills.{n}" for n in SKILLS),
@@ -252,13 +253,21 @@ def test_detect_not_found_is_ok(tmp_path):
 
 
 def test_detect_unsupported_object(tmp_path):
-    proc = run_module("detect_object", {"target": "phone"}, stub_env(tmp_path, fault="crash"))
-    resp = RESPONSE.validate_python(single_response(proc))  # no detector call was made
+    env = stub_env(tmp_path, GO2_VISION_SOCKET=str(tmp_path / "none.sock"))
+    proc = run_module("detect_object", {"target": "phone"}, env)
+    resp = RESPONSE.validate_python(single_response(proc))  # not vision_unavailable: no vision call was made
     assert proc.returncode == 1
     assert resp.error is not None
     assert resp.error.code == "unsupported_object"
     assert "cell phone" in resp.error.message
     assert resp.error.message.startswith("'phone' is not a detectable object. Closest supported:")
+
+
+def test_fault_crash_precedes_unsupported_object(tmp_path):
+    """The fault hook fires before the body, so the target check never runs (skills/docs/skills.md)."""
+    proc = run_module("detect_object", {"target": "phone"}, stub_env(tmp_path, fault="crash"))
+    assert proc.returncode == faults.CRASH_EXIT_CODE
+    assert proc.stdout == ""
 
 
 def test_detect_unsupported_without_matches(tmp_path):

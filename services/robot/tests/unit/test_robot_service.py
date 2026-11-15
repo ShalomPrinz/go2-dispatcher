@@ -22,6 +22,7 @@ from services.robot import service as robot_service
 from services.robot.client import ProtocolMismatch, Refused, RobotClient, ServiceUnavailable
 from services.robot.protocol import LinkEvent, StateReply
 from services.robot.state_store import StateStore
+from services.robot.tests.fake_sport import NoArmHook
 from tests.helpers.fake_clock import Clock
 
 
@@ -70,7 +71,7 @@ def serving(path: str, store: StateStore) -> Iterator[Served]:
     """``store`` and a Motion over a Recorder, served on a socket by robot_service.serve; the motion clock is
     real."""
     robot = Recorder()
-    motion = robot_service.Motion(robot, lambda s, abort: abort.wait(s), store, sim=False)
+    motion = robot_service.Motion(robot, lambda s, abort: abort.wait(s), store, NoArmHook())
     motion.start()
     listener = Listener(path, family=wire.FAMILY)
 
@@ -244,22 +245,55 @@ def test_deadline_ends_the_lease_and_stops():
     before the deadline and ends at it, whatever the machine load."""
     clock, robot = Clock(), Recorder()
     motion = robot_service.Motion(
-        robot, lambda s, abort: abort.wait(s), StateStore(lambda m: m), sim=False, clock=clock
+        robot, lambda s, abort: abort.wait(s), StateStore(lambda m: m), NoArmHook(), clock=clock
     )
     threading.Thread(target=motion._loop, daemon=True).start()
     conn = cast(wire.Conn, object())  # a lease binds to its connection by identity
     motion.arm("t", 0.3)
-    job = motion.submit(conn, "t", motion.move(0.3, 0.0, 0.0, 10.0, None, None))
+    job = motion.submit(conn, "t", motion.move(0.3, 0.0, 0.0, 10.0, None))
     assert until(lambda: "Move" in robot.calls, wait_s=10.0)
     clock.advance(0.299)
     assert not motion.end_expired_lease()
     clock.advance(0.002)
     with pytest.raises(robot_service.Refusal, match="deadline has passed"):
-        motion.submit(conn, "t", motion.action("StandDown", None))
+        motion.submit(conn, "t", motion.action("StandDown"))
     assert motion.end_expired_lease()
     assert job.done.wait(5.0) and job.reply is not None
     assert job.reply["error"]["code"] == protocol.ERR_ABORTED and "lease deadline" in job.reply["error"]["message"]
     assert stopped_after_moving(robot)
+
+
+def test_arm_runs_its_hook_between_the_old_lease_and_the_new_one():
+    """clear runs before the used lease's StopMove, arm after it and before the new lease; a ValueError from arm
+    refuses the arm and leaves no lease."""
+    robot, seen = Recorder(), []
+    motion: robot_service.Motion
+
+    class Hook:
+        def clear(self) -> None:
+            seen.append(("clear", list(robot.calls), motion._lease is None))
+
+        def arm(self) -> None:
+            seen.append(("arm", list(robot.calls), motion._lease is None))
+            if len(seen) == 6:
+                raise ValueError("bad fault file")
+
+    motion = robot_service.Motion(robot, lambda s, abort: abort.wait(s), StateStore(lambda m: m), Hook())
+    threading.Thread(target=motion._loop, daemon=True).start()
+    conn = cast(wire.Conn, object())
+    motion.arm("t1", 5.0)
+    job = motion.submit(conn, "t1", motion.move(0.3, 0.0, 0.0, 10.0, None))
+    assert until(lambda: "Move" in robot.calls, wait_s=10.0)
+    motion.arm("t2", 5.0)
+    assert job.done.wait(5.0)
+    stop = robot.calls.index("StopMove")
+    assert seen[2] == ("clear", robot.calls[:stop], False) and seen[3] == ("arm", robot.calls[: stop + 1], True)
+    assert motion._lease is not None and motion._lease.token == "t2"
+    with pytest.raises(ValueError, match="bad fault file"):
+        motion.arm("t3", 5.0)
+    assert motion._lease is None
+    with pytest.raises(robot_service.Refusal, match="no lease"):
+        motion.submit(conn, "t3", motion.action("StandDown"))
 
 
 def test_stop_op_stops_and_ends_the_lease(service):
@@ -315,12 +349,12 @@ def test_an_action_never_starts_after_a_stop_and_a_stop_during_it_is_resent():
             return 0
 
     robot = StopDuringStretch()
-    motion = robot_service.Motion(robot, lambda s, abort: abort.wait(s), StateStore(lambda m: m), sim=False)
-    job = robot_service.Job(run=motion.action("Stretch", None))
+    motion = robot_service.Motion(robot, lambda s, abort: abort.wait(s), StateStore(lambda m: m), NoArmHook())
+    job = robot_service.Job(run=motion.action("Stretch"))
     motion._job = job
     assert job.run(job)["error"]["code"] == protocol.ERR_ABORTED
     assert robot.calls == ["Stretch", "StopMove", "StopMove"]
-    late = robot_service.Job(run=motion.action("StandDown", None))
+    late = robot_service.Job(run=motion.action("StandDown"))
     motion._job = late
     motion.halt("stop op")
     assert late.run(late)["error"]["code"] == protocol.ERR_ABORTED
@@ -359,13 +393,13 @@ def test_disarm_reports_the_failed_stop_at_the_deadline():
     """The motion clock moves only when advanced and the test runs the deadline check itself."""
     clock, robot = Clock(), Recorder()
     motion = robot_service.Motion(
-        robot, lambda s, abort: abort.wait(s), StateStore(lambda m: m), sim=False, clock=clock
+        robot, lambda s, abort: abort.wait(s), StateStore(lambda m: m), NoArmHook(), clock=clock
     )
     threading.Thread(target=motion._loop, daemon=True).start()
     conn = cast(wire.Conn, object())  # a lease binds to its connection by identity
     motion.arm("t", 0.3)
     robot.stops = [7]
-    job = motion.submit(conn, "t", motion.move(0.3, 0.0, 0.0, 10.0, None, None))
+    job = motion.submit(conn, "t", motion.move(0.3, 0.0, 0.0, 10.0, None))
     assert until(lambda: "Move" in robot.calls, wait_s=10.0)
     clock.advance(0.3)
     assert motion.end_expired_lease()

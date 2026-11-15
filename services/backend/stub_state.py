@@ -10,6 +10,7 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 from contract.env import STUB_STATE_FILE
+from contract.faults import clear_fault
 from contract.stub import CONDITIONS, DEFAULT_POSTURE, DEFAULT_STATE_FILE, STUB_POSTURES, Condition, StubPosture
 
 
@@ -124,7 +125,9 @@ def write_command(command: Command | None, path: Path | None = None) -> None:
 
 
 def reset(posture: StubPosture, path: Path | None = None) -> None:
-    """Put the stub into a known state: ``posture`` at the origin, no command; the dispatcher's only write to
-    stub state."""
+    """Put the stub into a known state: ``posture`` at the origin, no command, no pending robot fault; the
+    dispatcher's only write to stub state."""
     _check_posture(posture)
-    write_state(StubState(posture=posture), path or state_file())
+    path = path or state_file()
+    write_state(StubState(posture=posture), path)
+    clear_fault(path)
