@@ -19,6 +19,8 @@ import ownership  # noqa: E402  (the map loader `scope.py` uses; the hooks thems
 
 OWNERSHIP = ownership.load_map()
 MAIN_ONLY = tuple(json.loads((HOOKS.parent / "ownership.json").read_text())["main"])
+# Mapped before the folder exists, so its owner can create it; the test fails once an entry's path exists.
+NOT_YET_CREATED = ("services/backend/", "services/backend/tests/")
 
 
 def git(*args: str, cwd: Path) -> None:
@@ -82,6 +84,7 @@ def test_scope_main_session_and_builtin_agents_denied_packages_only(repo: Path, 
             "skills/catalog/x/SKILL.md",
             "contract/x.py",
             "services/robot/x.py",
+            "services/backend/x.py",
         ):
             reason = decision("scope.py", write(rel, repo, agent), tmpdir_env)
             assert rel in reason and "in a package" in reason
@@ -97,6 +100,7 @@ def test_scope_project_agent_allowed_in_scope_and_denied_outside(repo: Path, tmp
     for rel, agent in (
         ("contract/x.py", "contract-dev"),
         ("services/robot/backends/x.py", "robot-dev"),
+        ("services/backend/dds.py", "robot-dev"),
         ("services/vision/docs/vision.md", "vision-dev"),
     ):
         assert decision("scope.py", write(rel, repo, agent), tmpdir_env) == "allow"
@@ -195,11 +199,11 @@ def test_typecheck_reports_nothing_touched(repo: Path, tmpdir_env: Path) -> None
 
 
 def test_ownership_paths_exist_in_the_repo() -> None:
-    """Every map path exists, except `**/name` patterns (files that may not exist yet)."""
+    """Every map path exists, except `**/name` patterns (files that may not exist yet) and `NOT_YET_CREATED`."""
     assert OWNERSHIP is not None, "ownership.json missing or malformed"
     scopes, packages = OWNERSHIP
     for p in {p for ps in scopes.values() for p in ps} | set(packages) | set(MAIN_ONLY):
-        assert p.startswith("**/") or (ROOT / p).exists(), p
+        assert p.startswith("**/") or (ROOT / p).exists() != (p in NOT_YET_CREATED), p
 
 
 def test_ownership_agents_have_agent_files() -> None:

@@ -41,7 +41,8 @@ CONTRACTS: tuple[tuple[str, str], ...] = (
     ("services/robot/protocol.py", "robot service protocol (services/robot/docs/service.md)"),
     ("services/vision/protocol.py", "vision service protocol (services/vision/docs/vision.md)"),
 )
-# Safety paths for reviewer check 4 (docs/safety.md): whole files, then words on changed lines elsewhere.
+# Safety paths for reviewer check 4 (docs/safety.md): whole files (a trailing `/` is a folder, tests excluded),
+# then words on changed lines elsewhere.
 SAFETY_FILES = (
     "dispatcher/executor.py",
     "skills/motion.py",
@@ -49,6 +50,8 @@ SAFETY_FILES = (
     "services/robot/lease.py",
     "services/robot/stop_move.py",
     "services/robot/local.py",
+    "services/robot/backends/",
+    "services/backend/",
     "contract/process.py",
 )
 SAFETY_WORDS = re.compile(
@@ -248,10 +251,14 @@ def contract_surfaces(paths: list[str]) -> list[str]:
     return [f"- `{p}`: {why}" for p in paths for pat, why in CONTRACTS if fnmatch(p, pat)]
 
 
+def is_safety_file(rel: str) -> bool:
+    return any(rel == p or (p.endswith("/") and rel.startswith(p) and "/tests/" not in rel) for p in SAFETY_FILES)
+
+
 def safety(root: Path, diffs: dict[str, FileDiff], untracked: list[str], packages: tuple[str, ...]) -> list[str]:
-    out = [f"- `{p}`: safety file" for p in [*diffs, *untracked] if p in SAFETY_FILES]
+    out = [f"- `{p}`: safety file" for p in [*diffs, *untracked] if is_safety_file(p)]
     for rel in [*diffs, *untracked]:
-        if rel in SAFETY_FILES or not rel.endswith(".py") or "/tests/" in rel or not rel.startswith(packages):
+        if is_safety_file(rel) or not rel.endswith(".py") or "/tests/" in rel or not rel.startswith(packages):
             continue
         lines = [t for _, t in [*diffs[rel].removed, *diffs[rel].added]] if rel in diffs else [read(root, rel) or ""]
         words = sorted({w for t in lines for w in SAFETY_WORDS.findall(t)})

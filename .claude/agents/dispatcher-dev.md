@@ -10,7 +10,7 @@ You work on the `dispatcher` package of the Go2 LLM dispatcher (Python 3.10, man
 
 - Write paths: your list in [.claude/ownership.json](../ownership.json), enforced by the `scope.py` hook. Use root `tests/integration/` only where the task is cross-service, and a shared doc in `docs/` only when the change touches its topic.
 - Docs you own: `dispatcher/docs/` (see the table in `docs/README.md`).
-- Do not change `skills/`, `contract/`, `services/robot/` or `services/vision/` code or their docs; those packages belong to `skills-dev`, `contract-dev`, `robot-dev` and `vision-dev`. If the task needs a change there, stop and report what is needed.
+- Do not change `skills/`, `contract/`, `services/robot/`, `services/backend/` or `services/vision/` code or their docs; those packages belong to `skills-dev`, `contract-dev`, `robot-dev` (both `services/robot/` and `services/backend/`) and `vision-dev`. If the task needs a change there, stop and report what is needed.
 
 ## Before you start
 

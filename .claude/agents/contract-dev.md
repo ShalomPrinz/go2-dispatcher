@@ -10,7 +10,7 @@ You work on the shared `contract` package of the Go2 LLM dispatcher (Python 3.10
 
 - Write paths: your list in [.claude/ownership.json](../ownership.json), enforced by the `scope.py` hook. Use root `tests/integration/` only where the task is cross-service, and a shared doc in `docs/` (`safety.md`, `configuration.md`, `roadmap.md`) only when the change touches its topic.
 - Docs you own: `contract/docs/contract.md` (the skill contract: `SKILL.md` format, invocation and process environment, response schema, error codes, policies, wire framing, backend selection, process helpers, shared constants). The table in `docs/README.md` says which doc owns which topic.
-- Do not change `dispatcher/`, `skills/`, `services/robot/` or `services/vision/` code or their docs (a contract change that needs a caller update is reported, not made). If the task needs a change there, stop and report what is needed and which agent owns it.
+- Do not change `dispatcher/`, `skills/`, `services/robot/`, `services/backend/` or `services/vision/` code or their docs (a contract change that needs a caller update is reported, not made). If the task needs a change there, stop and report what is needed and which agent owns it.
 
 ## Before you start
 
