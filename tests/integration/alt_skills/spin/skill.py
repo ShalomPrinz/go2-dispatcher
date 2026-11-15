@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from skills import runner, turn
+from skills import turn
+from skills.runtime import runner
 
 POLICY = replace(turn.POLICY, name="spin")
+body = turn.body
 
-if __name__ == "__main__":
-    runner.run_skill(POLICY, turn.body)
+
+def main() -> None:
+    runner.run_skill(POLICY, body)

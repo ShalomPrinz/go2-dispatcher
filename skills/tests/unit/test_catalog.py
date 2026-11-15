@@ -6,9 +6,10 @@ import re
 from pathlib import Path
 
 from contract.manifest import parse_skill_file
-from skills import turn, walk
+from skills.turn import skill as turn
+from skills.walk import skill as walk
 
-CATALOG = Path(__file__).resolve().parents[2] / "catalog"
+SKILLS_DIR = Path(__file__).resolve().parents[2]
 
 
 def _number_before(text: str, unit: str) -> float:
@@ -19,7 +20,7 @@ def _number_before(text: str, unit: str) -> float:
 
 def test_prose_numbers_match_code_constants():
     def effect(name: str) -> str:
-        sf = parse_skill_file(CATALOG / name / "SKILL.md")
+        sf = parse_skill_file(SKILLS_DIR / name / "SKILL.md")
         return next(s.text for s in sf.sections if s.heading == "Effect")
 
     assert _number_before(effect("walk"), "m/s") == walk.VELOCITY_MPS

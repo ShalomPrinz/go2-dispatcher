@@ -8,7 +8,7 @@ from typing import NoReturn
 from contract.policy import SkillPolicy
 from contract.runtime import SkillOutcome, StateSampler, parse_params, run_main
 from services.robot import client as robot_client
-from skills import faults
+from skills.runtime import faults
 
 Body = Callable[[dict], SkillOutcome]
 
@@ -17,7 +17,7 @@ def run_skill(policy: SkillPolicy, body: Body, *, sample_state: bool = True) -> 
     """Standard main() of a skill, via run_main:
     1. params = json.loads(argv[1]); must be a dict -> else error invalid_params
     2. if sample_state: sample state_before through the robot service (exception -> state_error, continue)
-    3. the stub's skill fault hook (skills/faults.py): hang, crash or garbage acts here
+    3. the stub's skill fault hook (skills/runtime/faults.py): hang, crash or garbage acts here
     4. outcome = body(params), a SkillOutcome
     5. if sample_state: sample state_after (exception -> appended to state_error)
     timing gets robot_connect_ms (if the process connected to the robot service), state_ms (time in the

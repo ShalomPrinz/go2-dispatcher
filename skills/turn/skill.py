@@ -10,7 +10,7 @@ from contract.constants import YAW_SIGN
 from contract.runtime import SkillOutcome
 from services.robot import ramp
 from services.robot.protocol import MoveTarget
-from skills import motion, runner
+from skills.runtime import motion, runner
 
 YAW_RATE_RPS = 1.0  # rad/s
 CAP_FACTOR = 1.25  # cap on the closed-loop turn: nominal time x factor + CAP_S (tunable, services/robot/docs/robot.md)
@@ -41,7 +41,3 @@ def body(params: dict) -> SkillOutcome:
 
 def main() -> None:
     runner.run_skill(POLICY, body)
-
-
-if __name__ == "__main__":
-    main()

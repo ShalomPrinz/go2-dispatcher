@@ -14,9 +14,9 @@ from contract.env import vision_socket_path
 from dispatcher.executor import Executor
 from dispatcher.registry import Registry, SkillDescriptor
 from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR, make_config
-from dispatcher.tests.helpers.skill_modules.env_dump import POLICY as ENV_DUMP_POLICY
 from services.backend import stub_state
 from tests.helpers import REPO_ROOT
+from tests.integration.env_dump import POLICY as ENV_DUMP_POLICY
 
 pytestmark = pytest.mark.integration
 
@@ -219,10 +219,9 @@ def test_child_env_has_no_secrets(executor, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-secret")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "tg-secret")
     monkeypatch.setenv("GO2_STUB_FAULT", "crash")  # must not leak either
-    monkeypatch.setenv("PYTHONPATH", str(REPO_ROOT / "dispatcher" / "tests" / "helpers"))
     desc = SkillDescriptor(
         name="env_dump",
-        entrypoint="skill_modules.env_dump",
+        entrypoint="tests.integration.env_dump",
         description="dump env keys",
         params={},
         sections=(),

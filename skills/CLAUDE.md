@@ -1,6 +1,6 @@
 # skills/CLAUDE.md
 
-The `skills` package: the `SKILL.md` catalog, the skills themselves, and the skill runtime (`runner.py`, `motion.py`, `faults.py`). The contract the skills follow, including the process runtime they run on (`contract/runtime.py`), is the `contract` package ([contract/CLAUDE.md](../contract/CLAUDE.md)); the robot service they move and read state through is the `services.robot` package ([services/robot/CLAUDE.md](../services/robot/CLAUDE.md)); the vision service `detect_object` asks is the `services.vision` package ([services/vision/CLAUDE.md](../services/vision/CLAUDE.md)). Repo-wide rules are in the root [CLAUDE.md](../CLAUDE.md).
+The `skills` package: one folder per skill (`skills/<name>/`: `SKILL.md`, `skill.py`, `__init__.py`, `__main__.py`) and the skill runtime `skills/runtime/` (`runner.py`, `motion.py`, `faults.py`). The contract the skills follow, including the generic process runtime they run on (`contract/runtime.py`, not `skills/runtime/`), is the `contract` package ([contract/CLAUDE.md](../contract/CLAUDE.md)); the robot service they move and read state through is the `services.robot` package ([services/robot/CLAUDE.md](../services/robot/CLAUDE.md)); the vision service `detect_object` asks is the `services.vision` package ([services/vision/CLAUDE.md](../services/vision/CLAUDE.md)). Repo-wide rules are in the root [CLAUDE.md](../CLAUDE.md).
 
 ## Commands
 
@@ -34,7 +34,8 @@ uv run go2 --reset-stub                        # stub checks: back to standing (
 - An agent never runs a skill on the real backend: no `--backend real`, no `robot.backend = "real"`, no `--run-robot` ([safety.md](../docs/safety.md#supervised-operation-rules)).
 - Mark robot facts not yet checked on the robot as *unverified*. Checklist results go only in [robot.md](../services/robot/docs/robot.md#results), and only from a supervised session reported by a person.
 - Importing a skill module must do nothing; `skills` imports `contract` and the client surfaces of `services.robot` (`protocol`, `client`, `ramp`) and `services.vision` (`protocol`, `client`, `coco`) but never `dispatcher`, `contract.manifest`, `services.backend`, `services.robot.stub`, a backend, a detector or a service ([skills.md](docs/skills.md#no-side-effects-on-import)).
-- Stub skill faults fire only in the runtime (`run_skill`'s hook, `faults.injected_error()` in the helpers); a skill body never handles a fault ([skills.md](docs/skills.md#skill-faults)).
+- A skill's code lives in `skill.py` and runs only through `__main__.py` (`python -m skills.<name>`); no `if __name__ == "__main__"` in `skill.py`, never `python -m skills.<name>.skill` ([skills.md](docs/skills.md#design-decisions)).
+- Stub skill faults fire only in the skill runtime (`run_skill`'s hook, `faults.injected_error()` in the helpers); a skill body never handles a fault ([skills.md](docs/skills.md#skill-faults)).
 - Exactly one JSON line on stdout, via `contract.runtime.emit()`; everything else goes to stderr ([contract.md](../contract/docs/contract.md#invocation)).
 - Skills wait through `backend.sleep()`, never `time.sleep`, so the stub time scale applies ([service.md](../services/robot/docs/service.md#stub-backend)).
 - Skills apply no defaults; the dispatcher fills them. Run by hand, pass every param ([skills.md](docs/skills.md#running-a-skill-by-hand)).

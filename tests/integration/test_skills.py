@@ -16,7 +16,7 @@ from contract import faults
 from contract.schema import SkillResponse
 from services.backend import stub_state
 from services.robot.backends import sim
-from skills.faults import GARBAGE_TEXT
+from skills.runtime.faults import GARBAGE_TEXT
 from tests.helpers import REPO_ROOT
 from tests.integration import robot, vision
 from tests.integration.skill_process import run_module, single_response, stub_env
@@ -96,10 +96,10 @@ def test_fresh_interpreter_import_is_side_effect_free():
 import contextlib, importlib, io, json, pkgutil, sys
 
 def modules(package):
-    # every module below the package, except its tests
+    # every module below the package, except its tests and the __main__ files that run a skill
     found = []
     for m in pkgutil.iter_modules(importlib.import_module(package).__path__):
-        if m.name == "tests":
+        if m.name in ("tests", "__main__"):
             continue
         name = f"{package}.{m.name}"
         found.append(name)
@@ -166,10 +166,12 @@ print(json.dumps({"modules": names, "heavy": heavy, "out": buf.getvalue(),
         "services.vision.detectors.real",
         "services.vision.detectors.stub",
         "services.vision.service",
-        "skills.faults",
-        "skills.motion",
-        "skills.runner",
+        "skills.runtime",
+        "skills.runtime.faults",
+        "skills.runtime.motion",
+        "skills.runtime.runner",
         *(f"skills.{n}" for n in SKILLS),
+        *(f"skills.{n}.skill" for n in SKILLS),
     } <= set(out["modules"])
     assert out["heavy"] == [] and out["out"] == "" and proc.stderr == ""
     for n in SKILLS:

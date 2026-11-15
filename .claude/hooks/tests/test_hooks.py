@@ -79,7 +79,7 @@ def test_scope_main_session_and_builtin_agents_denied_packages_only(repo: Path, 
     for agent in (None, "general-purpose"):
         for rel in (
             "dispatcher/loop.py",
-            "skills/catalog/x/SKILL.md",
+            "skills/x/SKILL.md",
             "contract/x.py",
             "services/robot/x.py",
             "services/backend/x.py",
@@ -115,9 +115,9 @@ def test_scope_reviewer_denied_everything(repo: Path, tmpdir_env: Path) -> None:
 
 
 def test_scope_conftest_anywhere_for_tests_dev(repo: Path, tmpdir_env: Path) -> None:
-    for rel in ("conftest.py", "dispatcher/tests/conftest.py", "skills/catalog/x/conftest.py"):
+    for rel in ("conftest.py", "dispatcher/tests/conftest.py", "skills/x/conftest.py"):
         assert decision("scope.py", write(rel, repo, "tests-dev"), tmpdir_env) == "allow"
-    assert decision("scope.py", write("skills/catalog/x/notconftest.py", repo, "tests-dev"), tmpdir_env) != "allow"
+    assert decision("scope.py", write("skills/x/notconftest.py", repo, "tests-dev"), tmpdir_env) != "allow"
 
 
 def test_scope_worktree_checked_like_the_checkout(repo: Path, tmpdir_env: Path, tmp_path: Path) -> None:

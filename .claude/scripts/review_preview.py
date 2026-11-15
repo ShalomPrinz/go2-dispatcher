@@ -22,7 +22,7 @@ GREP_HITS = 5  # per stale name (tunable)
 # Contract surfaces and what a change there means (owning docs in docs/README.md).
 CONTRACTS: tuple[tuple[str, str], ...] = (
     ("dispatcher/prompts.py", "fixed texts: registry hash and golden files change (skills/docs/skills.md)"),
-    ("skills/catalog/*/SKILL.md", "skill catalog: registry hash and golden files change (skills/docs/skills.md)"),
+    ("skills/*/SKILL.md", "built-in skills: registry hash and golden files change (skills/docs/skills.md)"),
     ("dispatcher/tests/golden/*", "golden file (tests/docs/testing.md)"),
     ("dispatcher/registry.py", "registry hash (skills/docs/skills.md)"),
     ("dispatcher/runlog.py", "run-log records (dispatcher/docs/run-log.md)"),
@@ -45,7 +45,7 @@ CONTRACTS: tuple[tuple[str, str], ...] = (
 # then words on changed lines elsewhere.
 SAFETY_FILES = (
     "dispatcher/executor.py",
-    "skills/motion.py",
+    "skills/runtime/motion.py",
     "services/robot/service.py",
     "services/robot/lease.py",
     "services/robot/stop_move.py",

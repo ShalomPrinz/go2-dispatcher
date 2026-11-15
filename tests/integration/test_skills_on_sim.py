@@ -14,7 +14,8 @@ from services.robot.backends import NoArmHook
 from services.robot.backends import sim as sim_backend
 from services.robot.protocol import MoveTarget
 from services.robot.state_store import StateStore
-from skills import turn, walk
+from skills.turn import skill as turn
+from skills.walk import skill as walk
 from tests.helpers.fake_clock import Clock
 
 

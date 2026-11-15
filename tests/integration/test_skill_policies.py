@@ -11,7 +11,12 @@ from contract.policy import MotionCost
 from dispatcher.registry import Registry
 from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR
 from services.robot import protocol, read_state, stop_move
-from skills import detect_object, motion, sit, stretch, turn, walk
+from skills.detect_object import skill as detect_object
+from skills.runtime import motion
+from skills.sit import skill as sit
+from skills.stretch import skill as stretch
+from skills.turn import skill as turn
+from skills.walk import skill as walk
 
 REGISTRY = Registry.load(BUILTIN_SKILLS_DIR)
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from contract import policy
 from contract.runtime import SkillOutcome
-from skills import motion, runner
+from skills.runtime import motion, runner
 
 TIMEOUT_S = 15.0  # (tunable)
 SETTLE_S = 3.0  # wait after StandDown so state_after is sampled at rest (tunable, services/robot/docs/robot.md)
@@ -18,7 +18,3 @@ def body(params: dict) -> SkillOutcome:
 
 def main() -> None:
     runner.run_skill(POLICY, body)
-
-
-if __name__ == "__main__":
-    main()

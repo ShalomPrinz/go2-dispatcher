@@ -227,6 +227,14 @@ def test_declarations_match_the_module(tmp_path):
     assert (walks.uses_vision, walks.moves) == (False, True)
 
 
+def test_vision_client_in_a_submodule_of_the_entry_package(tmp_path):
+    a, b = tmp_path / "a", tmp_path / "b"
+    write_skill(a, "demo", "uses_vision: true\n", entrypoint=f"{SKILL_MODULES}.vision_pkg")
+    path = write_skill(b, "demo", "", entrypoint=f"{SKILL_MODULES}.vision_pkg")
+    assert Registry.load(a)["demo"].uses_vision
+    assert_registry_error(b, path, "uses_vision is false")
+
+
 def test_uses_vision_without_vision_client(tmp_path):
     path = write_skill(tmp_path, "demo", "uses_vision: true\n")
     assert_registry_error(tmp_path, path, "does not import services.vision.client")

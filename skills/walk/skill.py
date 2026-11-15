@@ -7,7 +7,7 @@ from dataclasses import replace
 from contract import policy
 from contract.runtime import SkillOutcome
 from services.robot import ramp
-from skills import motion, runner
+from skills.runtime import motion, runner
 
 VELOCITY_MPS = 0.3
 LEAD_S = ramp.LINEAR_S  # extra command time for the start ramp (services/robot/docs/robot.md)
@@ -36,7 +36,3 @@ def body(params: dict) -> SkillOutcome:
 
 def main() -> None:
     runner.run_skill(POLICY, body)
-
-
-if __name__ == "__main__":
-    main()

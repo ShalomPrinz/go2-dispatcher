@@ -75,7 +75,7 @@ def test_stale_reference_changed_value_safety_and_missing_doc(repo: Path) -> Non
 
 def test_safety_files_and_contract_surfaces_outside_the_dispatcher(repo: Path) -> None:
     files = (
-        "skills/motion.py",
+        "skills/runtime/motion.py",
         "contract/process.py",
         "services/robot/service.py",
         "services/robot/lease.py",

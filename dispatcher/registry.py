@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import importlib
 import json
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -46,6 +47,13 @@ class SkillDescriptor:
 # --- loading ---------------------------------------------------------------------
 
 
+def _imports_vision(entrypoint: str) -> bool:
+    """True iff the entry module or a loaded submodule of it has the vision client module as a global."""
+    prefix = entrypoint + "."
+    mods = [m for n, m in list(sys.modules.items()) if n == entrypoint or n.startswith(prefix)]
+    return any(v is vision_client for m in mods for v in vars(m).values())
+
+
 def _load_skill(folder: Path) -> SkillDescriptor:
     path = folder / SKILL_FILE
     try:
@@ -69,7 +77,7 @@ def _load_skill(folder: Path) -> SkillDescriptor:
         raise RegistryError(f"{path}: POLICY.name '{policy.name}' does not match name '{name}'")
 
     uses_vision, moves = bool(fm.uses_vision), bool(fm.moves)
-    imports_vision = any(v is vision_client for v in vars(module).values())
+    imports_vision = _imports_vision(entrypoint)
     if uses_vision != imports_vision:
         found = "imports" if imports_vision else "does not import"
         raise RegistryError(

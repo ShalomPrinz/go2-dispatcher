@@ -10,7 +10,7 @@ from contract import backend
 from services.robot import client as robot_client
 from services.robot.client import Refused, ServiceUnavailable
 from services.robot.protocol import MoveResult, MoveTarget
-from skills import motion
+from skills.runtime import motion
 
 
 class FakeSession:

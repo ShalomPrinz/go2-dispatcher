@@ -38,7 +38,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["dispatcher", "skills", "contract", "services"]
-exclude = ["dispatcher/docs", "dispatcher/tests", "skills/docs", "skills/tests", "skills/catalog", "contract/docs", "contract/tests", "services/robot/docs", "services/robot/tests", "services/vision/docs", "services/vision/tests", "services/backend/docs", "services/backend/tests"]
+exclude = ["dispatcher/docs", "dispatcher/tests", "skills/docs", "skills/tests", "skills/*/SKILL.md", "contract/docs", "contract/tests", "services/robot/docs", "services/robot/tests", "services/vision/docs", "services/vision/tests", "services/backend/docs", "services/backend/tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["dispatcher/tests", "skills/tests", "contract/tests", "services/robot/tests", "services/vision/tests", "services/backend/tests", "tests", ".claude/hooks/tests", ".claude/scripts/tests"]
@@ -115,6 +115,12 @@ name = "The services import neither skills nor the dispatcher"
 type = "forbidden"
 source_modules = ["services"]
 forbidden_modules = ["skills", "dispatcher"]
+
+[[tool.importlinter.contracts]]
+name = "The dispatcher imports no skill"
+type = "forbidden"                      # the registry loads skill entrypoints by name at run time; a static import would hide a dependency
+source_modules = ["dispatcher"]
+forbidden_modules = ["skills"]
 
 [[tool.importlinter.contracts]]
 name = "The dispatcher imports only the client surfaces of robot and vision"

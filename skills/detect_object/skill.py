@@ -11,8 +11,8 @@ from contract.schema import ErrorCode
 from services.vision import client, protocol
 from services.vision.coco import COCO_CLASSES
 from services.vision.protocol import CameraUnavailable, DetectorError
-from skills import faults, runner
-from skills.motion import PROCESS_OVERHEAD_S
+from skills.runtime import faults, runner
+from skills.runtime.motion import PROCESS_OVERHEAD_S
 
 SUGGESTIONS_N = 3
 SUGGESTIONS_CUTOFF = 0.5
@@ -70,7 +70,3 @@ def body(params: dict) -> SkillOutcome:
 
 def main() -> None:
     runner.run_skill(POLICY, body)
-
-
-if __name__ == "__main__":
-    main()

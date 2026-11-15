@@ -23,7 +23,7 @@ from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR, ScriptedPlanner, make_c
 from services.backend import stub_state
 from services.robot.client import RobotClient
 from services.robot.protocol import StopSent
-from tests.integration.alt_skills import CATALOG_DIR as ALT_SKILLS_DIR
+from tests.integration.alt_skills import SKILLS_DIR as ALT_SKILLS_DIR
 
 pytestmark = pytest.mark.integration
 

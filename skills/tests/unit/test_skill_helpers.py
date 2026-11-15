@@ -12,7 +12,10 @@ from contract import env, process, runtime
 from contract.policy import MotionCost
 from contract.schema import RobotState
 from services.robot import client as robot_client
-from skills import runner, sit, turn, walk
+from skills.runtime import runner
+from skills.sit import skill as sit
+from skills.turn import skill as turn
+from skills.walk import skill as walk
 
 
 def test_policy_resolves_constants_and_functions():

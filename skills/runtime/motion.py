@@ -16,7 +16,7 @@ from services.robot import client as robot_client
 from services.robot import protocol
 from services.robot.client import Refused, ServiceUnavailable
 from services.robot.protocol import MoveTarget
-from skills import faults
+from skills.runtime import faults
 
 PROCESS_OVERHEAD_S = 5.0  # process start + robot service connect + two state samples (tunable)
 MOTION_BASE_S = PROCESS_OVERHEAD_S + protocol.SPORT_CLIENT_TIMEOUT_S  # plus one lost StopMove reply

@@ -97,7 +97,7 @@ class MotionBudgetConfig(_Section):
 
 
 class SkillsConfig(_Section):
-    dir: Path = Path("skills/catalog")
+    dir: Path = Path("skills")
 
 
 class RobotConfig(_Section):

@@ -8,7 +8,7 @@ from typing import Any
 from dispatcher.config import Config, build_config
 from tests.helpers import REPO_ROOT, TEST_TIME_SCALE
 
-BUILTIN_SKILLS_DIR = REPO_ROOT / "skills" / "catalog"  # the built-in skill set, for tests that load it
+BUILTIN_SKILLS_DIR = REPO_ROOT / "skills"  # the built-in skill set, for tests that load it
 
 
 def _merge(base: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:

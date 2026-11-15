@@ -1,7 +1,7 @@
 """Test-only skill: reports the names of its environment variables (tests/docs/testing.md).
 
-Run as ``python -m skill_modules.env_dump '{}'`` with ``dispatcher/tests/helpers`` on
-``PYTHONPATH`` (importing it as ``skill_modules`` avoids loading ``helpers``).
+Run as ``python -m tests.integration.env_dump '{}'``; it lives here, not under
+``dispatcher``, because it imports ``skills.runtime`` (the dispatcher imports no skill).
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ import os
 
 from contract import policy
 from contract.runtime import SkillOutcome
-from skills.runner import run_skill
+from skills.runtime.runner import run_skill
 
 SKILL = "env_dump"
 

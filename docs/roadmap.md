@@ -46,7 +46,7 @@ Not scheduled.
 | Question | Current v1 behaviour | Resolved by |
 |---|---|---|
 | Participant protocol: number of participants, session procedure, consent and ethics approval, participant safety around the robot beyond the [supervised-operation rules](safety.md#supervised-operation-rules). | Not designed | Experiment design with the advisor |
-| Task set: which tasks participants give, and whether each can run on both systems (the OpenClaw-baseline assumption, [project.md](project.md#openclaw-as-a-system-level-baseline)). Wait steps ([candidate tasks](project.md#preparing-the-openclaw-2-comparison)) need a skill on both systems; `skills/catalog` has none today. | Not designed | Experiment design with the advisor |
+| Task set: which tasks participants give, and whether each can run on both systems (the OpenClaw-baseline assumption, [project.md](project.md#openclaw-as-a-system-level-baseline)). Wait steps ([candidate tasks](project.md#preparing-the-openclaw-2-comparison)) need a skill on both systems; `skills/` has none today. | Not designed | Experiment design with the advisor |
 | How subjective trust and interaction quality are measured (questionnaire or other instrument). Dispatcher load is computed from the run log ([run-log.md](../dispatcher/docs/run-log.md#computing-the-study-metrics)). | Not designed | Experiment design with the advisor |
 | How are skill granularity and planning horizon crossed in the experiment? | — | Experiment design with the advisor |
 | Does the OpenClaw baseline run under one granularity condition or all of them? | — | Experiment design (task set) |

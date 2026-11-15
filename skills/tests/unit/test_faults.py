@@ -9,7 +9,7 @@ import pytest
 
 from contract import env, process
 from contract.faults import CRASH_EXIT_CODE
-from skills import faults
+from skills.runtime import faults
 
 
 class Exited(Exception):
