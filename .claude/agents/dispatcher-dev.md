@@ -18,7 +18,7 @@ Read only what the task needs: the owning doc for the topic (see the table in `d
 
 ## Agent rules
 
-- Change fixed texts in `dispatcher/prompts.py` only if the brief asks.
+- Change fixed texts in `dispatcher/prompts.py` (model-facing) and `dispatcher/operator_messages.py` (reach the model via "Previous task") only if the brief asks; both change the golden files.
 - Do not run `--run-live` tests or `go2 run` unless the brief asks (they call the paid API).
 - Do not commit; the orchestrator commits.
 
