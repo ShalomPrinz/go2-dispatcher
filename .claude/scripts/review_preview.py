@@ -49,7 +49,6 @@ SAFETY_FILES = (
     "services/robot/service.py",
     "services/robot/lease.py",
     "services/robot/stop_move.py",
-    "services/robot/local.py",
     "services/robot/backends/",
     "services/backend/",
     "contract/process.py",

@@ -78,7 +78,7 @@ class StateSampler:
         strict re-raises instead and records nothing. BackendNotConfigured always propagates."""
         self.used = True
         try:
-            backend.backend_name()  # a misconfigured backend fails the call, not just its samples
+            backend.check()  # a misconfigured backend fails the call, not just its samples
             if self.prepare is not None:
                 self.prepare()
             t = self.clock()

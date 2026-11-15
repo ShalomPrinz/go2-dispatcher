@@ -12,7 +12,7 @@ import traceback
 from contract import backend, policy, runtime
 from contract.runtime import SkillOutcome, StateSampler
 from contract.schema import ErrorCode, describe_exception
-from services.robot import local
+from services.robot import backends
 
 TIMEOUT_S = 10.0
 
@@ -21,7 +21,7 @@ POLICY = policy.SkillPolicy(name="read_state", timeout=TIMEOUT_S)  # utility: ze
 
 def body(states: StateSampler) -> SkillOutcome:
     runtime.parse_params()
-    backend.backend_name()  # raises BackendNotConfigured
+    backends.load()  # raises BackendNotConfigured
     try:
         states.take("after", strict=True)
     except backend.BackendNotConfigured:
@@ -33,8 +33,8 @@ def body(states: StateSampler) -> SkillOutcome:
 
 
 def main() -> None:
-    states = StateSampler(reader=local.sample_state, prepare=local.init_dds)
-    runtime.run_main(POLICY.name, body, watchdog=False, states=states, setup=local.setup_timing)
+    states = StateSampler(reader=lambda: backends.load().sample_state(), prepare=lambda: backends.load().init_dds())
+    runtime.run_main(POLICY.name, body, watchdog=False, states=states, setup=backends.setup_timing)
 
 
 if __name__ == "__main__":

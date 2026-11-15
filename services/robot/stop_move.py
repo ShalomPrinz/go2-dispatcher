@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import time
 
-from contract import backend, policy, runtime
+from contract import policy, runtime
 from contract.runtime import SkillOutcome, StateSampler
 from contract.schema import ErrorCode
-from services.robot import local
+from services.robot import backends
 
 TIMEOUT_S = 12.0  # covers one lost StopMove reply (tunable, contract/docs/contract.md)
 SETTLE_S = 0.5
@@ -27,15 +27,16 @@ def body(states: StateSampler) -> SkillOutcome:
         params_error = None
     except runtime.InvalidParams as e:
         params_error = str(e)  # reported only after StopMove was sent
-    local.init_dds()  # reported as dds_init_ms
+    robot = backends.load()
+    robot.init_dds()  # reported as dds_init_ms
     t = time.monotonic()
-    client = local.sport_client()
+    client = robot.sport_client()
     timing = {"client_init_ms": runtime.ms_since(t)}
     t = time.monotonic()
     ret = client.StopMove()
     timing["stop_call_ms"] = runtime.ms_since(t)
     observations = {"sdk_ret": ret}
-    backend.sleep(SETTLE_S)
+    robot.sleep(SETTLE_S)
     states.take("after")
     if params_error is not None:
         return SkillOutcome.error(ErrorCode.INVALID_PARAMS, params_error, observations=observations, timing=timing)
@@ -47,8 +48,8 @@ def body(states: StateSampler) -> SkillOutcome:
 
 
 def main() -> None:
-    states = StateSampler(reader=local.sample_state, prepare=local.init_dds)
-    runtime.run_main(POLICY.name, body, watchdog=False, states=states, setup=local.setup_timing)
+    states = StateSampler(reader=lambda: backends.load().sample_state(), prepare=lambda: backends.load().init_dds())
+    runtime.run_main(POLICY.name, body, watchdog=False, states=states, setup=backends.setup_timing)
 
 
 if __name__ == "__main__":

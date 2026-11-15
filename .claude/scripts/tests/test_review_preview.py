@@ -80,7 +80,6 @@ def test_safety_files_and_contract_surfaces_outside_the_dispatcher(repo: Path) -
         "services/robot/service.py",
         "services/robot/lease.py",
         "services/robot/stop_move.py",
-        "services/robot/local.py",
         "services/robot/backends/real.py",
         "services/backend/dds.py",
     )

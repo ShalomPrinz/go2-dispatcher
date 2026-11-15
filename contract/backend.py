@@ -5,10 +5,13 @@ from __future__ import annotations
 
 import os
 import time
+from collections.abc import Mapping
+from typing import TypeVar
 
 from contract.env import BACKEND, STUB_TIME_SCALE
 
 BACKENDS = ("real", "stub")
+T = TypeVar("T")
 DEFAULT_TIME_SCALE = 0.1  # used when the env is unset (manual runs) and as the dispatcher's stub config default
 
 
@@ -26,6 +29,19 @@ def backend_name() -> str:
     return name
 
 
+def check() -> None:
+    """Validate the configured backend; raises BackendNotConfigured."""
+    backend_name()
+
+
+def select(table: Mapping[str, T]) -> T:
+    """The ``table`` entry for the configured backend; raises BackendNotConfigured if unset or absent."""
+    name = backend_name()
+    if name not in table:
+        raise BackendNotConfigured(f"{BACKEND}={name!r} is not one of {', '.join(table)}")
+    return table[name]
+
+
 def time_scale() -> float:
     raw = os.environ.get(STUB_TIME_SCALE)
     return float(raw) if raw else DEFAULT_TIME_SCALE
@@ -38,7 +54,4 @@ def stub_sleep(seconds: float) -> None:
 
 def sleep(seconds: float) -> None:
     """A skill's wait: real time on the robot, scaled by the stub time scale on the stub."""
-    if backend_name() == "stub":
-        stub_sleep(seconds)
-    else:
-        time.sleep(seconds)
+    select({"real": time.sleep, "stub": stub_sleep})(seconds)

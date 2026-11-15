@@ -8,12 +8,14 @@ services/vision/detectors/real.py, used only by the vision service.
 from __future__ import annotations
 
 import math
+import threading
 import time
 from collections.abc import Callable
 from typing import Any
 
 from contract.schema import ObstacleDistances, Posture, RobotState
-from services.backend.dds import init_dds
+from services.backend import dds
+from services.robot.backends import SportClient, Wait
 from services.robot.protocol import SPORT_CLIENT_TIMEOUT_S, StateUnavailable
 from services.robot.state_store import STATE_WAIT_S, StateStore
 
@@ -34,9 +36,9 @@ RANGE_OBSTACLE_MAX_M = (
 # --- sport client -------------------------------------------------------------
 
 
-def get_sport_client():
+def get_sport_client() -> SportClient:
     """One SportClient: the robot service's for its lifetime, or the stop_move utility's own."""
-    init_dds()
+    dds.init_dds()
     from unitree_sdk2py.go2.sport.sport_client import SportClient
 
     client = SportClient()
@@ -50,7 +52,7 @@ def get_sport_client():
 
 def subscribe_state(on_message: Callable[[Any], None]) -> Any:
     """Init DDS and subscribe ``on_message`` to rt/sportmodestate; keep the returned subscriber alive."""
-    init_dds()
+    dds.init_dds()
     from unitree_sdk2py.core.channel import ChannelSubscriber
     from unitree_sdk2py.idl.unitree_go.msg.dds_ import SportModeState_
 
@@ -155,18 +157,51 @@ def state_from_msg(msg) -> RobotState:
     )
 
 
-_store = StateStore(state_from_msg)  # this process's own subscription: the utilities only
-_subscriber = None
+# --- the backend -------------------------------------------------------------------
 
 
-def sample_state() -> RobotState:
-    """The utilities' own DDS read: wait up to STATE_WAIT_S for a message that arrived after this call; else
-    use the latest earlier one; else raise StateUnavailable. Skills read state through the robot service."""
-    global _subscriber
-    min_seq = _store.seq + 1
-    if _subscriber is None:
-        _subscriber = subscribe_state(_store.put)
-    reading = _store.read(min_seq, STATE_WAIT_S)
-    if reading is None:
-        raise StateUnavailable(f"no {SPORT_STATE_TOPIC} message within {STATE_WAIT_S:g}s")
-    return reading.state
+def _wait(seconds: float, abort: threading.Event) -> None:
+    abort.wait(seconds)
+
+
+class RealBackend:
+    """The real Go2 (services/robot/docs/robot.md#real-backend): DDS, SportClient and rt/sportmodestate."""
+
+    name = "real"
+
+    def __init__(self) -> None:
+        self._store = StateStore(state_from_msg)  # this process's own subscription: the utilities only
+        self._subscriber: Any = None
+
+    def init_dds(self) -> None:
+        dds.init_dds()
+
+    def setup_timing(self) -> dict[str, float]:
+        ms = dds.dds_init_ms()
+        return {} if ms is None else {"dds_init_ms": ms}
+
+    def sport_client(self) -> SportClient:
+        return get_sport_client()
+
+    def sample_state(self) -> RobotState:
+        """The utilities' own DDS read: wait up to STATE_WAIT_S for a message that arrived after this call; else
+        use the latest earlier one; else raise StateUnavailable. Skills read state through the robot service."""
+        min_seq = self._store.seq + 1
+        if self._subscriber is None:
+            self._subscriber = subscribe_state(self._store.put)
+        reading = self._store.read(min_seq, STATE_WAIT_S)
+        if reading is None:
+            raise StateUnavailable(f"no {SPORT_STATE_TOPIC} message within {STATE_WAIT_S:g}s")
+        return reading.state
+
+    def start_source(self) -> tuple[StateStore, object]:
+        """The service's store and its rt/sportmodestate subscriber (DDS init happens here)."""
+        store = StateStore(state_from_msg)
+        return store, subscribe_state(store.put)
+
+    def motion(self, store: StateStore) -> tuple[SportClient, Wait]:
+        """The service's SportClient, after the state subscription's DDS init; the motion clock is real time."""
+        return get_sport_client(), _wait
+
+    def sleep(self, seconds: float) -> None:
+        time.sleep(seconds)

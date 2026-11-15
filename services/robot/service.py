@@ -1,7 +1,7 @@
 """The robot service (services/robot/docs/service.md): a long-running process, the only long-lived DDS owner of
-the robot's sport state and motion. It keeps the latest rt/sportmodestate message (real) or the stub's state (sim),
-answers state reads and stream subscriptions on a Unix socket, and runs motion primitives for the armed step's lease
-through its one sport client (real: SportClient; sim: SimRobot), which also sends every stop.
+the robot's sport state and motion. It keeps the latest state message from its backend
+(services/robot/backends, loaded once), answers state reads and stream subscriptions on a Unix socket, and runs motion
+primitives for the armed step's lease through the backend's one sport client, which also sends every stop.
 
     python -m services.robot.service
 
@@ -22,18 +22,17 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from multiprocessing.connection import Listener
 from types import FrameType
-from typing import Any, NoReturn, Protocol, cast
+from typing import NoReturn, cast
 
 from contract import backend, process, wire
 from contract.env import ROBOT_SOCKET, robot_lock_path
 from contract.faults import ROBOT_FAULTS, STUB_ERR_INJECTED
-from contract.schema import RobotState
 from contract.stub import CONDITIONS, Condition
-from services.robot import faults, protocol
+from services.robot import backends, faults, protocol
+from services.robot.backends import SportClient, Wait
 from services.robot.backends import sim as sim_backend
 from services.robot.state_store import StateStore
 
-SIM_PERIOD_S = 0.02  # the sim publishes the stub state at 50 Hz, the rate assumed for the robot (tunable)
 LEASE_POLL_S = 0.02  # how often the lease deadline is checked (tunable)
 EOF_POLL_S = 0.02  # how often a skill connection is checked for EOF while its primitive runs (tunable)
 YAW_STOP_MARGIN_RAD = math.radians(
@@ -61,53 +60,7 @@ def acquire_lock(path: str) -> bool:
     return True
 
 
-# --- state sources ----------------------------------------------------------------
-
-
-def _same(state: RobotState) -> RobotState:
-    return state
-
-
-def _publish_sim(store: StateStore) -> None:
-    try:
-        store.put(sim_backend.sample_state())
-    except Exception:  # a bad state file or objects env: no message, as on a lost link
-        traceback.print_exc(file=sys.stderr)
-
-
-def _simulate(store: StateStore) -> None:
-    while True:
-        _publish_sim(store)
-        time.sleep(SIM_PERIOD_S)
-
-
-def start_source(name: str) -> tuple[StateStore, object]:
-    """The store fed by the backend's state messages, and what must stay referenced to keep them coming.
-    real: the rt/sportmodestate subscriber; sim (stub): a thread sampling the stub state every SIM_PERIOD_S."""
-    if name == "real":
-        from services.robot.backends import real
-
-        store = StateStore(real.state_from_msg)
-        return store, real.subscribe_state(store.put)
-    store = StateStore(_same)
-    thread = threading.Thread(target=_simulate, args=(store,), name="sim-state", daemon=True)
-    thread.start()
-    return store, thread
-
-
 # --- motion: one sport client, the lease and the motion loop -----------------------
-
-
-class SportClient(Protocol):
-    """The calls the service makes; each returns an int, 0 = success (services/robot/docs/robot.md)."""
-
-    def Move(self, vx: float, vy: float, vyaw: float) -> int: ...
-    def StopMove(self) -> int: ...
-    def StandDown(self) -> int: ...
-    def Stretch(self) -> int: ...
-
-
-Wait = Callable[[float, threading.Event], Any]  # the motion clock: wait seconds or until the event is set
 
 
 @dataclass
@@ -449,24 +402,11 @@ class Refusal(Exception):
         self.closes = code in protocol.CLOSING_ERRORS
 
 
-def start_motion(name: str, store: StateStore) -> Motion:
-    """The service's one sport client: real: SportClient (after the state subscription's DDS init); sim:
-    SimRobot over the stub state file, with the stub time scale, publishing a state after each motion step."""
-    if name == "real":
-        from services.robot.backends import real
-
-        def wait(seconds: float, abort: threading.Event) -> None:
-            abort.wait(seconds)
-
-        motion = Motion(real.get_sport_client(), wait, store, sim=False)
-    else:
-        sim = sim_backend.SimRobot()
-
-        def sim_wait(seconds: float, abort: threading.Event) -> None:
-            sim.wait(seconds, abort)
-            _publish_sim(store)  # the pose moved: a fresh message, as the robot sends several per tick
-
-        motion = Motion(sim, sim_wait, store, sim=True)
+def start_motion(robot: backends.RobotBackend, store: StateStore) -> Motion:
+    """The service's one sport client and motion clock, from the backend, in a started Motion."""
+    client, wait = robot.motion(store)
+    sim = isinstance(client, sim_backend.SimRobot)  # stub faults only (services/robot/docs/service.md#fault-injection)
+    motion = Motion(client, wait, store, sim=sim)
     motion.start()
     return motion
 
@@ -654,15 +594,15 @@ def main() -> None:
     if not path:
         _fail(f"{ROBOT_SOCKET} is not set", EXIT_CONFIG_ERROR)
     try:
-        name = backend.backend_name()
+        robot = backends.load()
     except backend.BackendNotConfigured as e:
         _fail(str(e), EXIT_CONFIG_ERROR)
     lock = robot_lock_path(path)
     if not acquire_lock(lock):
         _fail(f"another robot service holds {lock}", protocol.EXIT_LOCKED)
     try:
-        store, _source = start_source(name)
-        motion = start_motion(name, store)
+        store, _source = robot.start_source()
+        motion = start_motion(robot, store)
     except backend.BackendNotConfigured as e:
         _fail(str(e), EXIT_CONFIG_ERROR)
     process.start_orphan_watchdog(on_orphan=lambda: motion.halt("dispatcher gone"))
@@ -673,14 +613,14 @@ def main() -> None:
         with Listener(path, family=wire.FAMILY) as listener:  # closing it removes the socket file
             os.chmod(path, SOCKET_MODE)
             process.write_raw_stdout(protocol.READY_LINE + "\n")
-            print(f"robot service: {name} ready on {path}", file=sys.stderr, flush=True)
+            print(f"robot service: {robot.name} ready on {path}", file=sys.stderr, flush=True)
             while True:
                 try:
                     conn = listener.accept()
                 except OSError:
                     traceback.print_exc(file=sys.stderr)
                     continue
-                args = (conn, store, name, motion)
+                args = (conn, store, robot.name, motion)
                 threading.Thread(target=serve, args=args, name="robot-conn", daemon=True).start()
     finally:
         motion.shutdown()

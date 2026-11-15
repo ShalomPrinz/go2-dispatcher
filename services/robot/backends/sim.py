@@ -1,11 +1,14 @@
 """The sim backend (services/robot/docs/service.md): the simulated sport client (SimRobot, run by the robot service
-and the stop_move utility) over the stub state file, its odometry, obstacle distances and state sample."""
+and the stop_move utility) over the stub state file, its odometry, obstacle distances, state sample and state
+source, and SimBackend, the stub's RobotBackend."""
 
 from __future__ import annotations
 
 import math
+import sys
 import threading
 import time
+import traceback
 from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
@@ -22,8 +25,11 @@ from services.backend.stub_state import (
     write_state,
 )
 from services.robot import ramp
+from services.robot.backends import SportClient, Wait
+from services.robot.state_store import StateStore
 
 STUB_ERR_NOT_STANDING = 1
+SIM_PERIOD_S = 0.02  # the sim publishes the stub state at 50 Hz, the rate assumed for the robot (tunable)
 
 STAND_DOWN_S = 1.5
 STRETCH_S = 3.0
@@ -208,3 +214,64 @@ def sample_state() -> RobotState:
         error_code=ERROR_CODE,
         obstacle_m=obstacle_distances(pose, objects()),
     )
+
+
+# --- the backend -------------------------------------------------------------------
+
+
+def _same(state: RobotState) -> RobotState:
+    return state
+
+
+def _publish(store: StateStore) -> None:
+    try:
+        store.put(sample_state())
+    except Exception:  # a bad state file or objects env: no message, as on a lost link
+        traceback.print_exc(file=sys.stderr)
+
+
+def _simulate(store: StateStore) -> None:
+    while True:
+        _publish(store)
+        time.sleep(SIM_PERIOD_S)
+
+
+class SimBackend:
+    """The stub: SimRobot over the stub state file, with the stub time scale; no DDS."""
+
+    name = "stub"
+
+    def __init__(self) -> None:
+        self._dds_init = False  # the stub has no DDS; an init is recorded so dds_init_ms is reported as on the robot
+
+    def init_dds(self) -> None:
+        self._dds_init = True
+
+    def setup_timing(self) -> dict[str, float]:
+        return {"dds_init_ms": 0.0} if self._dds_init else {}
+
+    def sport_client(self) -> SportClient:
+        return SimRobot()
+
+    def sample_state(self) -> RobotState:
+        return sample_state()
+
+    def start_source(self) -> tuple[StateStore, object]:
+        """The service's store, fed by a thread sampling the stub state every SIM_PERIOD_S."""
+        store = StateStore(_same)
+        thread = threading.Thread(target=_simulate, args=(store,), name="sim-state", daemon=True)
+        thread.start()
+        return store, thread
+
+    def motion(self, store: StateStore) -> tuple[SportClient, Wait]:
+        """The service's SimRobot; its motion clock publishes a state after each motion step."""
+        sim = SimRobot()
+
+        def wait(seconds: float, abort: threading.Event) -> None:
+            sim.wait(seconds, abort)
+            _publish(store)  # the pose moved: a fresh message, as the robot sends several per tick
+
+        return sim, wait
+
+    def sleep(self, seconds: float) -> None:
+        stub_sleep(seconds)

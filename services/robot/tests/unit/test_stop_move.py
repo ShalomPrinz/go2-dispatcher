@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import sys
+from types import SimpleNamespace
 
 import pytest
 
-from contract import backend, process, runtime
-from services.robot import local, stop_move
+from contract import process, runtime
+from services.robot import backends, stop_move
 from services.robot.protocol import StateUnavailable
 from services.robot.tests.fake_sport import FakeClient
 
@@ -26,12 +27,15 @@ def run_stop_move(monkeypatch):
                 raise state
             return state or {"posture": "standing"}
 
+        robot = SimpleNamespace(
+            init_dds=lambda: None,
+            setup_timing=lambda: {"dds_init_ms": 1.0},
+            sport_client=lambda: client,
+            sample_state=sample,
+            sleep=lambda s: None,
+        )
         monkeypatch.setenv("GO2_BACKEND", "stub")
-        monkeypatch.setattr(backend, "sleep", lambda s: None)
-        monkeypatch.setattr(local, "init_dds", lambda: None)
-        monkeypatch.setattr(local, "sport_client", lambda: client)
-        monkeypatch.setattr(local, "sample_state", sample)
-        monkeypatch.setattr(local, "setup_timing", lambda: {"dds_init_ms": 1.0})
+        monkeypatch.setattr(backends, "load", lambda: robot)
         monkeypatch.setattr(process, "capture_stdout", lambda: None)
         monkeypatch.setattr(sys, "argv", ["stop_move", *argv])
         emitted = []

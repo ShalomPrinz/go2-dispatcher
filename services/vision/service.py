@@ -31,15 +31,21 @@ class Detector(Protocol):
     def detect(self, target: str) -> DetectResult: ...
 
 
-def make_detector() -> Detector:
-    """The configured backend's detector; raises BackendNotConfigured."""
-    if backend.backend_name() == "real":
-        from services.vision.detectors.real import RealDetector
+def _real() -> Detector:
+    from services.vision.detectors.real import RealDetector
 
-        return RealDetector()
+    return RealDetector()
+
+
+def _stub() -> Detector:
     from services.vision.detectors.stub import StubDetector
 
     return StubDetector()
+
+
+def make_detector() -> Detector:
+    """The configured backend's detector; raises BackendNotConfigured."""
+    return backend.select({"real": _real, "stub": _stub})()
 
 
 def handle(conn: wire.Conn, detector: Detector) -> None:

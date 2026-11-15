@@ -14,3 +14,14 @@ def test_backend_not_configured(monkeypatch, value):
         monkeypatch.setenv(env.BACKEND, value)
     with pytest.raises(backend.BackendNotConfigured):
         backend.backend_name()
+    with pytest.raises(backend.BackendNotConfigured):
+        backend.check()
+    with pytest.raises(backend.BackendNotConfigured):
+        backend.select({"real": 1, "stub": 2})
+
+
+def test_select(monkeypatch):
+    monkeypatch.setenv(env.BACKEND, "stub")
+    assert backend.select({"real": 1, "stub": 2}) == 2
+    with pytest.raises(backend.BackendNotConfigured, match="'stub' is not one of real"):
+        backend.select({"real": 1})
