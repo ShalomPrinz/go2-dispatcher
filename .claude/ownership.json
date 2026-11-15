@@ -10,5 +10,5 @@
     "reviewer": []
   },
   "packages": ["dispatcher/", "skills/", "contract/", "services/robot/", "services/vision/", "services/backend/"],
-  "main": ["docs/README.md", "docs/project.md", "docs/architecture.md", "docs/references.md", "services/__init__.py", "services/CLAUDE.md"]
+  "main": ["CLAUDE.md", "docs/README.md", "docs/project.md", "docs/architecture.md", "docs/references.md", "services/__init__.py", "services/CLAUDE.md"]
 }

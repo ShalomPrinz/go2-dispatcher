@@ -39,7 +39,7 @@ Package commands (golden files, fault injection, opt-in tests) live in the folde
 - The stub is the default backend. Development, tests and demos use the stub.
 - Agents never use `--backend real` or set `robot.backend = "real"`, and never run `--run-robot` tests; those are supervised human checks. `--run-live` and `go2 run` call the paid API: only when a brief asks.
 - No secrets in code, config files under version control, or logs. The API key and Telegram token live only in `.env` ([docs/configuration.md](docs/configuration.md)).
-- Fixed texts in `prompts.py` and `SKILL.md` files change the golden files, and the system text and `SKILL.md` files also change the registry hash; changing them makes runs incomparable ([skills/docs/skills.md](skills/docs/skills.md)).
+- Fixed texts in `dispatcher/prompts.py`, `dispatcher/operator_messages.py`, `dispatcher/transports/texts.py` and `SKILL.md` files change the golden files, and the system text and `SKILL.md` files also change the registry hash; changing them makes runs incomparable ([skills/docs/skills.md](skills/docs/skills.md)).
 
 ## Engineering rules
 
@@ -51,11 +51,11 @@ Package commands (golden files, fault injection, opt-in tests) live in the folde
 
 ## Working pattern
 
-- The main session is an **orchestrator**: it always delegates code and doc changes to a project agent (`.claude/agents/`), one task at a time, with a self-contained brief written with the `delegate` skill (`.claude/skills/delegate/`). It does not edit a package (`contract/`, `dispatcher/`, `services/`, `skills/`) itself. Exception: the files under `main` in [.claude/ownership.json](.claude/ownership.json) belong to the main session, which edits them itself (shared docs and the `services/` root files); the map assigns every other path.
+- The main session is an **orchestrator**: it always delegates code and doc changes to a project agent (`.claude/agents/`), one task at a time, with a self-contained brief written with the `delegate` skill (`.claude/skills/delegate/`). It does not edit a package (`contract/`, `dispatcher/`, `services/`, `skills/`) itself. Exception: the files under `main` in [.claude/ownership.json](.claude/ownership.json) belong to the main session, which edits them itself (this file, shared docs and the `services/` root files); the map assigns every other path.
   - `dispatcher-dev`: anything under `dispatcher/` or owned by `dispatcher/docs/`.
   - `contract-dev`: anything under `contract/` or owned by `contract/docs/`.
-  - `robot-dev`: anything under `robot/` or owned by `services/robot/docs/`.
-  - `vision-dev`: anything under `vision/` or owned by `services/vision/docs/`.
+  - `robot-dev`: anything under `services/robot/` or `services/backend/`, or owned by `services/robot/docs/` or `services/backend/docs/`.
+  - `vision-dev`: anything under `services/vision/` or owned by `services/vision/docs/`.
   - `skills-dev`: anything under `skills/` or owned by `skills/docs/`.
   - `tests-dev`: test infrastructure only (pytest plugin, helpers, markers, golden mechanism, coverage, CI) and `tests/docs/testing.md`. Tests of package behaviour go with the package agent.
   - `claude-config-dev`: anything under `.claude/` (agents, skills, hooks, settings). `CLAUDE.md` files go with the agent that owns the folder.
