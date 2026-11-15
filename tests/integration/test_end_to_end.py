@@ -13,9 +13,10 @@ from pathlib import Path
 import pytest
 
 from dispatcher import prompts
+from dispatcher.app import build_executor
 from dispatcher.context import build_prompt_surface
 from dispatcher.dispatcher import Dispatcher
-from dispatcher.execution import Executor, build_executor, stop_path
+from dispatcher.execution import Executor, stop_path
 from dispatcher.execution.process import UtilityRun
 from dispatcher.planning.plan import Plan, PlanStep
 from dispatcher.registry import Registry

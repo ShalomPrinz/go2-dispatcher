@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from dispatcher.execution import build_executor
+from dispatcher.app import build_executor
 from dispatcher.execution.env import ChildEnv
 from dispatcher.execution.state_stream import STREAM_PERIOD_S
 from dispatcher.models import RobotServiceError

@@ -12,9 +12,11 @@ import time
 
 import pytest
 
+from dispatcher import app
+from dispatcher.app import build_executor
 from dispatcher.context import build_prompt_surface
 from dispatcher.dispatcher import Dispatcher
-from dispatcher.execution import build_executor, stop_path
+from dispatcher.execution import stop_path
 from dispatcher.execution.process import UtilityRun
 from dispatcher.models import StopCause
 from dispatcher.registry import Registry
@@ -176,7 +178,7 @@ def test_batch_stops_after_a_task_whose_stop_failed(tmp_path, monkeypatch, capsy
     registry = Registry.load(BUILTIN_SKILLS_DIR)
     planner = ScriptedPlanner([PLAN_TURN, DONE, PLAN_TURN], build_prompt_surface(registry, cfg.loop.planning_horizon))
     dispatcher = Dispatcher(cfg, registry, planner, FakeExecutor([exec_result(skill="turn"), failed]))
-    monkeypatch.setattr(cli_module, "build_dispatcher", lambda *_args, **_kwargs: dispatcher)
+    monkeypatch.setattr(app, "build_dispatcher", lambda *_args, **_kwargs: dispatcher)
     monkeypatch.setattr(cli_module._Runner, "install", lambda _self: None)  # no process-wide signal or atexit hooks
     assert cli_module.cmd_batch(cfg, tasks) == 1
     assert dispatcher.previous is not None and dispatcher.previous.outcome == outcome
@@ -208,7 +210,7 @@ def test_batch_stops_after_a_failed_service_stop_ending_a_walk(tmp_path, monkeyp
     script = [DONE, {"status": "PLAN", "steps": [walk, TURN]}]  # no further call after the failed stop
     planner = ScriptedPlanner(script, build_prompt_surface(registry, cfg.loop.planning_horizon))
     dispatcher = Dispatcher(cfg, registry, planner, build_executor(cfg))
-    monkeypatch.setattr(cli_module, "build_dispatcher", lambda *_args, **_kwargs: dispatcher)
+    monkeypatch.setattr(app, "build_dispatcher", lambda *_args, **_kwargs: dispatcher)
     monkeypatch.setattr(cli_module._Runner, "install", lambda _self: None)  # no process-wide signal or atexit hooks
     try:
         assert cli_module.cmd_batch(cfg, tasks) == 1

@@ -11,7 +11,8 @@ import time
 import pytest
 
 from contract.env import vision_socket_path
-from dispatcher.execution import build_executor, process, read_state_utility
+from dispatcher.app import build_executor, read_robot_state
+from dispatcher.execution import process
 from dispatcher.registry import Registry, SkillDescriptor
 from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR, make_config
 from services.backend import stub_state
@@ -239,12 +240,12 @@ def test_child_env_has_no_secrets(executor, monkeypatch):
         assert k in keys
 
 
-def test_read_state_utility(cfg):
+def test_read_robot_state(cfg):
     stub_state.write_posture("sitting", cfg.stub.state_file)
-    state = read_state_utility(cfg)
+    state = read_robot_state(cfg)
     assert state is not None and state.backend == "stub" and state.posture == "sitting"
     stub_state.write_posture("standing", cfg.stub.state_file)
-    state = read_state_utility(cfg)
+    state = read_robot_state(cfg)
     assert state is not None and state.posture == "standing"
 
 

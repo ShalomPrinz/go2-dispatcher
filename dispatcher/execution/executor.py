@@ -1,5 +1,5 @@
 """The executor: runs one step as a skill process under a robot service lease and watches it until it exits
-(docs/safety.md, dispatcher/docs/execution.md). It receives its parts; ``build_executor`` wires them."""
+(docs/safety.md, dispatcher/docs/execution.md). It receives its parts; ``dispatcher.app`` wires them."""
 
 from __future__ import annotations
 

@@ -36,6 +36,7 @@ An operator sends a natural-language task over Telegram or the CLI. The LLM retu
 
 | Component | Code | Owner doc |
 |---|---|---|
+| Composition root: builds and wires the dispatcher, planner, executor and services | `dispatcher/app.py` | [running.md](running.md#design-decisions) |
 | Transports: CLI (`go2`) and Telegram (`go2 bot`), both over the same dispatcher | `dispatcher/transports/` | [running.md](running.md) |
 | Dispatcher loop, busy-reject, stop, shutdown | `dispatcher.py` | [loop-and-context.md](../dispatcher/docs/loop-and-context.md), [safety.md](safety.md) |
 | Context assembly and the fixed texts the LLM and operator read | `context.py`, `prompts.py` (model texts), `operator_messages.py` (operator texts), `transports/texts.py` (transport replies) | [loop-and-context.md](../dispatcher/docs/loop-and-context.md) |
@@ -127,8 +128,10 @@ go2-dispatcher/
 ├── dispatcher/                 # dispatcher package; never imports the SDK
 │   ├── planning/               # plan model, submit_plan tool schema, validation, bounds, motion budget, verification
 │   ├── llm/                    # planner protocol, prompt surface, retry loop, one module per provider
-│   ├── transports/             # build_dispatcher, CLI, Telegram, transport texts
-│   ├── docs/                   # loop-and-context.md, llm.md, run-log.md
+│   ├── execution/              # child env, skill process, kill switch, control link, stop path, service supervisors, executor
+│   ├── app.py                  # composition root: builds and wires everything
+│   ├── transports/             # CLI, Telegram, transport texts
+│   ├── docs/                   # loop-and-context.md, llm.md, execution.md, run-log.md
 │   └── tests/                  # unit/, helpers/, golden/: dispatcher unit tests (excluded from the wheel)
 ├── services/                   # the two services the dispatcher supervises
 │   ├── backend/                # shared by both services: stub state file, DDS init

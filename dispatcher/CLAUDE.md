@@ -1,6 +1,6 @@
 # dispatcher/CLAUDE.md
 
-The `dispatcher` package: the loop, the executor and its services (`execution/`), the plan contract (`planning/`: plan model, tool schema, validation, bounds, budget, verification), context and prompts, the LLM layer (`llm/`: planner protocol, retries, one module per provider, `PromptSurface`), the run log, config and the CLI and Telegram transports. Repo-wide rules are in the root [CLAUDE.md](../CLAUDE.md).
+The `dispatcher` package: the loop, the executor and its services (`execution/`), the plan contract (`planning/`: plan model, tool schema, validation, bounds, budget, verification), context and prompts, the LLM layer (`llm/`: planner protocol, retries, one module per provider, `PromptSurface`), the run log, config, the composition root (`app.py`, which builds and wires everything) and the CLI and Telegram transports. Repo-wide rules are in the root [CLAUDE.md](../CLAUDE.md).
 
 ## Commands
 

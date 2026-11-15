@@ -25,12 +25,11 @@ from telegram.ext import (
     filters,
 )
 
-from services.robot import protocol
-
-from ..config import TOKEN_ENV, Config
+from ..app import STOP_MOVE_TIMEOUT_S, build_dispatcher
+from ..config import TOKEN_ENV, Config, load_config_and_env
 from ..dispatcher import Dispatcher
 from ..models import BusyError, StartupError
-from . import build_dispatcher, load_config_and_env, startup_error_text, texts
+from . import startup_error_text, texts
 from .telegram_progress import Edit, TelegramProgress
 from .telegram_text import format_outcome, h
 
@@ -178,7 +177,7 @@ async def on_post_init(app: Application) -> None:
 async def on_post_stop(app: Application) -> None:
     """Backstop (docs/running.md): waits for / force-ends a task still running."""
     dispatcher: Dispatcher = app.bot_data["dispatcher"]
-    await asyncio.to_thread(dispatcher.shutdown, protocol.STOP_MOVE.policy.timeout_s({}) + SHUTDOWN_EXTRA_S)
+    await asyncio.to_thread(dispatcher.shutdown, STOP_MOVE_TIMEOUT_S + SHUTDOWN_EXTRA_S)
 
 
 def build_application(

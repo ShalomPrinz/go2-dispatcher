@@ -139,6 +139,17 @@ forbidden_modules = ["services.backend"]
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
+name = "Only the composition root, execution and the registry import the services"
+type = "forbidden"                      # every other dispatcher module gets robot and vision through dispatcher.app (dispatcher/docs)
+source_modules = [
+  "dispatcher.dispatcher", "dispatcher.planning", "dispatcher.llm", "dispatcher.context", "dispatcher.runlog",
+  "dispatcher.transports", "dispatcher.config", "dispatcher.models", "dispatcher.prompts",
+  "dispatcher.operator_messages", "dispatcher.process_lock", "dispatcher.report",
+]
+forbidden_modules = ["services"]
+allow_indirect_imports = true           # the transports reach services through dispatcher.app -> dispatcher.execution; direct imports are the rule
+
+[[tool.importlinter.contracts]]
 name = "Planning and llm are independent of each other"
 type = "independence"                   # directly or through any chain; a plan never depends on a provider, a provider never on the plan
 modules = ["dispatcher.planning", "dispatcher.llm"]

@@ -7,9 +7,9 @@ import os
 
 import pytest
 
+from dispatcher.app import build_executor
 from dispatcher.context import build_prompt_surface
 from dispatcher.dispatcher import Dispatcher
-from dispatcher.execution import build_executor
 from dispatcher.llm.anthropic_planner import AnthropicPlanner
 from dispatcher.registry import Registry
 from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR, make_config
@@ -28,13 +28,7 @@ def test_live_turn_and_find_chair(tmp_path):
     stub_state.reset(cfg.stub.initial_posture, cfg.stub.state_file)
     registry = Registry.load(BUILTIN_SKILLS_DIR)
     surface = build_prompt_surface(registry, cfg.loop.planning_horizon)
-    d = Dispatcher(
-        cfg,
-        registry,
-        AnthropicPlanner(key, cfg.llm, surface),
-        build_executor(cfg),
-        initial_posture=cfg.stub.initial_posture,
-    )
+    d = Dispatcher(cfg, registry, AnthropicPlanner(key, cfg.llm, surface), build_executor(cfg))
     try:
         o = d.run_task(TASK, source="test")
     finally:

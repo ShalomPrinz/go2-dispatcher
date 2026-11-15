@@ -1,20 +1,17 @@
-"""Transport start-up shared by the CLI and Telegram: planner choice and start-up errors (docs/running.md)."""
+"""Start-up shared by the CLI and Telegram: the composition root's planner choice and the entry points'
+start-up errors (docs/running.md)."""
 
 from __future__ import annotations
 
 import pytest
 
+from dispatcher.app import MISSING_API_KEY, TEST_PLANNER_ENV, make_planner
+from dispatcher.config import API_KEY_ENV
 from dispatcher.context import build_prompt_surface
 from dispatcher.models import StartupError
 from dispatcher.registry import Registry
 from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR, make_config
-from dispatcher.transports import (
-    API_KEY_ENV,
-    MISSING_API_KEY,
-    TEST_PLANNER_ENV,
-    cli,
-    make_planner,
-)
+from dispatcher.transports import cli
 
 
 @pytest.fixture(scope="module")

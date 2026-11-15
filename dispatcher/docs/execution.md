@@ -15,7 +15,7 @@ Each part has one job and is tested without the others.
 | `StopPath` | `stop_path.py` | Every stop the executor sends, each returning one `StopMoveResult` and never raising: `stop(reason, kill)`, `after_kill(kill, lost)`, `disarm()`, `lost(service_error, t0, kill)`, `fallback(...)`. |
 | `step_outcome` | `outcome.py` | A started step's `StepVerdict` (outcome, interrupt cause, error code and message) from its kill cause, the service loss and the skill's reply. |
 | `Executor` | `executor.py` | Receives the parts and runs one step: arm, spawn, watch, stop or disarm, outcome. Also the `SkillExecutor` methods the loop calls (`kill_current`, `stop_move`, `fresh_state`, `state_stream`, `close`). |
-| `build_executor(cfg, cwd)` | `__init__.py` | Wires the parts; `cwd` defaults to `cfg.base_dir`. `read_state_utility(cfg)` serves `go2 state`. |
+| `build_executor(cfg, cwd)` | `dispatcher/app.py` | Wires the parts; `cwd` defaults to `cfg.base_dir`. The composition root ([running.md](../../docs/running.md#design-decisions)) also holds `read_robot_state(cfg)` (the `read_state` utility) for `go2 state`. |
 
 `SkillExecutor` and `StreamHandle` (the protocols the loop and its fakes use) are in `dispatcher/execution/__init__.py`. The supervisors (`supervisor.py`, `robot_service.py`, `vision_service.py`) and the state stream (`state_stream.py`) are in the same package ([running.md](../../docs/running.md#design-decisions)).
 

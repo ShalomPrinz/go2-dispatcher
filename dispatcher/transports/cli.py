@@ -13,15 +13,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from services.robot.stub import reset_stub
-
-from .. import process_lock, report
-from ..context import build_prompt_surface
+from .. import app, report
+from ..config import load_config_and_env
 from ..dispatcher import Dispatcher
-from ..execution import read_state_utility
 from ..models import ConfigError, StartupError, TaskOutcome
-from ..registry import Registry
-from . import build_dispatcher, load_config_and_env, startup_error_text, texts
+from . import startup_error_text, texts
 from .console_trace import ConsoleTrace
 
 SOURCE = "cli"
@@ -114,8 +110,7 @@ def _overrides(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def cmd_catalog(cfg) -> int:
-    registry = Registry.load(cfg.skills.dir)
-    surface = build_prompt_surface(registry, cfg.loop.planning_horizon)
+    surface = app.load_prompt_surface(cfg)
     print(surface.system[0])
     print()
     print(surface.system[1])
@@ -128,7 +123,7 @@ def cmd_catalog(cfg) -> int:
 
 
 def cmd_state(cfg) -> int:
-    state = read_state_utility(cfg)
+    state = app.read_robot_state(cfg)
     if state is None:
         print("Robot state unavailable.", file=sys.stderr)
         return EXIT_FAIL
@@ -140,8 +135,7 @@ def cmd_reset_stub(cfg) -> int:
     if cfg.robot.backend != "stub":
         print('--reset-stub needs robot.backend = "stub".', file=sys.stderr)
         return EXIT_USAGE
-    process_lock.acquire(cfg.log.dir)
-    reset_stub(cfg.stub.initial_posture, cfg.stub.state_file)
+    app.reset_stub(cfg)
     print(f"Stub reset: {cfg.stub.initial_posture} ({cfg.stub.state_file}).")
     return EXIT_OK
 
@@ -212,7 +206,7 @@ def cmd_run(cfg, task: str) -> int:
     if not task.strip():
         print(texts.EMPTY_TASK, file=sys.stderr)
         return EXIT_USAGE
-    d = build_dispatcher(cfg, reset_stub=True, observer=ConsoleTrace)
+    d = app.build_dispatcher(cfg, reset_stub=True, observer=ConsoleTrace)
     runner = _Runner(d)
     runner.install()
     outcome = runner.run(task)  # the ConsoleTrace is the only output (docs/running.md)
@@ -240,7 +234,7 @@ def cmd_batch(cfg, tasks_file: Path) -> int:
     except OSError as e:
         print(f"Cannot read {tasks_file}: {e}", file=sys.stderr)
         return EXIT_USAGE
-    d = build_dispatcher(cfg, reset_stub=True, observer=ConsoleTrace)
+    d = app.build_dispatcher(cfg, reset_stub=True, observer=ConsoleTrace)
     runner = _Runner(d)
     runner.install()
     for i, task in enumerate(tasks, 1):
