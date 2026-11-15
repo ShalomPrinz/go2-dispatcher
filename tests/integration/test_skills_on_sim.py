@@ -8,7 +8,8 @@ import threading
 import pytest
 
 from contract.env import STUB_FAULT, STUB_STATE_FILE, STUB_TIME_SCALE
-from services.robot import protocol, service, stub_state
+from services.backend import stub_state
+from services.robot import protocol, service
 from services.robot.backends import sim as sim_backend
 from services.robot.protocol import MoveTarget
 from services.robot.state_store import StateStore

@@ -7,7 +7,7 @@ import math
 
 from contract.backend import stub_sleep
 from contract.stub import WorldObject, objects
-from services.robot.stub_state import Pose, read_state
+from services.backend.stub_state import Pose, read_state
 from services.vision import boxes
 from services.vision.protocol import DetectResult
 

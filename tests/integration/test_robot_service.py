@@ -17,7 +17,8 @@ from pydantic import TypeAdapter
 
 from contract import faults
 from contract.schema import SkillResponse
-from services.robot import protocol, stub_state
+from services.backend import stub_state
+from services.robot import protocol
 from services.robot.backends import sim
 from tests.helpers import REPO_ROOT
 from tests.integration import robot

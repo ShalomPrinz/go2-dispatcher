@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from services.robot import stub_state
+from services.robot.stub import reset_stub
 
 from .. import process_lock, prompts, report
 from ..context import PromptSurface
@@ -141,7 +141,7 @@ def cmd_reset_stub(cfg) -> int:
         print('--reset-stub needs robot.backend = "stub".', file=sys.stderr)
         return EXIT_USAGE
     process_lock.acquire(cfg.log.dir)
-    stub_state.reset(cfg.stub.initial_posture, cfg.stub.state_file)
+    reset_stub(cfg.stub.initial_posture, cfg.stub.state_file)
     print(f"Stub reset: {cfg.stub.initial_posture} ({cfg.stub.state_file}).")
     return EXIT_OK
 

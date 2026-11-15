@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 
 from contract.env import YOLO_WEIGHTS
-from services.robot.backends import real
+from services.backend import dds
 from services.vision import boxes
 from services.vision.protocol import BadFrame, CameraUnavailable, DetectResult, WeightsMissing
 
@@ -39,7 +39,7 @@ class RealDetector:
 
     def _video_client(self):
         if self._video is None:
-            real.init_dds()
+            dds.init_dds()
             from unitree_sdk2py.go2.video.video_client import VideoClient
 
             client = VideoClient()

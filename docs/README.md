@@ -8,7 +8,7 @@ New to the project? Read [project](project.md), then [architecture](architecture
 
 Each document owns one topic. Other documents link to the owner instead of repeating it.
 
-Docs live in nine folders: shared documents that cover the whole system in `docs/` (this folder), contract documents in `contract/docs/`, dispatcher documents in `dispatcher/docs/`, robot documents in `services/robot/docs/`, vision documents in `services/vision/docs/`, skill documents in `skills/docs/`, the test-infrastructure document in `tests/docs/`, the Claude Code hooks document in `.claude/hooks/`, and the Claude Code scripts document in `.claude/scripts/`.
+Docs live in ten folders: shared documents that cover the whole system in `docs/` (this folder), contract documents in `contract/docs/`, dispatcher documents in `dispatcher/docs/`, the shared backend document in `services/backend/docs/`, robot documents in `services/robot/docs/`, vision documents in `services/vision/docs/`, skill documents in `skills/docs/`, the test-infrastructure document in `tests/docs/`, the Claude Code hooks document in `.claude/hooks/`, and the Claude Code scripts document in `.claude/scripts/`.
 
 ### Shared (`docs/`)
 
@@ -43,13 +43,21 @@ The `dispatcher` package: the loop, the LLM layer and the run log.
 | [llm.md](../dispatcher/docs/llm.md) | The LLM layer: provider and model choice, Sonnet 5.5 parameter constraints and the request we send (auto tool choice, non-strict tools, minimal thinking via `between_tools`, no temperature, `max_tokens`), schema retry, horizon rejection (not truncation) and its monitoring rule, infrastructure retries, live-API verification status. |
 | [run-log.md](../dispatcher/docs/run-log.md) | The run log as the study dataset: files, envelope, every record type, `index.jsonl`, and how to compute each study metric from the log. |
 
+### Shared backend (`services/backend/docs/`)
+
+The `services.backend` package: what both services share about the backend they run on.
+
+| Document | Owns |
+|---|---|
+| [backend.md](../services/backend/docs/backend.md) | The shared backend package: the stub state file (the simulated world both services read) and the one DDS init per process. |
+
 ### Robot (`services/robot/docs/`)
 
 The `services.robot` package: the robot service, its protocol and client, the real and sim backends, and the utilities.
 
 | Document | Owns |
 |---|---|
-| [service.md](../services/robot/docs/service.md) | The robot package: its client surface, the robot service and its lease, the stub backend (sim robot and stub state file) and fault injection. |
+| [service.md](../services/robot/docs/service.md) | The robot package: its client surface, the robot service and its lease, the stub backend (sim robot) and fault injection. |
 | [robot.md](../services/robot/docs/robot.md) | The Go2 EDU side: robot facts, SDK and DDS usage, state sampling and the posture rule, the real backend, settle waits, robot-side open questions (odometry, `stand` skill, `Move` while sitting), and the supervised robot checklist with its recorded results. |
 
 ### Vision (`services/vision/docs/`)
@@ -98,4 +106,4 @@ The repository root also has a short [README](../README.md) (one paragraph, quic
 - **Keep only knowledge worth maintaining.** No process history (task numbers, commit lists, review rounds), no drafting artefacts.
 - **No personal contact details** (emails, phone numbers). Names and roles only.
 - Plain, concise, technical Markdown.
-- **Folder `CLAUDE.md` files** (`contract/`, `dispatcher/`, `services/`, `services/robot/`, `services/vision/`, `skills/`, `tests/`) are the agent entry point for that folder: commands, a Doc | Covers table and gotchas, linking here for everything else. They do not own topics; a rule that explains behaviour belongs in the owning document.
+- **Folder `CLAUDE.md` files** (`contract/`, `dispatcher/`, `services/`, `services/backend/`, `services/robot/`, `services/vision/`, `skills/`, `tests/`) are the agent entry point for that folder: commands, a Doc | Covers table and gotchas, linking here for everything else. They do not own topics; a rule that explains behaviour belongs in the owning document.

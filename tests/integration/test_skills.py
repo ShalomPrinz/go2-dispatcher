@@ -14,7 +14,7 @@ from pydantic import TypeAdapter
 
 from contract import faults
 from contract.schema import SkillResponse
-from services.robot import stub_state
+from services.backend import stub_state
 from services.robot.backends import sim
 from services.robot.faults import GARBAGE_TEXT
 from tests.helpers import REPO_ROOT
@@ -108,7 +108,7 @@ def modules(package):
     return found
 
 # contract.manifest is the dispatcher-only SKILL.md parser; no skill process loads it
-packages = ("skills", "services.robot", "services.vision", "contract")
+packages = ("skills", "services.robot", "services.vision", "services.backend", "contract")
 names = sorted(n for p in packages for n in modules(p) if n != "contract.manifest")
 buf = io.StringIO()
 with contextlib.redirect_stdout(buf):
@@ -147,10 +147,13 @@ print(json.dumps({"modules": names, "heavy": heavy, "out": buf.getvalue(),
         "services.robot.protocol",
         "services.robot.ramp",
         "services.robot.state_store",
-        "services.robot.stub_state",
         "services.vision.client",
         "services.vision.coco",
         "services.vision.protocol",
+        # the shared backend package, the dispatcher's stub control
+        "services.backend.dds",
+        "services.backend.stub_state",
+        "services.robot.stub",
         # the services, backends, detectors and utilities import their heavy modules lazily
         "services.robot.backends.real",
         "services.robot.backends.sim",

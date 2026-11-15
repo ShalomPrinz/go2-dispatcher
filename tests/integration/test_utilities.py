@@ -7,7 +7,7 @@ import pytest
 from pydantic import TypeAdapter
 
 from contract.schema import SkillResponse
-from services.robot import stub_state
+from services.backend import stub_state
 from services.robot.backends import sim
 from tests.integration.skill_process import run_utility, single_response, stub_env
 

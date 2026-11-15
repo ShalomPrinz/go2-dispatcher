@@ -8,6 +8,7 @@ from typing import Any
 
 from contract import backend
 from contract.schema import RobotState
+from services.backend import dds
 from services.robot.backends import sim
 
 _stub_dds_init = False  # the stub has no DDS; an init is recorded so dds_init_ms is reported as on the robot
@@ -17,9 +18,7 @@ def init_dds() -> None:
     """DDS init once per process; its time is reported as dds_init_ms. Raises BackendNotConfigured."""
     global _stub_dds_init
     if backend.backend_name() == "real":
-        from services.robot.backends import real
-
-        real.init_dds()
+        dds.init_dds()
     else:
         _stub_dds_init = True
 
@@ -31,9 +30,7 @@ def setup_timing() -> dict[str, float]:
     except backend.BackendNotConfigured:
         return {}
     if name == "real":
-        from services.robot.backends import real
-
-        ms = real.dds_init_ms()
+        ms = dds.dds_init_ms()
     else:
         ms = 0.0 if _stub_dds_init else None
     return {} if ms is None else {"dds_init_ms": ms}

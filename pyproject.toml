@@ -38,10 +38,10 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["dispatcher", "skills", "contract", "services"]
-exclude = ["dispatcher/docs", "dispatcher/tests", "skills/docs", "skills/tests", "skills/catalog", "contract/docs", "contract/tests", "services/robot/docs", "services/robot/tests", "services/vision/docs", "services/vision/tests"]
+exclude = ["dispatcher/docs", "dispatcher/tests", "skills/docs", "skills/tests", "skills/catalog", "contract/docs", "contract/tests", "services/robot/docs", "services/robot/tests", "services/vision/docs", "services/vision/tests", "services/backend/docs", "services/backend/tests"]
 
 [tool.pytest.ini_options]
-testpaths = ["dispatcher/tests", "skills/tests", "contract/tests", "services/robot/tests", "services/vision/tests", "tests", ".claude/hooks/tests", ".claude/scripts/tests"]
+testpaths = ["dispatcher/tests", "skills/tests", "contract/tests", "services/robot/tests", "services/vision/tests", "services/backend/tests", "tests", ".claude/hooks/tests", ".claude/scripts/tests"]
 addopts = "-p tests.pytest_plugin"   # options and marker gating (tests/docs/testing.md)
 timeout = 30
 markers = [
@@ -72,6 +72,7 @@ forbidden_modules = [
   "unitree_sdk2py", "cyclonedds", "torch", "ultralytics", "cv2",
   "services.robot.service", "services.robot.backends", "services.robot.local", "services.robot.lease", "services.robot.stop_move", "services.robot.read_state",
   "services.vision.service", "services.vision.detectors", "services.vision.boxes",
+  "services.robot.stub", "services.backend",   # the stub world stays off a skill process's import graph
 ]
 ignore_imports = [
   "contract.manifest -> pydantic",   # skills.tests may import the parser; skill code may not (protected below)
@@ -82,11 +83,12 @@ ignore_imports = [
 name = "The robot and vision services are independent of each other"
 type = "independence"
 modules = ["services.robot", "services.vision"]
-ignore_imports = [
-  "services.vision.detectors.stub -> services.robot.stub_state",      # exception, to be removed: the stub camera reads the sim pose and world objects
-  "services.vision.detectors.real -> services.robot.backends.real",   # exception, to be removed: init_dds, one DDS init per process
-  "services.vision.tests.unit.test_stub_detector -> services.robot.stub_state",   # exception, to be removed: the unit test of the stub camera sets the sim pose and world objects
-]
+
+[[tool.importlinter.contracts]]
+name = "The shared backend package imports neither service, skills nor the dispatcher"
+type = "forbidden"                      # both services import it, so it stays below them
+source_modules = ["services.backend"]
+forbidden_modules = ["services.robot", "services.vision", "skills", "dispatcher"]
 
 [[tool.importlinter.contracts]]
 name = "The services import neither skills nor the dispatcher"
@@ -108,6 +110,13 @@ ignore_imports = [
   "dispatcher.transports.telegram_bot -> services.robot.stop_move",   # same reason
   "dispatcher.tests.unit.test_telegram_bot -> services.robot.stop_move",   # same reason: the unit test of the transport reads POLICY
 ]
+
+[[tool.importlinter.contracts]]
+name = "The dispatcher reaches the stub world only through the robot's stub control"
+type = "forbidden"                      # direct imports only: services.robot.stub itself imports services.backend.stub_state
+source_modules = ["dispatcher"]
+forbidden_modules = ["services.backend"]
+allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "Only the vision service imports the detector stack"

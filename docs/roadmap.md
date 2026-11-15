@@ -67,8 +67,6 @@ The `ignore_imports` entries marked "exception, to be removed" in `[tool.importl
 | Exception | Imports | Owner |
 |---|---|---|
 | The dispatcher imports the utility modules for their module name and `POLICY`, and through them loads `services.robot.local` and the sim backend. | `dispatcher.executor` imports `services.robot.stop_move` and `services.robot.read_state`; `dispatcher.transports.telegram_bot` and `dispatcher.tests.unit.test_telegram_bot` import `services.robot.stop_move` ([service.md](../services/robot/docs/service.md#the-package)) | robot-dev |
-| The stub camera reads the sim pose and the world objects. | `services.vision.detectors.stub` and `services.vision.tests.unit.test_stub_detector` import `services.robot.stub_state` ([vision.md](../services/vision/docs/vision.md#design-decisions)) | vision-dev |
-| The real detector uses `init_dds`, the one DDS init per process. | `services.vision.detectors.real` imports `services.robot.backends.real` ([vision.md](../services/vision/docs/vision.md#design-decisions)) | vision-dev |
 
 ## Before experiments
 

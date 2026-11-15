@@ -1,4 +1,4 @@
-"""The stub's state file (services/robot/docs/service.md): posture, an odometry pose, the running velocity command
+"""The stub's state file (services/backend/docs/backend.md): posture, an odometry pose, the running velocity command
 and an injected robot fault in a shared JSON file. Standard library and contract only."""
 
 from __future__ import annotations

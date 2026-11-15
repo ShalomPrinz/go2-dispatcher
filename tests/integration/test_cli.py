@@ -19,8 +19,8 @@ from dispatcher.models import StopCause
 from dispatcher.registry import Registry
 from dispatcher.tests.helpers import FakeExecutor, ScriptedPlanner, exec_result, make_config, stop_move_result
 from dispatcher.transports import cli as cli_module
+from services.backend import stub_state
 from services.robot import stop_move as stop_move_utility
-from services.robot import stub_state
 from tests.helpers import REPO_ROOT
 
 pytestmark = pytest.mark.integration

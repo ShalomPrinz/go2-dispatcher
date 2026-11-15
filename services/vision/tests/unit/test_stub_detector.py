@@ -7,7 +7,7 @@ import math
 import pytest
 
 from contract.stub import WorldObject
-from services.robot import stub_state
+from services.backend import stub_state
 from services.vision import boxes
 from services.vision.detectors import stub
 

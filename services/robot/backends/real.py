@@ -1,26 +1,22 @@
 """Real Unitree Go2 backend (services/robot/docs/robot.md).
 
 All third-party imports (unitree_sdk2py) are inside functions, so importing this module
-needs only the standard library. The detector is in services/vision/detectors/real.py, used only by
-the vision service.
+needs only the standard library. DDS init is services/backend/dds.py, shared with the detector in
+services/vision/detectors/real.py, used only by the vision service.
 """
 
 from __future__ import annotations
 
 import math
-import os
-import threading
 import time
 from collections.abc import Callable
 from typing import Any
 
-from contract.backend import BackendNotConfigured
-from contract.env import IFACE
 from contract.schema import ObstacleDistances, Posture, RobotState
+from services.backend.dds import init_dds
 from services.robot.protocol import SPORT_CLIENT_TIMEOUT_S, StateUnavailable
 from services.robot.state_store import STATE_WAIT_S, StateStore
 
-DDS_DOMAIN_ID = 0
 SPORT_STATE_TOPIC = "rt/sportmodestate"
 SUBSCRIBER_QUEUE_LEN = 10
 POSTURE_SITTING_MAX_M = 0.15  # (tunable, services/robot/docs/robot.md)
@@ -34,35 +30,6 @@ RANGE_OBSTACLE_ORDER = (
 RANGE_OBSTACLE_MAX_M = (
     30.0  # larger values are taken as a "nothing seen" sentinel (tunable, services/robot/docs/robot.md)
 )
-
-_dds_ready = False
-_dds_lock = threading.Lock()
-_dds_init_s: float | None = None  # time in the channel import and ChannelFactoryInitialize, failed attempts included
-
-
-def init_dds() -> None:
-    """ChannelFactoryInitialize once per process; its time is reported as dds_init_ms."""
-    global _dds_ready, _dds_init_s
-    with _dds_lock:
-        if _dds_ready:
-            return
-        iface = os.environ.get(IFACE, "")
-        if not iface:
-            raise BackendNotConfigured(f"{IFACE} is not set (robot.network_interface)")
-        t = time.monotonic()
-        try:
-            from unitree_sdk2py.core.channel import ChannelFactoryInitialize
-
-            ChannelFactoryInitialize(DDS_DOMAIN_ID, iface)
-        finally:
-            _dds_init_s = (_dds_init_s or 0.0) + time.monotonic() - t
-        _dds_ready = True
-
-
-def dds_init_ms() -> float | None:
-    """Time spent in init_dds in this process, or None if it was never attempted."""
-    return None if _dds_init_s is None else round(_dds_init_s * 1000.0, 3)
-
 
 # --- sport client -------------------------------------------------------------
 

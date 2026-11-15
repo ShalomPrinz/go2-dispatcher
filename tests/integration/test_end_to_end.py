@@ -19,7 +19,7 @@ from dispatcher.models import Plan, PlanStep
 from dispatcher.registry import Registry
 from dispatcher.runlog import INDEX_FILE, stream_path
 from dispatcher.tests.helpers import ScriptedPlanner, make_config
-from services.robot import stub_state
+from services.backend import stub_state
 from services.robot.client import RobotClient
 from services.robot.protocol import StopSent
 from tests.helpers import REPO_ROOT

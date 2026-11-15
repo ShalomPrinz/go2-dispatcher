@@ -13,8 +13,7 @@ from pathlib import Path
 from contract.backend import stub_sleep, time_scale
 from contract.schema import ObstacleDistances, Posture, RobotState
 from contract.stub import Condition, WorldObject, objects
-from services.robot import ramp
-from services.robot.stub_state import (
+from services.backend.stub_state import (
     Command,
     Pose,
     read_state,
@@ -22,6 +21,7 @@ from services.robot.stub_state import (
     write_command,
     write_state,
 )
+from services.robot import ramp
 
 STUB_ERR_NOT_STANDING = 1
 
