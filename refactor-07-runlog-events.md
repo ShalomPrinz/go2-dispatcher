@@ -19,6 +19,14 @@ Steps 1 to 6 are done; `dispatcher/` has `planning/`, `llm/`, `execution/`, `tra
 - `llm_retry` takes a bare `dict`.
 - In `dispatcher/dispatcher.py`: `Dispatcher` builds its own `RunLogFactory`; `_Ending` is unpacked field by field into `_end()`; the phase and stop state handling is interleaved with the loop.
 
+Notes from step 6 (see "Step status" in the context file for detail):
+
+- `analysis/` is owned by `runs-analyzer`, not `dispatcher-dev`. If the format constants move into `dispatcher/runlog/`, `analysis/logs.py` and `analysis/report.py` change import paths: that is a `runs-analyzer` task after the dispatcher side. "The report reads both logs with the same result" is also checked by running `uv run go2 report <folder>` on the reference and the new log folder.
+- `StepResult` serialises through a wrap `model_serializer` that flattens `process: ProcessRun` back to the flat `step_result` keys; `dispatcher/tests/unit/test_step_result_dump.py` pins the order. The writer's `step_result` serialiser must go through it.
+- `app.build_dispatcher` (in `dispatcher/app.py`) is where to inject the `RunLogFactory`.
+- Import contracts to touch with `tests-dev`: "Only the composition root, execution and the registry import the services" lists `dispatcher.runlog` among its sources (a package keeps the name); "The analysis package reads logs only" has `allow_indirect_imports = true` only because `runlog` imports `context` and `llm` under `TYPE_CHECKING`: remove those imports and make it indirect if you can.
+- Emitters in `execution/`: the stop path (`execution/stop_path.py`) and executor (`execution/executor.py`) call the observer; `state_stream.py` emits `robot_sample` / `robot_link`.
+
 ## Design guidance
 
 - **One frozen dataclass per record type**, carrying the typed objects the methods take today (`Plan`, `StepResult`, `LLMResult`, …), not pre-serialised dicts. Serialisation to the on-disk record stays in the writer, in one place per event, so the event types can evolve without touching the file format. `llm_retry` gets a typed event like the rest.
