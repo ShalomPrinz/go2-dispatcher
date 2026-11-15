@@ -9,7 +9,6 @@ uv run pytest dispatcher -q                    # dispatcher unit tests only
 uv run pytest -m integration                   # after touching the executor, subprocess handling or the loop
 uv run pytest --update-golden                  # after changing fixed texts, rendering or the catalog; then git diff dispatcher/tests/golden
 uv run go2 catalog                             # check system text, catalog, tool schema and registry hash after changing prompts or the registry
-uv run go2 report [FOLDER]                     # latency report from existing run logs; --since / --until / --model; no key needed
 ```
 
 ## Docs
@@ -20,6 +19,7 @@ uv run go2 report [FOLDER]                     # latency report from existing ru
 | [execution.md](docs/execution.md) | The executor's parts in `execution/` (env, process, kill switch, control link, stop path, outcome), the order of a step, `ExecResult` and `ProcessRun` |
 | [llm.md](docs/llm.md) | Providers (Anthropic, OpenRouter), model choice, request parameters, schema retry, horizon rejection, infrastructure retries |
 | [run-log.md](docs/run-log.md) | Run log files, record types, `index.jsonl`, study metrics |
+| [report.md](../analysis/docs/report.md) | The run-log report (`go2 report`, `analysis` package; `cli.py` only calls it) |
 | [configuration.md](../docs/configuration.md) | Config keys, validation rules, exit codes, CLI overrides, `.env` |
 | [running.md](../docs/running.md) | `go2` CLI, Telegram bot, stub vs real, single-instance lock |
 | [testing.md](../tests/docs/testing.md) | Test layout, helpers and fakes, markers, golden files |

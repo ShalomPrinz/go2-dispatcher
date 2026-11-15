@@ -10,7 +10,7 @@ You work on the `skills` package of the Go2 LLM dispatcher (Python 3.10, managed
 
 - Write paths: your list in [.claude/ownership.json](../ownership.json), enforced by the `scope.py` hook. Use root `tests/integration/` only where the task is cross-service, and a shared doc in `docs/` only when the change touches its topic.
 - Docs you own: `skills/docs/skills.md` (the skills, registry hash, import rules, adding a skill). The table in `docs/README.md` says which doc owns which topic.
-- Do not change `dispatcher/`, `contract/`, `services/` code or their docs. A cross-package change is split by the orchestrator, the defining side (contract first) going first. If the task needs a change in another agent's package, stop and report what is needed and which agent owns it.
+- Do not change `dispatcher/`, `analysis/`, `contract/`, `services/` code or their docs. A cross-package change is split by the orchestrator, the defining side (contract first) going first. If the task needs a change in another agent's package, stop and report what is needed and which agent owns it.
 
 ## Before you start
 

@@ -77,6 +77,14 @@ The `skills` package: the skill runtime and the skills.
 |---|---|
 | [skills.md](../skills/docs/skills.md) | The skills package: the skill runtime (`skills/runtime/`), one folder per skill, catalog generation and registry hash, the skills, how to add a skill and run one by hand. |
 
+### Analysis (`analysis/docs/`)
+
+The run-log report, owned by the `runs-analyzer` agent.
+
+| Document | Owns |
+|---|---|
+| [report.md](../analysis/docs/report.md) | The `go2 report` latency report: what it computes and prints, its arguments, and the default motion and stationary skill lists. How each study metric is computed from the log stays in [run-log.md](../dispatcher/docs/run-log.md). |
+
 ### Tests (`tests/docs/`)
 
 The test infrastructure, owned by the `tests-dev` agent.

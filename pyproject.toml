@@ -37,11 +37,11 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["dispatcher", "skills", "contract", "services"]
-exclude = ["dispatcher/docs", "dispatcher/tests", "skills/docs", "skills/tests", "skills/*/SKILL.md", "contract/docs", "contract/tests", "services/robot/docs", "services/robot/tests", "services/vision/docs", "services/vision/tests", "services/backend/docs", "services/backend/tests"]
+packages = ["dispatcher", "skills", "contract", "services", "analysis"]
+exclude = ["dispatcher/docs", "dispatcher/tests", "skills/docs", "skills/tests", "skills/*/SKILL.md", "contract/docs", "contract/tests", "services/robot/docs", "services/robot/tests", "services/vision/docs", "services/vision/tests", "services/backend/docs", "services/backend/tests", "analysis/docs", "analysis/tests"]
 
 [tool.pytest.ini_options]
-testpaths = ["dispatcher/tests", "skills/tests", "contract/tests", "services/robot/tests", "services/vision/tests", "services/backend/tests", "tests", ".claude/hooks/tests", ".claude/scripts/tests"]
+testpaths = ["dispatcher/tests", "skills/tests", "contract/tests", "services/robot/tests", "services/vision/tests", "services/backend/tests", "analysis/tests", "tests", ".claude/hooks/tests", ".claude/scripts/tests"]
 addopts = "-p tests.pytest_plugin"   # options and marker gating (tests/docs/testing.md)
 timeout = 30
 markers = [
@@ -51,7 +51,7 @@ markers = [
 ]
 
 [tool.coverage.run]                     # opt-in: uv run pytest --cov (tests/docs/testing.md)
-source = ["dispatcher", "skills", "contract", "services"]
+source = ["dispatcher", "skills", "contract", "services", "analysis"]
 branch = true
 patch = ["subprocess", "_exit"]         # measure skill and CLI subprocesses; skills end with os._exit
 
@@ -60,7 +60,7 @@ show_missing = true
 skip_covered = true
 
 [tool.importlinter]                     # import boundaries: uv run lint-imports (tests/docs/testing.md)
-root_packages = ["skills", "dispatcher", "contract", "services", "tests"]
+root_packages = ["skills", "dispatcher", "contract", "services", "analysis", "tests"]
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
@@ -68,7 +68,7 @@ name = "Skills import only the client surfaces of robot and vision, and no heavy
 type = "forbidden"                      # a skill process stays light and reaches the robot and the detector only through the services
 source_modules = ["skills"]
 forbidden_modules = [
-  "dispatcher", "pydantic", "yaml",
+  "dispatcher", "analysis", "pydantic", "yaml",
   "unitree_sdk2py", "cyclonedds", "torch", "ultralytics", "cv2",
   "services.robot.service", "services.robot.backends", "services.robot.lease", "services.robot.stop_move", "services.robot.read_state",
   "services.vision.service", "services.vision.detectors", "services.vision.boxes",
@@ -111,10 +111,10 @@ protected_modules = ["services.robot.backends.faults"]
 allowed_importers = ["services.robot.backends.sim", "services.robot.tests", "tests.integration"]
 
 [[tool.importlinter.contracts]]
-name = "The services import neither skills nor the dispatcher"
+name = "The services import neither skills, the dispatcher nor analysis"
 type = "forbidden"
 source_modules = ["services"]
-forbidden_modules = ["skills", "dispatcher"]
+forbidden_modules = ["skills", "dispatcher", "analysis"]
 
 [[tool.importlinter.contracts]]
 name = "The dispatcher imports no skill"
@@ -144,7 +144,7 @@ type = "forbidden"                      # every other dispatcher module gets rob
 source_modules = [
   "dispatcher.dispatcher", "dispatcher.planning", "dispatcher.llm", "dispatcher.context", "dispatcher.runlog",
   "dispatcher.transports", "dispatcher.config", "dispatcher.models", "dispatcher.prompts",
-  "dispatcher.operator_messages", "dispatcher.process_lock", "dispatcher.report",
+  "dispatcher.operator_messages", "dispatcher.process_lock",
 ]
 forbidden_modules = ["services"]
 allow_indirect_imports = true           # the transports reach services through dispatcher.app -> dispatcher.execution; direct imports are the rule
@@ -179,16 +179,32 @@ protected_modules = ["services.vision.detectors", "services.vision.service", "ul
 allowed_importers = ["services.vision.service", "services.vision.detectors", "services.vision.tests"]
 
 [[tool.importlinter.contracts]]
+name = "The analysis package reads logs only"
+type = "forbidden"                      # it imports dispatcher.runlog (file-format constants) and dispatcher.config (Provider) and nothing else of the run time
+source_modules = ["analysis"]
+forbidden_modules = [
+  "dispatcher.registry", "dispatcher.execution", "dispatcher.app", "dispatcher.dispatcher", "dispatcher.planning",
+  "dispatcher.llm", "dispatcher.context", "dispatcher.transports", "skills", "services",
+]
+allow_indirect_imports = true           # dispatcher.runlog imports dispatcher.context and dispatcher.llm for type checking, which reach the registry; direct imports are the rule
+
+[[tool.importlinter.contracts]]
+name = "Only the CLI imports analysis"
+type = "protected"                      # direct imports only; the run-log report is reached through go2 report
+protected_modules = ["analysis"]
+allowed_importers = ["dispatcher.transports.cli", "tests"]
+
+[[tool.importlinter.contracts]]
 name = "Shared test helpers import no project package"
 type = "forbidden"                      # every package's tests import tests.helpers; a project import there links the packages
 source_modules = ["tests.helpers"]
-forbidden_modules = ["dispatcher", "skills", "services", "contract"]
+forbidden_modules = ["dispatcher", "skills", "services", "contract", "analysis"]
 
 [[tool.importlinter.contracts]]
 name = "Contract imports no other project package"
 type = "forbidden"                      # tests is listed so no chain through tests.helpers hides one
 source_modules = ["contract"]
-forbidden_modules = ["skills", "dispatcher", "services", "tests"]
+forbidden_modules = ["skills", "dispatcher", "services", "analysis", "tests"]
 
 [[tool.importlinter.contracts]]
 name = "Contract imports neither pydantic nor yaml, except the SKILL.md parser"
@@ -207,7 +223,7 @@ protected_modules = ["contract.manifest"]
 allowed_importers = ["dispatcher", "skills.tests", "contract.tests"]
 
 [tool.basedpyright]                     # type check: uv run basedpyright (tests/docs/testing.md)
-include = ["dispatcher", "skills", "contract", "services", "tests"]
+include = ["dispatcher", "skills", "contract", "services", "analysis", "tests"]
 exclude = ["**/__pycache__", "**/.*"]   # replaces the defaults; .venv and caches sit outside include anyway
 typeCheckingMode = "basic"
 pythonVersion = "3.10"

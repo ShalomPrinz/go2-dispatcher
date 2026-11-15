@@ -18,8 +18,6 @@ sys.path.insert(0, str(HOOKS.parent))
 import ownership  # noqa: E402  (the map loader `scope.py` uses; the hooks themselves run as subprocesses)
 
 OWNERSHIP = ownership.load_map()
-# Mapped paths created by a later commit (self-expiring, see the test below).
-NOT_CREATED_YET = ("analysis/",)
 MAIN_ONLY = tuple(json.loads((HOOKS.parent / "ownership.json").read_text())["main"])
 
 
@@ -203,12 +201,7 @@ def test_ownership_paths_exist_in_the_repo() -> None:
     assert OWNERSHIP is not None, "ownership.json missing or malformed"
     scopes, packages = OWNERSHIP
     for p in {p for ps in scopes.values() for p in ps} | set(packages) | set(MAIN_ONLY):
-        assert p.startswith("**/") or p.startswith(NOT_CREATED_YET) or (ROOT / p).exists(), p
-
-
-def test_not_created_yet_exemption_expires() -> None:
-    """Fails once `analysis/` exists: then delete `NOT_CREATED_YET` and this test."""
-    assert any(not (ROOT / p).exists() for p in NOT_CREATED_YET), "folder created: remove NOT_CREATED_YET"
+        assert p.startswith("**/") or (ROOT / p).exists(), p
 
 
 def test_ownership_agents_have_agent_files() -> None:

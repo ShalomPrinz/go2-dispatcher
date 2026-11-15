@@ -13,7 +13,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .. import app, report
+from analysis import report
+
+from .. import app
 from ..config import load_config_and_env
 from ..dispatcher import Dispatcher
 from ..models import ConfigError, StartupError, TaskOutcome
@@ -141,7 +143,7 @@ def cmd_reset_stub(cfg) -> int:
 
 
 def cmd_report(args: argparse.Namespace) -> int:
-    # An explicit folder needs no config, so a report never depends on the current config (docs/running.md).
+    # An explicit folder needs no config, so a report never depends on the current config (analysis/docs/report.md).
     folder = args.folder
     if folder is None:
         folder = load_config_and_env(args.config, _overrides(args)).log.dir / report.STUDY_FOLDER

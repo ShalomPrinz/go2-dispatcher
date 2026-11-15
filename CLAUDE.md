@@ -20,11 +20,11 @@ uv run go2 run "turn left 90 degrees"          # one task on the stub (needs ANT
 uv run go2 --reset-stub                        # reset the stub posture and exit
 ```
 
-Package commands (golden files, fault injection, opt-in tests) live in the folder CLAUDE.md files: [contract/CLAUDE.md](contract/CLAUDE.md), [dispatcher/CLAUDE.md](dispatcher/CLAUDE.md), [services/CLAUDE.md](services/CLAUDE.md), [services/robot/CLAUDE.md](services/robot/CLAUDE.md), [services/vision/CLAUDE.md](services/vision/CLAUDE.md), [skills/CLAUDE.md](skills/CLAUDE.md), [tests/CLAUDE.md](tests/CLAUDE.md). They load when Claude works in that folder.
+Package commands (golden files, fault injection, opt-in tests) live in the folder CLAUDE.md files: [analysis/CLAUDE.md](analysis/CLAUDE.md), [contract/CLAUDE.md](contract/CLAUDE.md), [dispatcher/CLAUDE.md](dispatcher/CLAUDE.md), [services/CLAUDE.md](services/CLAUDE.md), [services/robot/CLAUDE.md](services/robot/CLAUDE.md), [services/vision/CLAUDE.md](services/vision/CLAUDE.md), [skills/CLAUDE.md](skills/CLAUDE.md), [tests/CLAUDE.md](tests/CLAUDE.md). They load when Claude works in that folder.
 
 ## Documentation rules
 
-- The docs (`docs/`, `contract/docs/`, `dispatcher/docs/`, `services/robot/docs/`, `services/vision/docs/`, `skills/docs/`, `tests/docs/`) are the source of truth for why the system is built as it is and for its contracts (plan schema, skill response, config keys, outcome codes, log records, fixed texts).
+- The docs (`docs/`, `analysis/docs/`, `contract/docs/`, `dispatcher/docs/`, `services/robot/docs/`, `services/vision/docs/`, `skills/docs/`, `tests/docs/`) are the source of truth for why the system is built as it is and for its contracts (plan schema, skill response, config keys, outcome codes, log records, fixed texts).
 - A change that affects behaviour updates the owning doc **in the same commit**. Never leave docs and code disagreeing.
 - Decisions go into the owning doc's "Design decisions" section, with the reason and any rejected alternative. There is no separate decisions log.
 - Open questions and pending work go into [docs/roadmap.md](docs/roadmap.md), each with an owner or a way to resolve it. When one is resolved, move the result into the owning doc and remove it from the roadmap.
