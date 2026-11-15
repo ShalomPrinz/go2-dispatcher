@@ -9,7 +9,7 @@ import pytest
 
 from dispatcher.context import build_prompt_surface
 from dispatcher.dispatcher import Dispatcher
-from dispatcher.executor import Executor
+from dispatcher.execution import build_executor
 from dispatcher.llm.anthropic_planner import AnthropicPlanner
 from dispatcher.registry import Registry
 from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR, make_config
@@ -32,7 +32,7 @@ def test_live_turn_and_find_chair(tmp_path):
         cfg,
         registry,
         AnthropicPlanner(key, cfg.llm, surface),
-        Executor(cfg, cfg.base_dir),
+        build_executor(cfg),
         initial_posture=cfg.stub.initial_posture,
     )
     try:

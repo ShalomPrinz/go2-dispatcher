@@ -18,7 +18,7 @@ from services.robot.stub import reset_stub
 from .. import process_lock, report
 from ..context import build_prompt_surface
 from ..dispatcher import Dispatcher
-from ..executor import Executor
+from ..execution import read_state_utility
 from ..models import ConfigError, StartupError, TaskOutcome
 from ..registry import Registry
 from . import build_dispatcher, load_config_and_env, startup_error_text, texts
@@ -128,7 +128,7 @@ def cmd_catalog(cfg) -> int:
 
 
 def cmd_state(cfg) -> int:
-    state = Executor(cfg, cfg.base_dir).read_state()
+    state = read_state_utility(cfg)
     if state is None:
         print("Robot state unavailable.", file=sys.stderr)
         return EXIT_FAIL

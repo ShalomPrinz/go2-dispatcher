@@ -4,12 +4,18 @@ GO2_STUB_FAULT (dispatcher/docs/run-log.md)."""
 from __future__ import annotations
 
 import threading
+from typing import cast
 
 import pytest
 
 from contract.env import STUB_FAULT
 from contract.faults import fault_file, take_fault
-from dispatcher.executor import Executor
+from dispatcher.execution import Executor, process
+from dispatcher.execution.control import ControlLink
+from dispatcher.execution.env import ChildEnv
+from dispatcher.execution.robot_service import RobotSupervisor
+from dispatcher.execution.stop_path import StopPath
+from dispatcher.execution.vision_service import VisionSupervisor
 from dispatcher.registry import Registry
 from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR
 from dispatcher.tests.helpers.config import make_config
@@ -23,19 +29,24 @@ class _Spawned(Exception):
 def _route(tmp_path, monkeypatch, fault):
     """Run one step up to its spawn; returns (fault kind found in the file at arm, skill env)."""
     cfg = make_config(tmp_path, stub={"state_file": str(tmp_path / "missing" / "state.json")})
-    ex = Executor(cfg, REPO_ROOT)
     seen: dict = {}
 
-    class Control:
+    class FakeControl:
+        """A ControlLink whose arm reads the fault file as the sim would."""
+
         def arm(self, token, timeout_s):
             seen["at_arm"] = take_fault(cfg.stub.state_file)
 
-    def popen(module, params, env):
+    def spawn(module, params, env, cwd):
         seen["env"] = env
         raise _Spawned
 
-    monkeypatch.setattr(ex, "_control", Control)
-    monkeypatch.setattr(ex, "_popen", popen)
+    env = ChildEnv(cfg)
+    robot = RobotSupervisor(REPO_ROOT, tmp_path / "robot.log", str(tmp_path / "robot.sock"), env.for_service)
+    vision = VisionSupervisor(REPO_ROOT, tmp_path / "vision.log", env.for_service)
+    control = cast(ControlLink, FakeControl())
+    ex = Executor(cfg, env, robot, vision, control, StopPath(control, robot, env, REPO_ROOT), REPO_ROOT)
+    monkeypatch.setattr(process, "spawn", spawn)
     skill = Registry.load(BUILTIN_SKILLS_DIR).get("turn")
     assert skill is not None
     with pytest.raises(_Spawned):

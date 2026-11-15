@@ -6,7 +6,7 @@ import pytest
 
 from contract.runtime import SkillOutcome, StateSampler, build_response, to_json
 from contract.schema import ErrorCode, RobotState
-from dispatcher.executor import _parse_response
+from dispatcher.execution.process import parse_response
 
 
 def _no_state() -> RobotState:
@@ -35,7 +35,7 @@ LINE = to_json(build_response("walk", SkillOutcome.ok(observations={}, timing={}
     ids=["last_line_wins", "trailing_blank_lines"],
 )
 def test_parse_response_last_nonempty_line(stdout):
-    r = _parse_response(stdout, "walk")
+    r = parse_response(stdout, "walk")
     assert r is not None and r.status == "ok"
 
 
@@ -43,4 +43,4 @@ def test_parse_response_last_nonempty_line(stdout):
     "stdout", ["", LINE + "\n{not json", LINE.replace("walk", "turn")], ids=["empty", "invalid_json", "other_skill"]
 )
 def test_parse_response_none(stdout):
-    assert _parse_response(stdout, "walk") is None
+    assert parse_response(stdout, "walk") is None

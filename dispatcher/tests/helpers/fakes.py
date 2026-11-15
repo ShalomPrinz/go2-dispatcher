@@ -9,10 +9,12 @@ from pathlib import Path
 from typing import Any
 
 from contract.schema import SCHEMA_VERSION
-from dispatcher.executor import ExecOutcome, ExecResult
 from dispatcher.models import (
+    ExecOutcome,
+    ExecResult,
     ObstacleDistances,
     Posture,
+    ProcessRun,
     RobotState,
     SkillError,
     SkillResponse,
@@ -80,9 +82,7 @@ def exec_result(
     return ExecResult(
         outcome=outcome,
         interrupt_cause=interrupt_cause,
-        response=response,
-        exit_code=0,
-        pid=12345,
+        process=ProcessRun(response=response, exit_code=0, pid=12345),
         duration_ms=1.0,
         error_code=error_code,
         error_message=error_message,
@@ -91,14 +91,24 @@ def exec_result(
 
 
 def stop_move_result(
-    reason: StopCause = StopCause.OPERATOR, *, ok: bool = True, posture: Posture | None = None
+    reason: StopCause = StopCause.OPERATOR,
+    *,
+    ok: bool = True,
+    posture: Posture | None = None,
+    service_lost: bool = False,
 ) -> StopMoveResult:
-    """A service stop when ``ok``, else a failed fallback."""
+    """A service stop when ``ok`` and the service was not lost, else a fallback (failed unless ``ok``)."""
     after = state(posture) if posture is not None else None
-    if ok:
+    if ok and not service_lost:
         return StopMoveResult(ok=True, reason=reason, stop_path="service", duration_ms=1.0, state_after=after)
     return StopMoveResult(
-        ok=False, reason=reason, stop_path="fallback", duration_ms=1.0, exit_code=1, state_after=after
+        ok=ok,
+        reason=reason,
+        stop_path="fallback",
+        duration_ms=1.0,
+        exit_code=0 if ok else 1,
+        service_lost=service_lost,
+        state_after=after,
     )
 
 

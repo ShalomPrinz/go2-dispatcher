@@ -1,6 +1,6 @@
 # dispatcher/CLAUDE.md
 
-The `dispatcher` package: the loop, the plan contract (`planning/`: plan model, tool schema, validation, bounds, budget, verification), context and prompts, the LLM layer (`llm/`: planner protocol, retries, one module per provider, `PromptSurface`), the run log, config and the CLI and Telegram transports. Repo-wide rules are in the root [CLAUDE.md](../CLAUDE.md).
+The `dispatcher` package: the loop, the executor and its services (`execution/`), the plan contract (`planning/`: plan model, tool schema, validation, bounds, budget, verification), context and prompts, the LLM layer (`llm/`: planner protocol, retries, one module per provider, `PromptSurface`), the run log, config and the CLI and Telegram transports. Repo-wide rules are in the root [CLAUDE.md](../CLAUDE.md).
 
 ## Commands
 
@@ -17,6 +17,7 @@ uv run go2 report [FOLDER]                     # latency report from existing ru
 | Doc | Covers |
 |---|---|
 | [loop-and-context.md](docs/loop-and-context.md) | `submit_plan` schema, validation, return reasons, budgets, outcome codes and operator messages, context layout, fixed texts |
+| [execution.md](docs/execution.md) | The executor's parts in `execution/` (env, process, kill switch, control link, stop path, outcome), the order of a step, `ExecResult` and `ProcessRun` |
 | [llm.md](docs/llm.md) | Providers (Anthropic, OpenRouter), model choice, request parameters, schema retry, horizon rejection, infrastructure retries |
 | [run-log.md](docs/run-log.md) | Run log files, record types, `index.jsonl`, study metrics |
 | [configuration.md](../docs/configuration.md) | Config keys, validation rules, exit codes, CLI overrides, `.env` |

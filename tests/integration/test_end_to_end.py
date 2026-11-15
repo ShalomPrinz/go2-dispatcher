@@ -15,7 +15,8 @@ import pytest
 from dispatcher import prompts
 from dispatcher.context import build_prompt_surface
 from dispatcher.dispatcher import Dispatcher
-from dispatcher.executor import Executor
+from dispatcher.execution import Executor, build_executor, stop_path
+from dispatcher.execution.process import UtilityRun
 from dispatcher.planning.plan import Plan, PlanStep
 from dispatcher.registry import Registry
 from dispatcher.runlog import INDEX_FILE, stream_path
@@ -44,7 +45,7 @@ def build(tmp_path, registry, items, **cfg_over):
     stub_state.reset(cfg.stub.initial_posture, cfg.stub.state_file)
     surface = build_prompt_surface(registry, cfg.loop.planning_horizon)
     planner = ScriptedPlanner(items, surface)
-    executor = Executor(cfg, cfg.base_dir)
+    executor = build_executor(cfg)
     d = Dispatcher(cfg, registry, planner, executor)  # the first fresh read starts the robot service
     return d, planner, cfg
 
@@ -206,7 +207,7 @@ def test_service_crash_mid_walk_ends_the_task_and_the_next_task_restarts_it(tmp_
 def test_failed_stop_with_the_service_alive_ends_the_task(tmp_path, registry, monkeypatch):
     """The stub's StopMove never fails, so both stop results are patched; the step, kill and service are real."""
     monkeypatch.setattr(RobotClient, "stop", lambda _self, _wait_s: StopSent(ret=5, stop_call_ms=1.0))
-    monkeypatch.setattr(Executor, "_run_utility", lambda _self, _utility: (1, None, "StopMove failed", 1.0))
+    monkeypatch.setattr(stop_path, "run_utility", lambda _utility, _env, _cwd: UtilityRun(1, None, "StopMove failed"))
     real_run = Executor.run
     monkeypatch.setattr(Executor, "run", lambda self, *a, **kw: real_run(self, *a, **{**kw, "timeout_s": STOP_AFTER_S}))
     items = [Plan(status="PLAN", steps=[TURN, TURN])]

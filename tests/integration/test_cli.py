@@ -14,7 +14,8 @@ import pytest
 
 from dispatcher.context import build_prompt_surface
 from dispatcher.dispatcher import Dispatcher
-from dispatcher.executor import Executor
+from dispatcher.execution import build_executor, stop_path
+from dispatcher.execution.process import UtilityRun
 from dispatcher.models import StopCause
 from dispatcher.registry import Registry
 from dispatcher.tests.helpers import (
@@ -190,12 +191,12 @@ def test_batch_stops_after_a_task_whose_stop_failed(tmp_path, monkeypatch, capsy
 
 def test_batch_stops_after_a_failed_service_stop_ending_a_walk(tmp_path, monkeypatch, capsys):
     """In process, real executor: stop_error fails the service's own StopMove; the patched fallback fails too."""
-    real_utility = Executor._run_utility
+    real_utility = stop_path.run_utility
     monkeypatch.setattr(
-        Executor,
-        "_run_utility",
-        lambda self, utility: (
-            (1, None, "StopMove failed", 1.0) if utility is STOP_MOVE else real_utility(self, utility)
+        stop_path,
+        "run_utility",
+        lambda utility, env, cwd: (
+            UtilityRun(1, None, "StopMove failed") if utility is STOP_MOVE else real_utility(utility, env, cwd)
         ),
     )
     tasks = tmp_path / "tasks.txt"
@@ -206,7 +207,7 @@ def test_batch_stops_after_a_failed_service_stop_ending_a_walk(tmp_path, monkeyp
     walk = {"skill": "walk", "params": {"direction": "forward", "distance_m": 0.1}}
     script = [DONE, {"status": "PLAN", "steps": [walk, TURN]}]  # no further call after the failed stop
     planner = ScriptedPlanner(script, build_prompt_surface(registry, cfg.loop.planning_horizon))
-    dispatcher = Dispatcher(cfg, registry, planner, Executor(cfg, cfg.base_dir))
+    dispatcher = Dispatcher(cfg, registry, planner, build_executor(cfg))
     monkeypatch.setattr(cli_module, "build_dispatcher", lambda *_args, **_kwargs: dispatcher)
     monkeypatch.setattr(cli_module._Runner, "install", lambda _self: None)  # no process-wide signal or atexit hooks
     try:

@@ -11,9 +11,9 @@ import pytest
 from dispatcher import operator_messages, prompts
 from dispatcher.context import build_prompt_surface
 from dispatcher.dispatcher import Dispatcher
-from dispatcher.executor import STDERR_TAIL_CHARS, ExecOutcome
+from dispatcher.execution.process import STDERR_TAIL_CHARS
 from dispatcher.llm.client import LLMInterrupted, LLMUnavailable
-from dispatcher.models import BusyError, ObstacleDistances, Posture, StopCause
+from dispatcher.models import BusyError, ExecOutcome, ObstacleDistances, Posture, StopCause
 from dispatcher.planning.plan import Plan, PlanStep
 from dispatcher.registry import Registry
 from dispatcher.runlog import RunLog, RunLogFactory
@@ -743,9 +743,8 @@ def test_log_open_fails_internal_error_without_index_row(tmp_path, registry, mon
 
 
 def lost_step(*, stop_ok=True, outcome: ExecOutcome = "error", interrupt_cause=None):
-    stop = stop_move_result(StopCause.ROBOT_SERVICE_LOST, ok=stop_ok)
-    res = exec_result(outcome, interrupt_cause=interrupt_cause, stop_move=stop)
-    return res.model_copy(update={"service_lost": True})
+    stop = stop_move_result(StopCause.ROBOT_SERVICE_LOST, ok=stop_ok, service_lost=True)
+    return exec_result(outcome, interrupt_cause=interrupt_cause, stop_move=stop)
 
 
 @pytest.mark.parametrize(

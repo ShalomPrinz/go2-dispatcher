@@ -52,7 +52,7 @@ CONTRACTS: tuple[tuple[str, str], ...] = (
 # Safety paths for reviewer check 4 (docs/safety.md): whole files (a trailing `/` is a folder, tests excluded),
 # then words on changed lines elsewhere.
 SAFETY_FILES = (
-    "dispatcher/executor.py",
+    "dispatcher/execution/",
     "skills/runtime/motion.py",
     "services/robot/service.py",
     "services/robot/lease.py",

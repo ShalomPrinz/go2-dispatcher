@@ -27,8 +27,8 @@ def repo(tmp_path: Path) -> Path:
     files = {
         ".claude/ownership.json": OWNERSHIP,
         "docs/README.md": INDEX,
-        "docs/safety.md": "The executor kills the group (dispatcher/executor.py).\n",
-        "dispatcher/executor.py": "POLL_S = 0.05\n\n\ndef kill():\n    pass\n",
+        "docs/safety.md": "The executor kills the group (dispatcher/execution/executor.py).\n",
+        "dispatcher/execution/executor.py": "POLL_S = 0.05\n\n\ndef kill():\n    pass\n",
         "dispatcher/loop.py": "from dispatcher.executor import kill\n\nkill()\n",
     }
     for rel, text in files.items():
@@ -64,13 +64,13 @@ def test_untracked_file_content_and_doc_hygiene(repo: Path) -> None:
 
 
 def test_stale_reference_changed_value_safety_and_missing_doc(repo: Path) -> None:
-    (repo / "dispatcher/executor.py").write_text("POLL_S = 0.1\n\n\ndef stop_group():\n    pass\n")
+    (repo / "dispatcher/execution/executor.py").write_text("POLL_S = 0.1\n\n\ndef stop_group():\n    pass\n")
     out = preview(repo)
     assert "- `kill` removed, still referenced:" in out and "dispatcher/loop.py:1:" in out
-    assert "`dispatcher/executor.py:1`: 0.05 -> 0.1" in out
-    assert "| `dispatcher/executor.py` | dispatcher-dev | docs/safety.md |" in out
-    assert "`dispatcher/executor.py`: package code changed with no owning doc in the diff." in out
-    assert "Check 4 needed" in out and "`dispatcher/executor.py`: safety file" in out
+    assert "`dispatcher/execution/executor.py:1`: 0.05 -> 0.1" in out
+    assert "| `dispatcher/execution/executor.py` | dispatcher-dev | docs/safety.md |" in out
+    assert "`dispatcher/execution/executor.py`: package code changed with no owning doc in the diff." in out
+    assert "Check 4 needed" in out and "`dispatcher/execution/executor.py`: safety file" in out
 
 
 def test_safety_files_and_contract_surfaces_outside_the_dispatcher(repo: Path) -> None:

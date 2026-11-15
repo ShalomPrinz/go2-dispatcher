@@ -12,7 +12,7 @@ from .. import process_lock
 from ..config import API_KEY_ENV, Config, load_config_and_env
 from ..context import build_prompt_surface
 from ..dispatcher import Dispatcher
-from ..executor import Executor, needs_vision
+from ..execution import build_executor
 from ..llm.anthropic_planner import AnthropicPlanner
 from ..llm.client import PlannerClient
 from ..llm.openrouter_planner import OpenRouterPlanner
@@ -74,7 +74,7 @@ def build_dispatcher(
         stub.reset_stub(cfg.stub.initial_posture, cfg.stub.state_file)
     surface = build_prompt_surface(registry, cfg.loop.planning_horizon)
     planner = make_planner(cfg, surface)
-    executor = Executor(cfg, cfg.base_dir)
+    executor = build_executor(cfg)
     executor.start_robot()  # waits for ready, opens the control connection; raises RobotServiceError (docs/running.md)
     try:
         dispatcher = Dispatcher(
@@ -87,6 +87,6 @@ def build_dispatcher(
     except BaseException:
         executor.close()  # no dispatcher, so no shutdown hook stops the robot service
         raise
-    if any(needs_vision(registry[name]) for name in registry.names()):
+    if any(registry[name].uses_vision for name in registry.names()):
         executor.vision.start()  # no wait: the first vision step waits for ready (docs/running.md)
     return dispatcher

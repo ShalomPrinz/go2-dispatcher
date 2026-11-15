@@ -14,7 +14,8 @@ from typing import Literal, NoReturn
 from . import operator_messages
 from .config import Config
 from .context import ContextInput, Feedback, RequestReason, ReturnReason, build_user_message, schema_retry_message
-from .executor import STDERR_TAIL_CHARS, SkillExecutor
+from .execution import SkillExecutor
+from .execution.process import STDERR_TAIL_CHARS
 from .llm.client import LLMInterrupted, LLMResult, LLMUnavailable, PlannerClient
 from .models import (
     KILLED_OUTCOMES,
@@ -589,10 +590,18 @@ class Dispatcher:
         finally:
             self._set_phase("between")
 
-        exec_fields = {k: v for k, v in ex if k not in ("interrupt_cause", "stop_move", "service_lost")}  # 1:1
-        exec_fields["error_message"] = cut_message(ex.error_message) if ex.error_message else None
         check = verify(desc.expect, params, ex.response, ok=ex.outcome == "ok")
-        sr = StepResult(ref=ref, dispatch=dispatch, verification=check.verdict, faults=check.faults, **exec_fields)
+        sr = StepResult(
+            ref=ref,
+            dispatch=dispatch,
+            outcome=ex.outcome,
+            error_code=ex.error_code,
+            error_message=cut_message(ex.error_message) if ex.error_message else None,
+            duration_ms=ex.duration_ms,
+            process=ex.process,
+            verification=check.verdict,
+            faults=check.faults,
+        )
         self._record(t, sr, ex.stop_move)
 
         if sr.outcome == "interrupted":

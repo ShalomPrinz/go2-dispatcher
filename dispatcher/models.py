@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Literal, NamedTuple
 
-from pydantic import BaseModel, ConfigDict, StrictInt
+from pydantic import BaseModel, ConfigDict, SerializerFunctionWrapHandler, StrictInt, model_serializer
 
 from contract.policy import MotionCost
 
@@ -150,19 +150,79 @@ Verdict = Literal["verified", "failed", "unverified", "unavailable"]
 Fault = Literal["fallen", "fault_mode", "command_rejected"]
 
 
+class ProcessRun(Model):
+    """What one skill process left behind: its reply, exit code, pid and stderr tail (contract/docs/contract.md)."""
+
+    response: SkillResponse | None = None  # None if stdout held no valid response line
+    exit_code: int
+    pid: int  # LOG ONLY
+    stderr_tail: str | None = None  # last 2000 chars; LOG ONLY, never in context
+
+
+ExecOutcome = Literal["ok", "error", "timeout", "malformed", "interrupted"]
+
+
+class ExecResult(Model):
+    """One step as the executor ran it (dispatcher/docs/execution.md)."""
+
+    outcome: ExecOutcome
+    interrupt_cause: StopCause | None = None  # set iff outcome is interrupted
+    error_code: str | None = None
+    error_message: str | None = None
+    duration_ms: float
+    process: ProcessRun | None = None  # None if the step never started
+    stop_move: StopMoveResult | None = None
+
+    @property
+    def service_lost(self) -> bool:
+        """The robot service was lost during the step and killed; owned by ``stop_move`` (docs/safety.md)."""
+        return self.stop_move is not None and self.stop_move.service_lost
+
+    @property
+    def response(self) -> SkillResponse | None:
+        return self.process.response if self.process is not None else None
+
+
+# the step_result record's key order; ``process`` is flattened into it (dispatcher/docs/run-log.md)
+_STEP_RESULT_KEYS = (
+    "ref",
+    "dispatch",
+    "outcome",
+    "error_code",
+    "error_message",
+    "response",
+    "duration_ms",
+    "exit_code",
+    "pid",
+    "stderr_tail",
+    "verification",
+    "faults",
+)
+
+
 class StepResult(Model):
     ref: StepRef
     dispatch: StepDispatch | None = None  # None if not dispatched (rejected)
     outcome: StepOutcome
     error_code: str | None = None
     error_message: str | None = None  # one line, <= 200 chars, safe for LLM context
-    response: SkillResponse | None = None
     duration_ms: float = 0.0  # wall clock around the subprocess; 0 if not dispatched
-    exit_code: int | None = None
-    pid: int | None = None  # LOG ONLY
-    stderr_tail: str | None = None  # last 2000 chars; LOG ONLY, never in context
+    process: ProcessRun | None = None  # None if no skill process ran (rejected, or never started)
     verification: Verdict | None = None  # None: not dispatched, or the outcome is not ok (loop-and-context.md)
     faults: list[Fault] = []  # faults detected in the step's response; on an ok step any forces "failed"
+
+    @model_serializer(mode="wrap")
+    def _flatten_process(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Dump ``process`` as top-level ``response``, ``exit_code``, ``pid``, ``stderr_tail`` (null without one)."""
+        data = handler(self)
+        process = data.pop("process", None) or {}
+        data.update({k: process.get(k) for k in ProcessRun.model_fields})
+        ordered = {k: data.pop(k) for k in _STEP_RESULT_KEYS if k in data}
+        return ordered | data
+
+    @property
+    def response(self) -> SkillResponse | None:
+        return self.process.response if self.process is not None else None
 
     @property
     def is_failure(self) -> bool:
