@@ -9,7 +9,6 @@
     ],
     "ask": [
       "Bash(*--run-live*)",
-      "Edit(//**/dispatcher/prompts.py)",
       "Edit(//**/skills/*/SKILL.md)"
     ],
     "allow": [
