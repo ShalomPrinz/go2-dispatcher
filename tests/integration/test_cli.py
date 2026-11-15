@@ -20,7 +20,7 @@ from dispatcher.registry import Registry
 from dispatcher.tests.helpers import FakeExecutor, ScriptedPlanner, exec_result, make_config, stop_move_result
 from dispatcher.transports import cli as cli_module
 from services.backend import stub_state
-from services.robot import stop_move as stop_move_utility
+from services.robot.protocol import STOP_MOVE
 from tests.helpers import REPO_ROOT
 
 pytestmark = pytest.mark.integration
@@ -188,7 +188,7 @@ def test_batch_stops_after_a_failed_service_stop_ending_a_walk(tmp_path, monkeyp
         Executor,
         "_run_utility",
         lambda self, utility: (
-            (1, None, "StopMove failed", 1.0) if utility is stop_move_utility else real_utility(self, utility)
+            (1, None, "StopMove failed", 1.0) if utility is STOP_MOVE else real_utility(self, utility)
         ),
     )
     tasks = tmp_path / "tasks.txt"

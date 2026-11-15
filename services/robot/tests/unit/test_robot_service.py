@@ -19,10 +19,10 @@ from contract import wire
 from contract.schema import RobotState
 from services.robot import protocol, state_store
 from services.robot import service as robot_service
+from services.robot.backends import NoArmHook
 from services.robot.client import ProtocolMismatch, Refused, RobotClient, ServiceUnavailable
 from services.robot.protocol import LinkEvent, StateReply
 from services.robot.state_store import StateStore
-from services.robot.tests.fake_sport import NoArmHook
 from tests.helpers.fake_clock import Clock
 
 

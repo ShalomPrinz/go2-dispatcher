@@ -1,5 +1,5 @@
 """The robot service protocol (services/robot/docs/service.md): JSON messages on persistent connections, encoded as
-contract/wire.py does, and the service's lifecycle constants. Standard library, contract and
+contract/wire.py does, the service's lifecycle constants and the utilities' descriptors. Standard library, contract and
 services.robot.state_store only;
 imported by the service, by its client (services/robot/client.py), by skills and by the dispatcher."""
 
@@ -9,6 +9,7 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 from contract.constants import Link
+from contract.policy import SkillPolicy
 from contract.schema import RobotState
 from services.robot.state_store import Reading
 
@@ -17,6 +18,20 @@ READY_LINE = "ready"
 STARTUP_TIMEOUT_S = 10.0  # SDK import, DDS init and subscription on the lab machine (tunable)
 STOP_GRACE_S = 2.0  # SIGTERM to SIGKILL (tunable)
 EXIT_LOCKED = 3
+
+
+@dataclass(frozen=True)
+class Utility:
+    """A utility the dispatcher runs as ``python -m <module>`` without importing it; the module's ``POLICY`` is
+    ``policy`` (services/robot/docs/service.md)."""
+
+    module: str
+    policy: SkillPolicy
+
+
+# the fallback stop; 12 s covers one lost StopMove reply (tunable, contract/docs/contract.md)
+STOP_MOVE = Utility("services.robot.stop_move", SkillPolicy(name="stop_move", timeout=12.0))
+READ_STATE = Utility("services.robot.read_state", SkillPolicy(name="read_state", timeout=10.0))
 
 PROTOCOL_VERSION = 1
 MAX_MESSAGE_BYTES = 16384

@@ -15,7 +15,7 @@ from typing import Any
 
 from contract.schema import ObstacleDistances, Posture, RobotState
 from services.backend import dds
-from services.robot.backends import ArmHook, SportClient, Wait
+from services.robot.backends import ArmHook, NoArmHook, SportClient, Wait
 from services.robot.protocol import SPORT_CLIENT_TIMEOUT_S, StateUnavailable
 from services.robot.state_store import STATE_WAIT_S, StateStore
 
@@ -164,16 +164,6 @@ def _wait(seconds: float, abort: threading.Event) -> None:
     abort.wait(seconds)
 
 
-class _NoArmHook:
-    """Nothing happens at an arm on the robot."""
-
-    def clear(self) -> None:
-        pass
-
-    def arm(self) -> None:
-        pass
-
-
 class RealBackend:
     """The real Go2 (services/robot/docs/robot.md#real-backend): DDS, SportClient and rt/sportmodestate."""
 
@@ -212,7 +202,7 @@ class RealBackend:
     def motion(self, store: StateStore) -> tuple[SportClient, Wait, ArmHook]:
         """The service's SportClient, after the state subscription's DDS init; the motion clock is real time and
         an arm does nothing here."""
-        return get_sport_client(), _wait, _NoArmHook()
+        return get_sport_client(), _wait, NoArmHook()
 
     def sleep(self, seconds: float) -> None:
         time.sleep(seconds)

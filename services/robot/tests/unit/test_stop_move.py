@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import importlib
 import sys
 from types import SimpleNamespace
 
 import pytest
 
 from contract import process, runtime
-from services.robot import backends, stop_move
+from services.robot import backends, protocol, stop_move
 from services.robot.protocol import StateUnavailable
 from services.robot.tests.fake_sport import FakeClient
 
@@ -77,3 +78,11 @@ def test_stop_move_state_error_keeps_ok(run_stop_move):
     assert client.calls == ["StopMove"]
     assert (out.status, out.error, out.state_after) == ("ok", None, None)
     assert out.state_error == "after: StateUnavailable: no message"
+
+
+def test_utility_descriptors_name_their_modules():
+    """The dispatcher runs the utilities by protocol descriptor; each names its module and is that module's POLICY."""
+    for utility in (protocol.STOP_MOVE, protocol.READ_STATE):
+        module = importlib.import_module(utility.module)
+        assert module.POLICY is utility.policy
+        assert utility.policy.name == utility.module.rsplit(".", 1)[1]

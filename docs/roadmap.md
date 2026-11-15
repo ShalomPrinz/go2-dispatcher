@@ -60,14 +60,6 @@ Not scheduled.
 | Reduce latency to the 4 s target if Sonnet measures above it; prompt caching is the first candidate. | No latency work; `go2 report` measures against the target ([run-log.md](../dispatcher/docs/run-log.md#latency-report-go2-report)) | Student, after the Sonnet measurement |
 | Every starting value: budgets, limits, timeouts, parameter ranges, settle waits, posture thresholds. | Marked *tunable* in [configuration.md](configuration.md) and the topic docs | Tune from logs and robot runs |
 
-## Import-contract exceptions
-
-The `ignore_imports` entries marked "exception, to be removed" in `[tool.importlinter]` in `pyproject.toml` ([testing.md](../tests/docs/testing.md#import-boundaries)). Each is removed when the backend interface is introduced and the import goes; its entry in `pyproject.toml` is deleted with it.
-
-| Exception | Imports | Owner |
-|---|---|---|
-| The dispatcher imports the utility modules for their module name and `POLICY`, and through them loads the robot backend interface `services.robot.backends`. | `dispatcher.executor` imports `services.robot.stop_move` and `services.robot.read_state`; `dispatcher.transports.telegram_bot` and `dispatcher.tests.unit.test_telegram_bot` import `services.robot.stop_move` ([service.md](../services/robot/docs/service.md#the-package)) | robot-dev |
-
 ## Before experiments
 
 The gate for experiments with participants, collected from the sections above. Each item is specified where it is linked.

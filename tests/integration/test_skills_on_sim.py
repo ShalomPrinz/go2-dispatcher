@@ -10,6 +10,7 @@ import pytest
 from contract.env import STUB_FAULT, STUB_STATE_FILE, STUB_TIME_SCALE
 from services.backend import stub_state
 from services.robot import protocol, service
+from services.robot.backends import NoArmHook
 from services.robot.backends import sim as sim_backend
 from services.robot.protocol import MoveTarget
 from services.robot.state_store import StateStore
@@ -39,7 +40,7 @@ def run_move(vx: float, vy: float, vyaw: float, duration_s: float, target=None, 
 
     if publish:
         store.put(sim_backend.sample_state())
-    m = service.Motion(sim, wait, store, lambda: None)
+    m = service.Motion(sim, wait, store, NoArmHook())
     threading.Thread(target=m._loop, daemon=True).start()
     job = service.Job(run=m.move(vx, vy, vyaw, duration_s, target))
     m._jobs.put(job)

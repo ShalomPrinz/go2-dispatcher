@@ -35,6 +35,16 @@ class ArmHook(Protocol):
         """After the old lease ended, before the new one exists; a ValueError refuses the arm."""
 
 
+class NoArmHook:
+    """The arm hook of a backend with nothing to do at an arm (the real robot)."""
+
+    def clear(self) -> None:
+        pass
+
+    def arm(self) -> None:
+        pass
+
+
 class RobotBackend(Protocol):
     """One robot backend: the utilities' own access (init_dds, setup_timing, sport_client, sample_state) and the
     robot service's (start_source, motion)."""

@@ -198,6 +198,7 @@ Some *tunable* values are named constants in code, not config keys:
 | Posture thresholds | `POSTURE_SITTING_MAX_M`, `POSTURE_STANDING_MIN_M` in `services/robot/backends/real.py` ([robot.md](../services/robot/docs/robot.md#posture-rule)) |
 | Detector thresholds | `RealDetector` constants in `services/vision/detectors/real.py` ([vision.md](../services/vision/docs/vision.md#object-detection)) |
 | `StopMove` settle wait | `SETTLE_S` in `services/robot/stop_move.py` |
+| `stop_move` and `read_state` utility timeouts | The `SkillPolicy` of the `STOP_MOVE` and `READ_STATE` descriptors in `services/robot/protocol.py` |
 | Stub durations and body heights | Constants at the top of `services/robot/backends/sim.py` |
 
 ## Design decisions

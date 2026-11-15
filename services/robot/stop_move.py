@@ -10,15 +10,14 @@ from __future__ import annotations
 
 import time
 
-from contract import policy, runtime
+from contract import runtime
 from contract.runtime import SkillOutcome, StateSampler
 from contract.schema import ErrorCode
-from services.robot import backends
+from services.robot import backends, protocol
 
-TIMEOUT_S = 12.0  # covers one lost StopMove reply (tunable, contract/docs/contract.md)
 SETTLE_S = 0.5
 
-POLICY = policy.SkillPolicy(name="stop_move", timeout=TIMEOUT_S)  # utility: zero cost, no observations
+POLICY = protocol.STOP_MOVE.policy  # zero cost, no observations
 
 
 def body(states: StateSampler) -> SkillOutcome:

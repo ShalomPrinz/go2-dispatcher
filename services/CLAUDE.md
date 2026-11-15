@@ -19,9 +19,9 @@ uv run lint-imports                            # import contracts; must pass bef
 | [robot.md](robot/docs/robot.md) | Robot facts, SDK and DDS usage, the real backend, supervised robot checklist |
 | [vision.md](vision/docs/vision.md) | The vision package, the vision service, the stub camera, object detection on the robot |
 | [architecture.md](../docs/architecture.md) | Why the services are grouped here, and the package dependency directions |
-| [testing.md](../tests/docs/testing.md) | Import contracts and their named exceptions |
+| [testing.md](../tests/docs/testing.md) | Import contracts |
 
 ## Gotchas
 
-- `services.robot` and `services.vision` import `contract` and `services.backend`, never `skills` or `dispatcher`, and never each other; `services.backend` imports neither service; the few edges outside that are named exceptions in `pyproject.toml` ([testing.md](../tests/docs/testing.md#import-boundaries)).
+- `services.robot` and `services.vision` import `contract` and `services.backend`, never `skills` or `dispatcher`, and never each other; `services.backend` imports neither service. Import-linter contracts in `pyproject.toml` enforce this without exceptions ([testing.md](../tests/docs/testing.md#import-boundaries)).
 - Each service keeps its own protocol and client; the shared framing is `contract.wire`. Backend selection and the process helpers live in `contract`, because skills use them.

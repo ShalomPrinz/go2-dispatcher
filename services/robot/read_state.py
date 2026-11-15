@@ -9,14 +9,12 @@ from __future__ import annotations
 import sys
 import traceback
 
-from contract import backend, policy, runtime
+from contract import backend, runtime
 from contract.runtime import SkillOutcome, StateSampler
 from contract.schema import ErrorCode, describe_exception
-from services.robot import backends
+from services.robot import backends, protocol
 
-TIMEOUT_S = 10.0
-
-POLICY = policy.SkillPolicy(name="read_state", timeout=TIMEOUT_S)  # utility: zero cost, no observations
+POLICY = protocol.READ_STATE.policy  # zero cost, no observations
 
 
 def body(states: StateSampler) -> SkillOutcome:

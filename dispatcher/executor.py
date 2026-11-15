@@ -12,18 +12,14 @@ import sys
 import threading
 import time
 from pathlib import Path
-from types import ModuleType
 from typing import TYPE_CHECKING, Literal, Protocol, cast
 
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from contract.env import child_env, robot_socket_path
 from contract.faults import ROBOT_FAULTS, SKILL_FAULTS, RobotFault, write_fault
-from contract.policy import SkillPolicy
-from services.robot import read_state as read_state_utility
-from services.robot import stop_move as stop_move_utility
 from services.robot.client import Refused, RobotClient, ServiceUnavailable
-from services.robot.protocol import MAX_TIMEOUT_S
+from services.robot.protocol import MAX_TIMEOUT_S, READ_STATE, STOP_MOVE, Utility
 from skills import detect_object as vision_client
 
 from . import prompts
@@ -388,12 +384,12 @@ class Executor:
 
     # --- utilities (docs/safety.md) ------------------------------------------------------------
 
-    def _run_utility(self, utility: ModuleType) -> tuple[int | None, SkillResponse | None, str | None, float]:
-        """Run a utility module (never registered as current) with its POLICY name and timeout.
+    def _run_utility(self, utility: Utility) -> tuple[int | None, SkillResponse | None, str | None, float]:
+        """Run a utility module (never registered as current) with its descriptor's policy name and timeout.
         Returns (exit_code, response, stderr_tail, duration_ms)."""
-        policy: SkillPolicy = utility.POLICY
+        policy = utility.policy
         t0 = time.monotonic()
-        proc = self._popen(utility.__name__, {}, self._env(None))
+        proc = self._popen(utility.module, {}, self._env(None))
         try:
             out, err = proc.communicate(timeout=policy.timeout_s({}))
         except subprocess.TimeoutExpired:
@@ -460,7 +456,7 @@ class Executor:
             self._close_control()
             self.robot.kill()
         try:
-            rc, response, tail, _ = self._run_utility(stop_move_utility)
+            rc, response, tail, _ = self._run_utility(STOP_MOVE)
         except Exception as e:  # noqa: BLE001 - the stop path must not raise (docs/safety.md)
             rc, response, tail = None, None, _stderr_tail(_error_text(e))
         return StopMoveResult(
@@ -486,7 +482,7 @@ class Executor:
 
     def read_state(self) -> RobotState | None:
         """The ``read_state`` utility's state, read with its own DDS, not through the robot service (diagnosis)."""
-        _, response, _, _ = self._run_utility(read_state_utility)
+        _, response, _, _ = self._run_utility(READ_STATE)
         return response.state_after if response is not None else None
 
     # --- control connection (services/robot/docs/service.md) -------------------------------------------

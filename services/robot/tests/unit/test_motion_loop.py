@@ -11,9 +11,10 @@ import pytest
 
 from contract.schema import RobotState
 from services.robot import protocol, service
+from services.robot.backends import NoArmHook
 from services.robot.protocol import MoveTarget
 from services.robot.state_store import StateStore
-from services.robot.tests.fake_sport import FakeClient, NoArmHook
+from services.robot.tests.fake_sport import FakeClient
 from tests.helpers.fake_clock import Clock
 
 

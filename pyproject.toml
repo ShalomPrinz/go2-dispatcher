@@ -124,12 +124,6 @@ forbidden_modules = [
   "services.robot.service", "services.robot.backends", "services.robot.lease", "services.robot.stop_move", "services.robot.read_state",
   "services.vision.service", "services.vision.detectors", "services.vision.boxes",
 ]
-ignore_imports = [
-  "dispatcher.executor -> services.robot.stop_move",   # exception, to be removed: the utilities' module name and POLICY; the import also loads services.robot.backends (the package; load() imports a backend module lazily)
-  "dispatcher.executor -> services.robot.read_state",   # same reason
-  "dispatcher.transports.telegram_bot -> services.robot.stop_move",   # same reason
-  "dispatcher.tests.unit.test_telegram_bot -> services.robot.stop_move",   # same reason: the unit test of the transport reads POLICY
-]
 
 [[tool.importlinter.contracts]]
 name = "The dispatcher reaches the stub world only through the robot's stub control"
