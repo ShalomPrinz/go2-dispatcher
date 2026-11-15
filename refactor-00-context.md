@@ -76,6 +76,21 @@ Notes for later steps:
 - Root `CLAUDE.md` "Working pattern" agent list still says `robot-dev: anything under robot/` and does not name `services/backend/`; it is not main-owned in `.claude/ownership.json`, so it needs the user or a claude-config decision.
 - Unverified on the robot (moved, not exercised): `RealBackend` wiring (`start_source`, `motion`, `sample_state`, `sleep`), `services/backend/dds.py`, the real detector's DDS import.
 
+### Step 4 (`refactor-04-skill-declarations.md`): done
+
+On `architecture_refactor`, 5 commits from `manifest: add the uses_vision and moves declarations …` to `docs: name the skill runtime and the per-skill folders in the docs index`. Registry hash `768d05c6633b8fdc` before and after, goldens unchanged; 602 passed, 1 skipped; 97 integration; 15 import contracts kept (new: "The dispatcher imports no skill"); no exceptions.
+
+Notes for later steps:
+
+- **User decisions**: frontmatter `uses_vision: true` (detect_object) and `moves: true` (walk, turn, sit, stretch), `Literal[True]`, absent = false, unrendered. The registry (`dispatcher/registry.py` `_load_skill`) checks them against the code: `uses_vision` iff the entry module or a submodule loaded by importing it holds `services.vision.client` as a global (identity, `_imports_vision`); a non-zero `POLICY.cost` requires `moves`. `SkillDescriptor.uses_vision` / `.moves` are plain bools. `needs_vision(skill)` in `executor.py` is just `skill.uses_vision` (step 6 can inline it at its two callers).
+- **Report (user decision, run log unchanged)**: `MOTION_SKILLS` / `STATIONARY_SKILLS` stay in `dispatcher/report.py` as a documented default list; `dispatcher/tests/unit/test_report.py` checks them against the registry's `moves`. When step 6 moves the report to `analysis/`, that check needs the registry, which `analysis` must not import: put it in root `tests/` (cross-package) rather than adding an analysis→dispatcher edge.
+- **Layout (user decision)**: `skills/runtime/{runner,faults,motion}.py`; one folder per skill `skills/<name>/{SKILL.md, skill.py, __init__.py, __main__.py}`; `__init__` re-exports `POLICY, body, main` from `skill.py`; `__main__.py` calls `main()`; entrypoint `skills.<name>` (never `python -m skills.<name>.skill`: it would load skill.py twice). `skills.dir` default is `skills`; the registry skips folders without `SKILL.md`. SKILL.md files stay out of the wheel (`skills/*/SKILL.md` exclude). `skills.runtime` (skill side) is distinct from `contract.runtime` (generic process runtime); `skills/docs/skills.md` says which is which.
+- **Tests**: `BUILTIN_SKILLS_DIR` (`dispatcher/tests/helpers`) is the one path to the built-in set. A differently named skill set (`peek` uses vision, `spin` moves) is `tests/integration/alt_skills/<name>/`, run end to end in `test_end_to_end.py`. The `env_dump` test skill moved to `tests/integration/env_dump.py` so `dispatcher` imports no `skills` without an exception.
+- **Roadmap** gained two open items: the system text names `walk`/`turn` (hash-locked), and the user's future change "SKILL.md LLM-facing only, system data in a separate metadata file per skill" (recorded, not designed; not part of this series unless the user schedules it).
+- `.claude/settings.json` ask rule is `Edit(//**/skills/*/SKILL.md)`; it also matches `.claude/skills/*/SKILL.md` (accepted, documented in `.claude/hooks/README.md`). Settings changes apply from a new session.
+- Skill names left in `dispatcher/` outside tests: `report.py` default lists, the system text and `EMPTY_TASK` in `prompts.py` (fixed texts), "turn rate" display text in `telegram_progress.py`.
+- One unidentified single failure in a full run while two agents edited the tree at once; the rerun and every later run passed. If it recurs, check the known flaky `test_vision_ipc.py::test_result_and_error_round_trip` first.
+
 ## What this is
 
 The system works and is tested. The refactor changes its **structure**, not its behaviour: the code has outgrown the "two packages, `dispatcher/` and `skills/`" layout. An architecture review found nine faults (below). The series fixes them in an order where each step leaves the repo green, committed and usable, so the series can stop after any step.
