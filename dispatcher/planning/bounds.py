@@ -8,10 +8,11 @@ from typing import Any
 
 from contract.manifest import ParamSpec
 
-from . import prompts
+from .. import prompts
+from ..models import StepRef, StepResult
+from ..registry import Registry
 from .budget import MotionBudget
-from .models import Plan, PlanStep, StepRef, StepResult
-from .registry import Registry
+from .plan import Plan, PlanStep
 
 # StepResult.error_message limit (dispatcher/docs/run-log.md, dispatcher/docs/loop-and-context.md)
 ERROR_MESSAGE_MAX = 200

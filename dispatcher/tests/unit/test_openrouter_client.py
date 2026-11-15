@@ -10,8 +10,10 @@ import pytest
 
 from dispatcher import prompts
 from dispatcher.context import PromptSurface
-from dispatcher.llm import OPENROUTER_URL, TOOL_NAME, OpenRouterPlanner, check_reply, plan_tool_schema
+from dispatcher.llm import OPENROUTER_URL, LLMResult, OpenRouterPlanner
 from dispatcher.models import LLMUnavailable
+from dispatcher.planning.schema import TOOL_NAME, plan_tool_schema
+from dispatcher.planning.validation import PlanCheck, check_reply
 from dispatcher.tests.helpers import make_config
 
 H = 5
@@ -22,6 +24,11 @@ SURFACE = PromptSurface(
 USER = "## Task\nsit down"
 USAGE = {"prompt_tokens": 321, "completion_tokens": 45, "total_tokens": 366}
 GOOD_INPUT = {"status": "PLAN", "steps": [{"skill": "sit", "params": {}}]}
+
+
+def check(r: LLMResult) -> PlanCheck:
+    """The reply check the loop runs on every planner reply (dispatcher/docs/llm.md)."""
+    return check_reply(r.tool_input, cut_off=r.cut_off, horizon=H)
 
 
 def tool_call(inp, name=TOOL_NAME):
@@ -90,14 +97,14 @@ def test_tool_call_parsed_and_request_shape(tmp_path):
     assert set(body) == {"model", "max_tokens", "messages", "tools", "tool_choice"}
     assert r.tool_input == GOOD_INPUT and r.usage == USAGE and r.stop_reason == "tool_calls"
     assert r.content == json.loads(ok().content)["choices"] and r.response_id == "gen-1" and r.attempts == 1
-    c = check_reply(r, H)
+    c = check(r)
     assert c.rejection_kind == "none" and c.plan is not None
 
 
 def test_no_tool_call(tmp_path):
     r = Harness(tmp_path, [ok(completion({"role": "assistant", "content": "I would sit."}, "stop"))]).plan()
     assert r.tool_input is None
-    c = check_reply(r, H)
+    c = check(r)
     assert c.rejection_kind == "no_tool_call" and c.errors == [prompts.ERR_NO_TOOL_CALL]
 
 
@@ -105,7 +112,7 @@ def test_length_is_max_tokens(tmp_path):
     msg = {"role": "assistant", "content": None, "tool_calls": [tool_call({"status": "PLAN"})]}
     r = Harness(tmp_path, [ok(completion(msg, "length"))]).plan()
     assert r.stop_reason == "length"
-    c = check_reply(r, H)
+    c = check(r)
     assert c.rejection_kind == "max_tokens" and c.errors == [prompts.ERR_MAX_TOKENS]
 
 

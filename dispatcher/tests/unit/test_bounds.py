@@ -8,9 +8,10 @@ import pytest
 
 from contract.manifest import ParamSpec
 from contract.policy import MotionCost, SkillPolicy
-from dispatcher.bounds import ERROR_MESSAGE_MAX, check_step, cut_message, precheck
-from dispatcher.budget import MotionBudget
-from dispatcher.models import Plan, PlanStep, StepRef
+from dispatcher.models import StepRef
+from dispatcher.planning.bounds import ERROR_MESSAGE_MAX, check_step, cut_message, precheck
+from dispatcher.planning.budget import MotionBudget
+from dispatcher.planning.plan import Plan, PlanStep
 from dispatcher.registry import Registry, SkillDescriptor
 from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR
 

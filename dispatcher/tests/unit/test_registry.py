@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 from contract.policy import SkillPolicy
-from dispatcher.llm import plan_tool_schema
 from dispatcher.models import RegistryError
+from dispatcher.planning.schema import plan_tool_schema
 from dispatcher.prompts import system_text
 from dispatcher.registry import Registry, registry_hash
 from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR

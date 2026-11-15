@@ -7,9 +7,9 @@ from typing import Any, NamedTuple
 
 from contract.constants import YAW_SIGN
 from contract.manifest import Expectation, YawDelta
-from contract.schema import ErrorCode
+from contract.schema import ErrorCode, Posture, RobotState, SkillResponse
 
-from .models import Fault, Posture, RobotState, SkillResponse, Verdict
+from ..models import Fault, Verdict
 
 # Fault thresholds: assumed signatures, unverified on the robot (tunable) (dispatcher/docs/loop-and-context.md)
 FALLEN_TILT_RAD = 0.5  # |roll| or |pitch| above this (about 29 deg) is a fall; standing stays within 0.14 rad

@@ -1,6 +1,6 @@
 # dispatcher/CLAUDE.md
 
-The `dispatcher` package: the loop, plan validation, budgets, context and prompts, the LLM layer, the run log, config and the CLI and Telegram transports. Repo-wide rules are in the root [CLAUDE.md](../CLAUDE.md).
+The `dispatcher` package: the loop, the plan contract (`planning/`: plan model, tool schema, validation, bounds, budget, verification), context and prompts, the LLM layer, the run log, config and the CLI and Telegram transports. Repo-wide rules are in the root [CLAUDE.md](../CLAUDE.md).
 
 ## Commands
 

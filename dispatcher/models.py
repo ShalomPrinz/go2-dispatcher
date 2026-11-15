@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Literal, NamedTuple
 
-from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr, model_validator
+from pydantic import StrictInt
 
 from contract.policy import MotionCost
 
@@ -17,6 +17,7 @@ from contract.schema import SkillError as SkillError
 from contract.schema import SkillResponse as SkillResponse
 
 from . import prompts
+from .planning.plan import _Model
 
 # --- Exceptions (docs/architecture.md) -------------------------------------------------------
 
@@ -63,33 +64,6 @@ class LLMInterrupted(Exception):
     def __init__(self, cause: StopCause):
         super().__init__(cause)
         self.cause = StopCause(cause)
-
-
-class _Model(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-# --- Plan (dispatcher/docs/loop-and-context.md) -------------------------------------------------------------
-
-
-class PlanStep(_Model):
-    skill: StrictStr
-    params: dict[str, Any] = {}
-
-
-class Plan(_Model):
-    status: Literal["PLAN", "DONE", "ABORT", "ASK"]
-    steps: list[PlanStep] = []
-    replan_after: StrictInt | None = None  # 1-based step index within this plan
-    message: StrictStr | None = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def _normalise_status(cls, data: Any) -> Any:
-        # the API does not guarantee enum casing in non-strict mode
-        if isinstance(data, dict) and isinstance(data.get("status"), str):
-            data = {**data, "status": data["status"].strip().upper()}
-        return data
 
 
 # --- StepResult (dispatcher/docs/run-log.md) --------------------------------------------------------

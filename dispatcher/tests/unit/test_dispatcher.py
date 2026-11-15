@@ -17,11 +17,10 @@ from dispatcher.models import (
     LLMInterrupted,
     LLMUnavailable,
     ObstacleDistances,
-    Plan,
-    PlanStep,
     Posture,
     StopCause,
 )
+from dispatcher.planning.plan import Plan, PlanStep
 from dispatcher.registry import Registry
 from dispatcher.runlog import RunLog, RunLogFactory
 from dispatcher.tests.helpers import (

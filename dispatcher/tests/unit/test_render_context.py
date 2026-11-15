@@ -10,7 +10,6 @@ import pytest
 
 from contract.policy import MotionCost
 from contract.schema import SCHEMA_VERSION
-from dispatcher.budget import MotionBudget
 from dispatcher.context import (
     ContextInput,
     Feedback,
@@ -23,7 +22,6 @@ from dispatcher.context import (
 )
 from dispatcher.models import (
     ObstacleDistances,
-    PlanStep,
     RobotState,
     SkillError,
     SkillResponse,
@@ -32,6 +30,8 @@ from dispatcher.models import (
     StepResult,
     TaskSummary,
 )
+from dispatcher.planning.budget import MotionBudget
+from dispatcher.planning.plan import PlanStep
 from dispatcher.registry import Registry
 from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR
 from tests.helpers import REPO_ROOT

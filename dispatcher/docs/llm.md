@@ -1,6 +1,6 @@
 # The LLM layer
 
-How the dispatcher calls the planner model: provider and model, the exact request, how a reply is turned into a plan or rejected, schema retry, horizon rejection, and infrastructure retries. What the model must return and what it sees are in [loop-and-context.md](loop-and-context.md). Code: `dispatcher/llm.py`; config keys under `[llm]` in [configuration.md](../../docs/configuration.md).
+How the dispatcher calls the planner model: provider and model, the exact request, how a reply is turned into a plan or rejected, schema retry, horizon rejection, and infrastructure retries. What the model must return and what it sees are in [loop-and-context.md](loop-and-context.md). Code: `dispatcher/llm.py`; the plan contract it carries (tool schema, validation) is in `dispatcher/planning/` ([loop-and-context.md](loop-and-context.md#design-decisions)); config keys under `[llm]` in [configuration.md](../../docs/configuration.md).
 
 ## Provider and model
 
@@ -72,7 +72,7 @@ Sonnet 5.5 returns HTTP 400 for three things an earlier design relied on. A 400 
 
 ## Response handling
 
-`AnthropicPlanner` returns the reply unvalidated: the input of the first `tool_use` block named `submit_plan` (`thinking` and `text` blocks before it are skipped, further calls are ignored), or none. The loop then checks it with `llm.check_reply`, in this order ([loop-and-context.md](loop-and-context.md#design-decisions)):
+`AnthropicPlanner` returns the reply unvalidated: the input of the first `tool_use` block named `submit_plan` (`thinking` and `text` blocks before it are skipped, further calls are ignored), or none. The loop then checks it with `planning.validation.check_reply` (the tool input and `LLMResult.cut_off`), in this order ([loop-and-context.md](loop-and-context.md#design-decisions)):
 
 1. `stop_reason == "max_tokens"` → invalid, `rejection_kind = "max_tokens"`, error `reply hit the output token limit before submit_plan was complete; reason more briefly and submit the plan sooner`. The tool input, if any, is logged but not validated.
 2. No `submit_plan` block (for example a text-only reply) → invalid, `rejection_kind = "no_tool_call"`, error `no submit_plan call in reply`.
@@ -80,7 +80,7 @@ Sonnet 5.5 returns HTTP 400 for three things an earlier design relied on. A 400 
 
 All content blocks, `usage` (verbatim), `stop_reason`, latency, attempts, `response_id` and `request_id` are logged in the `llm_response` record ([run-log.md](run-log.md)). A reply with `stop_reason = "refusal"` (Sonnet 5.5 safety classifiers) has no `submit_plan` call, so it is handled as `no_tool_call`; there is no special handling and no fallback model.
 
-**OpenRouter replies** go through the same checks. `OpenRouterPlanner` takes the first tool call named `submit_plan` in the first choice's `message.tool_calls` and parses its `arguments` JSON string; text that is not valid JSON is kept as the raw string and fails schema validation. `stop_reason` is the first choice's `finish_reason`, verbatim: `length` is treated like `max_tokens` (step 1, `CUT_OFF_STOP_REASONS` in `llm.py`), and a reply without the tool call (`stop`, `content_filter`, `error` or none) is `no_tool_call`. `usage` is OpenRouter's usage object and `content` the full `choices` list, both verbatim (no conversion to the Anthropic shape); `response_id` is the generation `id` and `request_id` is null.
+**OpenRouter replies** go through the same checks. `OpenRouterPlanner` takes the first tool call named `submit_plan` in the first choice's `message.tool_calls` and parses its `arguments` JSON string; text that is not valid JSON is kept as the raw string and fails schema validation. `stop_reason` is the first choice's `finish_reason`, verbatim: `length` is treated like `max_tokens` (step 1, `CUT_OFF_STOP_REASONS` in `llm.py`, read through `LLMResult.cut_off`), and a reply without the tool call (`stop`, `content_filter`, `error` or none) is `no_tool_call`. `usage` is OpenRouter's usage object and `content` the full `choices` list, both verbatim (no conversion to the Anthropic shape); `response_id` is the generation `id` and `request_id` is null.
 
 ## Schema retry
 

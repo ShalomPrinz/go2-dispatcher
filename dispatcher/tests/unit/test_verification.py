@@ -7,7 +7,7 @@ import math
 from contract.manifest import Expectation, YawDelta
 from contract.schema import SCHEMA_VERSION
 from dispatcher.models import Posture, RobotState, SkillError, SkillResponse
-from dispatcher.verification import verify
+from dispatcher.planning.verification import verify
 
 TURN = Expectation(yaw_delta=YawDelta(param="angle_deg", direction_param="direction", tolerance_deg=10))
 SIT = Expectation(posture="sitting")

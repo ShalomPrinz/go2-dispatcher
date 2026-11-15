@@ -39,8 +39,8 @@ An operator sends a natural-language task over Telegram or the CLI. The LLM retu
 | Transports: CLI (`go2`) and Telegram (`go2 bot`), both over the same dispatcher | `dispatcher/transports/` | [running.md](running.md) |
 | Dispatcher loop, busy-reject, stop, shutdown | `dispatcher.py` | [loop-and-context.md](../dispatcher/docs/loop-and-context.md), [safety.md](safety.md) |
 | Context assembly and the fixed texts the LLM and operator read | `context.py`, `prompts.py` (model texts), `operator_messages.py` (operator texts), `transports/texts.py` (transport replies) | [loop-and-context.md](../dispatcher/docs/loop-and-context.md) |
-| LLM client, tool schema, infra retries | `llm.py` | [llm.md](../dispatcher/docs/llm.md) |
-| Plan validation, parameter bounds, motion budget | `llm.py`, `bounds.py`, `budget.py` | [loop-and-context.md](../dispatcher/docs/loop-and-context.md), [safety.md](safety.md) |
+| LLM client, infra retries | `llm.py` | [llm.md](../dispatcher/docs/llm.md) |
+| Plan model, tool schema, plan validation, parameter bounds, motion budget, verification | `planning/` | [loop-and-context.md](../dispatcher/docs/loop-and-context.md), [safety.md](safety.md) |
 | Skill registry and generated catalog; `SKILL.md` schema and parser | `registry.py`, `contract/manifest.py`, `skills/*/SKILL.md` | [skills.md](../skills/docs/skills.md), [contract.md](../contract/docs/contract.md) |
 | Executor: subprocesses, timeouts, kill, leases, stop path and fallback, state reads | `executor.py` | [safety.md](safety.md) |
 | Vision service lifecycle (start, restart before a skill that declares `uses_vision`, stop) | `vision.py`, `services/vision/service.py` | [running.md](running.md), [vision.md](../services/vision/docs/vision.md#vision-service) |

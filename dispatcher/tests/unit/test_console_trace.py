@@ -9,7 +9,7 @@ import pytest
 from dispatcher.context import PromptSurface
 from dispatcher.dispatcher import Dispatcher
 from dispatcher.llm import LLMResult
-from dispatcher.models import Plan, PlanStep
+from dispatcher.planning.plan import Plan, PlanStep
 from dispatcher.registry import Registry
 from dispatcher.runlog import NullLog, TeeLog
 from dispatcher.tests.helpers import (

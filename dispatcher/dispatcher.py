@@ -12,18 +12,15 @@ from datetime import datetime
 from typing import Literal, NoReturn
 
 from . import operator_messages
-from .bounds import cut_message, precheck
-from .budget import MotionBudget
 from .config import Config
 from .context import ContextInput, Feedback, RequestReason, ReturnReason, build_user_message, schema_retry_message
 from .executor import STDERR_TAIL_CHARS, SkillExecutor
-from .llm import LLMResult, PlanCheck, PlannerClient, check_reply
+from .llm import LLMResult, PlannerClient
 from .models import (
     KILLED_OUTCOMES,
     BusyError,
     LLMInterrupted,
     LLMUnavailable,
-    Plan,
     Posture,
     PreconditionFailure,
     RobotServiceLostError,
@@ -39,9 +36,13 @@ from .models import (
     TaskOutcomeCode,
     TaskSummary,
 )
+from .planning.bounds import cut_message, precheck
+from .planning.budget import MotionBudget
+from .planning.plan import Plan
+from .planning.validation import PlanCheck, check_reply
+from .planning.verification import verify
 from .registry import Registry
 from .runlog import NullLog, RunLogFactory, SessionInfo, TaskLog, TaskObserver, TeeLog, notify, stream_path
-from .verification import verify
 
 __all__ = ["Dispatcher"]
 
@@ -507,7 +508,7 @@ class Dispatcher:
             if t.llm_calls >= self.cfg.loop.max_llm_calls:
                 raise _TaskEnded(_Ending("CALL_BUDGET_EXHAUSTED"))
             res = self._call(t, request, return_reason, retry_of)
-            check = check_reply(res, self.cfg.loop.planning_horizon)
+            check = check_reply(res.tool_input, cut_off=res.cut_off, horizon=self.cfg.loop.planning_horizon)
             if check.plan is not None:
                 return check.plan
             self._log_invalid(t, res, check)

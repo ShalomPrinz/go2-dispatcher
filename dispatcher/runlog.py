@@ -21,11 +21,9 @@ from .config import Config, Provider
 if TYPE_CHECKING:
     from contract.constants import Link
 
-    from .budget import MotionBudget
     from .context import PromptSurface, RequestReason, ReturnReason
-    from .llm import LLMResult, PlanCheck
+    from .llm import LLMResult
     from .models import (
-        Plan,
         Posture,
         PreconditionFailure,
         RobotState,
@@ -37,6 +35,9 @@ if TYPE_CHECKING:
         TaskOutcome,
         TaskSummary,
     )
+    from .planning.budget import MotionBudget
+    from .planning.plan import Plan
+    from .planning.validation import PlanCheck
 
 INDEX_FILE = "index.jsonl"
 STREAM_SUFFIX = ".state_stream.jsonl"  # beside the task's log file (dispatcher/docs/run-log.md)

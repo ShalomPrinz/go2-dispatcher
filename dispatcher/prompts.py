@@ -9,10 +9,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from .budget import (
-    MOTION_BUDGET_MESSAGE,  # re-exported: defined once, in budget.py (dispatcher/docs/loop-and-context.md)
-)
-
 __all__ = [
     "SYSTEM_TEMPLATE",
     "SKILLS_HEADER",
@@ -208,6 +204,9 @@ PARAM_VALUE = "parameter '{param}' for skill {skill} is {value:g}"
 PARAM_OUTSIDE_RANGE = "{where}, outside {lo:g} to {hi:g}"
 PARAM_BELOW_MIN = "{where}, below the minimum {lo:g}"
 PARAM_ABOVE_MAX = "{where}, above the maximum {hi:g}"
+
+# Motion-budget message; planning/budget.py fills it, kind -> unit there
+MOTION_BUDGET_MESSAGE = "this step needs {need:g} {unit} of {kind} but only {left:g} {unit} remain for this task"
 
 MALFORMED_RESPONSE = "skill process exited with code {rc} without a valid response"
 KILL_STEP_TIMEOUT = "killed after {timeout_s:g}s timeout"

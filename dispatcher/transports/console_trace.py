@@ -14,11 +14,9 @@ from ..context import format_call, render_step
 if TYPE_CHECKING:
     from contract.constants import Link
 
-    from ..budget import MotionBudget
     from ..context import RequestReason, ReturnReason
-    from ..llm import LLMResult, PlanCheck
+    from ..llm import LLMResult
     from ..models import (
-        Plan,
         Posture,
         PreconditionFailure,
         RobotState,
@@ -30,6 +28,9 @@ if TYPE_CHECKING:
         TaskOutcome,
         TaskSummary,
     )
+    from ..planning.budget import MotionBudget
+    from ..planning.plan import Plan
+    from ..planning.validation import PlanCheck
     from ..registry import Registry
 
 NO_COLOR_ENV = "NO_COLOR"  # https://no-color.org

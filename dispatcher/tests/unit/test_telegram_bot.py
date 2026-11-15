@@ -14,7 +14,8 @@ import pytest
 
 from dispatcher.context import PromptSurface
 from dispatcher.dispatcher import Dispatcher
-from dispatcher.models import BusyError, Plan, PlanStep
+from dispatcher.models import BusyError
+from dispatcher.planning.plan import Plan, PlanStep
 from dispatcher.registry import Registry
 from dispatcher.tests.helpers import (
     BUILTIN_SKILLS_DIR,

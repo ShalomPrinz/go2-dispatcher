@@ -1,5 +1,5 @@
-"""LLM client and plan contract (dispatcher/docs/llm.md): tool schema, AnthropicPlanner, OpenRouterPlanner,
-infra retries."""
+"""LLM client (dispatcher/docs/llm.md): AnthropicPlanner, OpenRouterPlanner, infra retries. The plan contract it
+carries is in planning/."""
 
 from __future__ import annotations
 
@@ -9,33 +9,26 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict
 
-from . import prompts
 from .config import LLMConfig
-from .models import LLMInterrupted, LLMUnavailable, Plan, StopCause
+from .context import PromptSurface
+from .models import LLMInterrupted, LLMUnavailable, StopCause
+from .planning.schema import TOOL_NAME
 
 if TYPE_CHECKING:
     import httpx
     import httpx2  # the anthropic SDK (1.x) runs on httpx2; an injected client must be httpx2
     from anthropic.types import ThinkingConfigParam
 
-    from .context import PromptSurface  # context imports this module at run time
-
 # `anthropic` and `httpx` are imported only inside the planners and their helpers: `anthropic` costs about
 # 0.8 s at start-up, and stub runs with the test planner, `catalog`, `state` and `--reset-stub` never
 # call the API (dispatcher/docs/llm.md).
 
 __all__ = [
-    "TOOL_NAME",
-    "TOOL_REQUIRED",
-    "STEP_REQUIRED",
-    "plan_tool_schema",
     "LLMResult",
-    "PlanCheck",
-    "check_reply",
     "PlannerClient",
     "AnthropicPlanner",
     "OpenRouterPlanner",
@@ -43,141 +36,20 @@ __all__ = [
     "CUT_OFF_STOP_REASONS",
     "RETRYABLE_STATUS_CODES",
     "RETRY_AFTER_CAP_S",
-    "validate_tool_input",
 ]
-
-TOOL_NAME = "submit_plan"
-TOOL_REQUIRED = ["status", "steps"]
-STEP_REQUIRED = ["skill", "params"]
 
 RETRYABLE_STATUS_CODES = frozenset({408, 409, 429})  # plus every status >= 500
 RETRY_AFTER_CAP_S = 30.0
 CUT_OFF_STOP_REASONS = frozenset({"max_tokens", "length"})  # Anthropic, OpenRouter (dispatcher/docs/llm.md)
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-RejectionKind = Literal["none", "schema", "horizon", "semantic", "no_tool_call", "max_tokens"]
-
-# loc label for a pydantic error that has no location (the whole input is wrong)
-ROOT_LOC = "input"
-
-
-# --- Tool schema (dispatcher/docs/loop-and-context.md) ----------------------------------------------------------------
-
-
-def plan_tool_schema(horizon: int) -> dict:
-    """The hand-written submit_plan tool definition, with ``maxItems = horizon``."""
-    return {
-        "name": TOOL_NAME,
-        "description": "Submit your plan for the current task. Call this exactly once.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "status": {
-                    "type": "string",
-                    "enum": ["PLAN", "DONE", "ABORT", "ASK"],
-                    "description": "PLAN: run the steps. DONE: task complete, no steps. "
-                    "ABORT: cannot or should not be done, no steps. "
-                    "ASK: ambiguous, message is a question for the operator, no steps.",
-                },
-                "steps": {
-                    "type": "array",
-                    "maxItems": horizon,
-                    "description": "Skill calls to run in order. Empty for DONE, ABORT and ASK.",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "skill": {"type": "string", "description": "Skill name from the skill list."},
-                            "params": {"type": "object", "description": "Parameter values for this skill."},
-                        },
-                        "required": list(STEP_REQUIRED),
-                        "additionalProperties": False,
-                    },
-                },
-                "replan_after": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "description": "Optional. Stop after this step number and call again before running the rest.",
-                },
-                "message": {
-                    "type": "string",
-                    "description": "Required for DONE, ABORT and ASK: text for the operator. Optional for PLAN.",
-                },
-            },
-            "required": list(TOOL_REQUIRED),
-            "additionalProperties": False,
-        },
-    }
-
-
-# --- Plan validation (dispatcher/docs/loop-and-context.md) -------------------------------------------------
-
-
-def _schema_errors(e: ValidationError) -> list[str]:
-    out: list[str] = []
-    for err in e.errors():
-        loc = ".".join(str(p) for p in err["loc"]) or ROOT_LOC
-        out.append(f"{loc}: {err['msg']}")
-    return out
-
-
-def _semantic_errors(plan: Plan) -> list[str]:
-    errors: list[str] = []
-    s = plan.status
-    n = len(plan.steps)
-    if s == "PLAN" and n == 0:
-        errors.append(prompts.PLAN_NEEDS_STEPS)
-    if s in ("DONE", "ABORT", "ASK"):
-        if n > 0:
-            errors.append(prompts.STATUS_NO_STEPS.format(status=s))
-        if s in ("ABORT", "ASK") and (plan.message is None or not plan.message.strip()):
-            errors.append(prompts.STATUS_NEEDS_MESSAGE.format(status=s))
-    if plan.replan_after is not None:
-        if s != "PLAN":
-            errors.append(prompts.REPLAN_ONLY_PLAN)
-        elif not 1 <= plan.replan_after <= n:
-            errors.append(prompts.REPLAN_OUT_OF_RANGE.format(n=n))
-    return errors
-
-
-def validate_tool_input(raw: Any, horizon: int) -> tuple[Plan | None, list[str], RejectionKind]:
-    """Returns (plan, errors, rejection_kind). Plans are never truncated: an over-long plan is
-    rejected as a whole."""
-    errors: list[str] = []
-
-    # 1. horizon, on the raw input, before pydantic
-    kind: RejectionKind = "none"
-    if isinstance(raw, dict) and isinstance(raw.get("steps"), list) and len(raw["steps"]) > horizon:
-        kind = "horizon"
-        errors.append(prompts.HORIZON_EXCEEDED.format(n=len(raw["steps"]), horizon=horizon))
-
-    # 2. schema
-    plan: Plan | None = None
-    schema_errors: list[str] = []
-    try:
-        plan = Plan.model_validate(raw)
-    except ValidationError as e:
-        schema_errors = _schema_errors(e)
-    errors.extend(schema_errors)
-
-    # 3. semantic, only if the schema passed
-    semantic_errors = _semantic_errors(plan) if plan is not None else []
-    errors.extend(semantic_errors)
-
-    # 4. rejection kind: horizon first
-    if kind == "none" and schema_errors:
-        kind = "schema"
-    elif kind == "none" and semantic_errors:
-        kind = "semantic"
-
-    # 5. a plan only if there are no errors at all
-    return (plan if not errors else None), errors, kind
-
 
 # --- Interfaces (dispatcher/docs/llm.md) -----------------------------------------------------------------
 
 
 class LLMResult(BaseModel):
-    """One planner reply, unvalidated: the loop checks it with ``check_reply`` (dispatcher/docs/llm.md)."""
+    """One planner reply, unvalidated: the loop checks it with ``planning.validation.check_reply``
+    (dispatcher/docs/llm.md)."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -191,23 +63,10 @@ class LLMResult(BaseModel):
     response_id: str | None
     request_id: str | None
 
-
-class PlanCheck(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    plan: Plan | None  # set iff errors is empty
-    errors: list[str]
-    rejection_kind: RejectionKind
-
-
-def check_reply(res: LLMResult, horizon: int) -> PlanCheck:
-    """Response handling then plan validation, in the order of dispatcher/docs/llm.md."""
-    if res.stop_reason in CUT_OFF_STOP_REASONS:
-        return PlanCheck(plan=None, errors=[prompts.ERR_MAX_TOKENS], rejection_kind="max_tokens")
-    if res.tool_input is None:
-        return PlanCheck(plan=None, errors=[prompts.ERR_NO_TOOL_CALL], rejection_kind="no_tool_call")
-    plan, errors, kind = validate_tool_input(res.tool_input, horizon)
-    return PlanCheck(plan=plan, errors=errors, rejection_kind=kind)
+    @property
+    def cut_off(self) -> bool:
+        """The reply hit the token limit (``CUT_OFF_STOP_REASONS``)."""
+        return self.stop_reason in CUT_OFF_STOP_REASONS
 
 
 class PlannerClient(Protocol):

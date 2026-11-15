@@ -10,13 +10,10 @@ import pytest
 
 from dispatcher import prompts
 from dispatcher.context import PromptSurface
-from dispatcher.llm import (
-    TOOL_NAME,
-    AnthropicPlanner,
-    check_reply,
-    plan_tool_schema,
-)
+from dispatcher.llm import AnthropicPlanner, LLMResult
 from dispatcher.models import LLMInterrupted, LLMUnavailable
+from dispatcher.planning.schema import TOOL_NAME, plan_tool_schema
+from dispatcher.planning.validation import PlanCheck, check_reply
 from dispatcher.tests.helpers import make_config
 
 H = 5
@@ -27,6 +24,11 @@ SURFACE = PromptSurface(
 USER = "## Task\nsit down"
 USAGE = {"input_tokens": 321, "output_tokens": 45}
 GOOD_INPUT = {"status": "PLAN", "steps": [{"skill": "sit", "params": {}}]}
+
+
+def check(r: LLMResult) -> PlanCheck:
+    """The reply check the loop runs on every planner reply (dispatcher/docs/llm.md)."""
+    return check_reply(r.tool_input, cut_off=r.cut_off, horizon=H)
 
 
 def message(content, stop_reason="tool_use", usage=USAGE):
@@ -118,7 +120,7 @@ def test_valid_tool_use_parsed(tmp_path):
     h = Harness(tmp_path, [ok()])
     r = h.plan()
     assert r.tool_input == GOOD_INPUT
-    c = check_reply(r, H)
+    c = check(r)
     assert c.errors == [] and c.rejection_kind == "none"
     assert c.plan is not None and c.plan.steps[0].skill == "sit"
     assert {k: r.usage[k] for k in USAGE} == USAGE
@@ -150,7 +152,7 @@ def test_first_submit_plan_block_used(tmp_path):
 
 def test_invalid_tool_input_validated(tmp_path):
     body = message([tool_use({"status": "PLAN", "steps": [{"skill": "sit"}] * (H + 1)})])
-    c = check_reply(Harness(tmp_path, [ok(body)]).plan(), H)
+    c = check(Harness(tmp_path, [ok(body)]).plan())
     assert c.plan is None and c.rejection_kind == "horizon"
     assert c.errors == [f"plan has {H + 1} steps; the maximum is {H}"]
 
@@ -159,7 +161,7 @@ def test_text_only_reply_is_no_tool_call(tmp_path):
     body = message([{"type": "text", "text": "I would sit down."}], stop_reason="end_turn")
     r = Harness(tmp_path, [ok(body)]).plan()
     assert r.tool_input is None and r.content[0]["type"] == "text"
-    c = check_reply(r, H)
+    c = check(r)
     assert c.plan is None and c.rejection_kind == "no_tool_call" and c.errors == [prompts.ERR_NO_TOOL_CALL]
 
 
@@ -167,7 +169,7 @@ def test_max_tokens(tmp_path):
     body = message([tool_use({"status": "PLAN"})], stop_reason="max_tokens")
     r = Harness(tmp_path, [ok(body)]).plan()
     assert r.stop_reason == "max_tokens" and r.tool_input == {"status": "PLAN"}
-    c = check_reply(r, H)
+    c = check(r)
     assert c.plan is None and c.rejection_kind == "max_tokens" and c.errors == [prompts.ERR_MAX_TOKENS]
 
 

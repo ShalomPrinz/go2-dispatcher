@@ -16,7 +16,7 @@ from dispatcher import prompts
 from dispatcher.context import PromptSurface
 from dispatcher.dispatcher import Dispatcher
 from dispatcher.executor import Executor
-from dispatcher.models import Plan, PlanStep
+from dispatcher.planning.plan import Plan, PlanStep
 from dispatcher.registry import Registry
 from dispatcher.runlog import INDEX_FILE, stream_path
 from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR, ScriptedPlanner, make_config

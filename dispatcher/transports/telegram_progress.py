@@ -17,11 +17,9 @@ from .telegram_text import call_html, h, step_line, trim
 if TYPE_CHECKING:
     from contract.constants import Link
 
-    from ..budget import MotionBudget
     from ..context import RequestReason, ReturnReason
-    from ..llm import LLMResult, PlanCheck
+    from ..llm import LLMResult
     from ..models import (
-        Plan,
         Posture,
         PreconditionFailure,
         RobotState,
@@ -33,6 +31,9 @@ if TYPE_CHECKING:
         TaskOutcome,
         TaskSummary,
     )
+    from ..planning.budget import MotionBudget
+    from ..planning.plan import Plan
+    from ..planning.validation import PlanCheck
     from ..registry import Registry
 
 __all__ = ["TelegramProgress", "Edit", "NewMessage", "EDIT_INTERVAL_S", "EDIT_FAILED_WARNING", "robot_line"]

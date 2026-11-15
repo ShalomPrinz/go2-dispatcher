@@ -6,12 +6,13 @@ from typing import Literal
 
 from contract.policy import MotionCost
 
+from ..prompts import MOTION_BUDGET_MESSAGE
+
 BUDGET_EPSILON = 1e-9  # tolerance on the limit: exceeds when used + cost > max + epsilon
 # numbers in the motion-budget message are rounded to this (dispatcher/docs/loop-and-context.md)
 MESSAGE_DECIMALS = 2
 
-# Motion-budget message (dispatcher/docs/loop-and-context.md); kind -> unit
-MOTION_BUDGET_MESSAGE = "this step needs {need:g} {unit} of {kind} but only {left:g} {unit} remain for this task"
+# unit per budget kind in the motion-budget message (dispatcher/docs/loop-and-context.md)
 KIND_UNITS = {"travel": "m", "rotation": "deg"}
 
 BudgetKind = Literal["travel", "rotation"]

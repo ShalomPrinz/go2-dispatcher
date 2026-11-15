@@ -6,8 +6,9 @@ import threading
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
-from dispatcher.llm import TOOL_NAME, LLMResult
-from dispatcher.models import Plan
+from dispatcher.llm import LLMResult
+from dispatcher.planning.plan import Plan
+from dispatcher.planning.schema import TOOL_NAME
 
 if TYPE_CHECKING:
     from dispatcher.context import PromptSurface
