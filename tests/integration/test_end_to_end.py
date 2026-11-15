@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import signal
 import threading
@@ -18,11 +19,11 @@ from dispatcher.executor import Executor
 from dispatcher.models import Plan, PlanStep
 from dispatcher.registry import Registry
 from dispatcher.runlog import INDEX_FILE, stream_path
-from dispatcher.tests.helpers import ScriptedPlanner, make_config
+from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR, ScriptedPlanner, make_config
 from services.backend import stub_state
 from services.robot.client import RobotClient
 from services.robot.protocol import StopSent
-from tests.helpers import REPO_ROOT
+from tests.integration.alt_skills import CATALOG_DIR as ALT_SKILLS_DIR
 
 pytestmark = pytest.mark.integration
 
@@ -35,7 +36,7 @@ STOP_WITHIN_S = 3.0
 
 @pytest.fixture(scope="module")
 def registry():
-    return Registry.load(REPO_ROOT / "skills" / "catalog")
+    return Registry.load(BUILTIN_SKILLS_DIR)
 
 
 def build(tmp_path, registry, items, **cfg_over):
@@ -87,6 +88,37 @@ def test_turn_then_detect(tmp_path, registry):
     assert len(index) == 1 and index[0]["run_id"] == o.run_id
     assert index[0]["input_tokens"] == 200
     assert index[0]["model"] == cfg.llm.model and index[0]["thinking"] == cfg.llm.thinking
+
+
+def test_a_differently_named_skill_set_runs_by_its_declarations(tmp_path):
+    """No skill name is known to the dispatcher: vision starts for the skill that declares uses_vision."""
+    alt = Registry.load(ALT_SKILLS_DIR)
+    assert alt.names() == ["peek", "spin"]
+    spin = PlanStep(skill="spin", params={"direction": "left", "angle_deg": 90})
+    peek = PlanStep(skill="peek", params={"target": "chair"})
+    items = [
+        Plan(status="PLAN", steps=[spin]),
+        Plan(status="DONE"),
+        Plan(status="PLAN", steps=[peek]),
+        Plan(status="DONE"),
+    ]
+    d, _, cfg = build(tmp_path, alt, items, stub={"objects": {"chair": {"x": 0.0, "y": 2.0}}})
+    assert isinstance(d.executor, Executor)
+    try:
+        turned = d.run_task("spin left", source="test")
+        assert turned.outcome == "DONE", turned.message
+        assert [(s.outcome, s.verification) for s in turned.steps] == [("ok", "verified")]
+        assert abs(stub_state.read_state(cfg.stub.state_file).pose.yaw - math.pi / 2) < math.radians(10)
+        assert d.executor.vision.pid is None  # spin does not declare uses_vision
+
+        looked = d.run_task("look for a chair", source="test")
+        assert looked.outcome == "DONE", looked.message
+        assert [s.outcome for s in looked.steps] == ["ok"]
+        assert d.executor.vision.pid is not None
+        assert looked.steps[0].response is not None
+        assert looked.steps[0].response.observations["object_found"] is True
+    finally:
+        d.shutdown(0)
 
 
 def test_fault_at_step_two(tmp_path, registry):

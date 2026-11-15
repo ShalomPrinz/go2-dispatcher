@@ -12,13 +12,13 @@ from contract.schema import ErrorCode
 from dispatcher import prompts
 from dispatcher.models import StepDispatch, StepOutcome, StepRef, StepResult, TaskOutcome, TaskOutcomeCode
 from dispatcher.registry import Registry
+from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR
 from dispatcher.transports.telegram_text import MAX_CHARS, format_outcome, step_reason, trim
-from tests.helpers import REPO_ROOT
 
 
 @pytest.fixture(scope="module")
 def registry():
-    return Registry.load(REPO_ROOT / "skills" / "catalog")
+    return Registry.load(BUILTIN_SKILLS_DIR)
 
 
 REF = StepRef(call_index=1, plan_step=1, skill="sit", params={})

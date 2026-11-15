@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
 import json
 from datetime import datetime
 from pathlib import Path
@@ -12,8 +11,8 @@ import pytest
 
 from dispatcher import report
 from dispatcher.registry import Registry
+from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR
 from dispatcher.transports import cli
-from tests.helpers import REPO_ROOT
 
 
 def request(index: int, reason: str) -> dict[str, Any]:
@@ -166,10 +165,10 @@ def test_unknown_skill_counts_as_non_motion_and_is_named(tmp_path):
 
 
 def test_skill_sets_match_the_catalog():
-    """A skill moves the robot if its module uses ``skills.motion``; a new skill must be classified."""
-    registry = Registry.load(REPO_ROOT / "skills" / "catalog")
+    """The default lists follow each skill's ``moves`` declaration; a new skill must be classified."""
+    registry = Registry.load(BUILTIN_SKILLS_DIR)
     for name in registry.names():
-        moves = "motion" in vars(importlib.import_module(registry[name].entrypoint))
+        moves = registry[name].moves
         assert (name in report.MOTION_SKILLS) == moves, name
         assert (name in report.STATIONARY_SKILLS) == (not moves), name
 

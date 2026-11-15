@@ -15,10 +15,17 @@ from dispatcher.context import PromptSurface
 from dispatcher.dispatcher import Dispatcher
 from dispatcher.models import ObstacleDistances, Plan, PlanStep, RobotState
 from dispatcher.registry import Registry
-from dispatcher.tests.helpers import FakeExecutor, ScriptedPlanner, exec_result, fake_context, make_config, replies
+from dispatcher.tests.helpers import (
+    BUILTIN_SKILLS_DIR,
+    FakeExecutor,
+    ScriptedPlanner,
+    exec_result,
+    fake_context,
+    make_config,
+    replies,
+)
 from dispatcher.transports.telegram_bot import on_text
 from dispatcher.transports.telegram_progress import TelegramProgress, robot_line
-from tests.helpers import REPO_ROOT
 
 USER = 42
 EDIT_S = 0.5
@@ -28,7 +35,7 @@ WALK = PlanStep(skill="walk", params={"direction": "forward", "distance_m": 1.0}
 
 @pytest.fixture(scope="module")
 def registry():
-    return Registry.load(REPO_ROOT / "skills" / "catalog")
+    return Registry.load(BUILTIN_SKILLS_DIR)
 
 
 @pytest.fixture

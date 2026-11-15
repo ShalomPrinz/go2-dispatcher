@@ -20,7 +20,6 @@ from contract.env import child_env, robot_socket_path
 from contract.faults import ROBOT_FAULTS, SKILL_FAULTS, RobotFault, write_fault
 from services.robot.client import Refused, RobotClient, ServiceUnavailable
 from services.robot.protocol import MAX_TIMEOUT_S, READ_STATE, STOP_MOVE, Utility
-from skills import detect_object as vision_client
 
 from . import prompts
 from .config import SECRET_ENV, Config
@@ -101,8 +100,8 @@ class StreamHandle(Protocol):
 
 
 def needs_vision(skill: SkillDescriptor) -> bool:
-    """Whether ``skill`` is a client of the vision service (services/vision/docs/vision.md)."""
-    return skill.entrypoint == vision_client.__name__
+    """Whether ``skill`` declares ``uses_vision`` (dispatcher/docs/loop-and-context.md)."""
+    return skill.uses_vision
 
 
 def _stderr_tail(text: str | None) -> str | None:

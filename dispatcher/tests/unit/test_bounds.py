@@ -12,12 +12,12 @@ from dispatcher.bounds import ERROR_MESSAGE_MAX, check_step, cut_message, preche
 from dispatcher.budget import MotionBudget
 from dispatcher.models import Plan, PlanStep, StepRef
 from dispatcher.registry import Registry, SkillDescriptor
-from tests.helpers import REPO_ROOT
+from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR
 
 
 @pytest.fixture(scope="module")
 def registry() -> Registry:
-    return Registry.load(REPO_ROOT / "skills" / "catalog")
+    return Registry.load(BUILTIN_SKILLS_DIR)
 
 
 @pytest.fixture

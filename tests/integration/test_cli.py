@@ -17,7 +17,14 @@ from dispatcher.dispatcher import Dispatcher
 from dispatcher.executor import Executor
 from dispatcher.models import StopCause
 from dispatcher.registry import Registry
-from dispatcher.tests.helpers import FakeExecutor, ScriptedPlanner, exec_result, make_config, stop_move_result
+from dispatcher.tests.helpers import (
+    BUILTIN_SKILLS_DIR,
+    FakeExecutor,
+    ScriptedPlanner,
+    exec_result,
+    make_config,
+    stop_move_result,
+)
 from dispatcher.transports import cli as cli_module
 from services.backend import stub_state
 from services.robot.protocol import STOP_MOVE
@@ -39,7 +46,7 @@ STOP_WITHIN_S = 5.0
 def cfg_path(tmp_path):
     p = tmp_path / "config.toml"
     p.write_text(
-        f'[skills]\ndir = "{REPO_ROOT / "skills" / "catalog"}"\n'
+        f'[skills]\ndir = "{BUILTIN_SKILLS_DIR}"\n'
         '[log]\ndir = "logs"\n'
         '[robot]\nnetwork_interface = "eth0"\n'
         '[stub]\nstate_file = "logs/.stub_state.json"\ntime_scale = 0.01\n',
@@ -73,7 +80,7 @@ def test_catalog(cfg_path):
         argv(cfg_path, "catalog"), env=env, cwd=cfg_path.parent, capture_output=True, text=True, timeout=30
     )
     assert proc.returncode == 0, proc.stderr
-    assert Registry.load(REPO_ROOT / "skills" / "catalog").catalog_text() in proc.stdout
+    assert Registry.load(BUILTIN_SKILLS_DIR).catalog_text() in proc.stdout
     assert re.search(r"^Registry hash: [0-9a-f]{16}$", proc.stdout, re.M)
 
 
@@ -165,7 +172,7 @@ def test_batch_stops_after_a_task_whose_stop_failed(tmp_path, monkeypatch, capsy
     tasks = tmp_path / "tasks.txt"
     tasks.write_text("turn left\nwalk\nturn right\nsit\n", encoding="utf-8")
     cfg = make_config(tmp_path)
-    registry = Registry.load(REPO_ROOT / "skills" / "catalog")
+    registry = Registry.load(BUILTIN_SKILLS_DIR)
     planner = ScriptedPlanner([PLAN_TURN, DONE, PLAN_TURN], PromptSurface.build(registry, cfg.loop.planning_horizon))
     dispatcher = Dispatcher(cfg, registry, planner, FakeExecutor([exec_result(skill="turn"), failed]))
     monkeypatch.setattr(cli_module, "build_dispatcher", lambda *_args, **_kwargs: dispatcher)
@@ -195,7 +202,7 @@ def test_batch_stops_after_a_failed_service_stop_ending_a_walk(tmp_path, monkeyp
     tasks.write_text("say hi\nwalk\nturn right\n", encoding="utf-8")
     cfg = make_config(tmp_path, stub={"initial_posture": "standing", "faults": [{"step": 1, "kind": "stop_error"}]})
     stub_state.reset(cfg.stub.initial_posture, cfg.stub.state_file)
-    registry = Registry.load(REPO_ROOT / "skills" / "catalog")
+    registry = Registry.load(BUILTIN_SKILLS_DIR)
     walk = {"skill": "walk", "params": {"direction": "forward", "distance_m": 0.1}}
     script = [DONE, {"status": "PLAN", "steps": [walk, TURN]}]  # no further call after the failed stop
     planner = ScriptedPlanner(script, PromptSurface.build(registry, cfg.loop.planning_horizon))

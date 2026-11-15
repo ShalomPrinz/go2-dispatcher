@@ -33,6 +33,7 @@ from dispatcher.models import (
     TaskSummary,
 )
 from dispatcher.registry import Registry
+from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR
 from tests.helpers import REPO_ROOT
 
 GOLDEN = REPO_ROOT / "dispatcher" / "tests" / "golden"
@@ -50,7 +51,7 @@ TASK = "Walk forward, then  find the chair"  # verbatim: inner double space kept
 
 @pytest.fixture(scope="module")
 def registry() -> Registry:
-    return Registry.load(REPO_ROOT / "skills" / "catalog")
+    return Registry.load(BUILTIN_SKILLS_DIR)
 
 
 def check_golden(name: str, text: str, update: bool) -> None:

@@ -18,6 +18,7 @@ from dispatcher.dispatcher import Dispatcher
 from dispatcher.models import BusyError, Plan, PlanStep
 from dispatcher.registry import Registry
 from dispatcher.tests.helpers import (
+    BUILTIN_SKILLS_DIR,
     FakeClock,
     FakeExecutor,
     ScriptedPlanner,
@@ -38,7 +39,6 @@ from dispatcher.transports.telegram_bot import (
     on_text,
 )
 from services.robot import protocol
-from tests.helpers import REPO_ROOT
 
 USER = 42
 TOKEN = "123456:TEST-token-not-real"
@@ -46,7 +46,7 @@ TOKEN = "123456:TEST-token-not-real"
 
 @pytest.fixture(scope="module")
 def registry():
-    return Registry.load(REPO_ROOT / "skills" / "catalog")
+    return Registry.load(BUILTIN_SKILLS_DIR)
 
 
 @pytest.fixture

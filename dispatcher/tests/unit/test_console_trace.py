@@ -12,14 +12,20 @@ from dispatcher.llm import LLMResult
 from dispatcher.models import Plan, PlanStep
 from dispatcher.registry import Registry
 from dispatcher.runlog import NullLog, TeeLog
-from dispatcher.tests.helpers import FakeClock, FakeExecutor, ScriptedPlanner, exec_result, make_config
+from dispatcher.tests.helpers import (
+    BUILTIN_SKILLS_DIR,
+    FakeClock,
+    FakeExecutor,
+    ScriptedPlanner,
+    exec_result,
+    make_config,
+)
 from dispatcher.transports.console_trace import ConsoleTrace
-from tests.helpers import REPO_ROOT
 
 
 @pytest.fixture(scope="module")
 def registry():
-    return Registry.load(REPO_ROOT / "skills" / "catalog")
+    return Registry.load(BUILTIN_SKILLS_DIR)
 
 
 class Recorder(NullLog):

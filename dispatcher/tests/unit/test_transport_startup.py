@@ -7,7 +7,7 @@ import pytest
 from dispatcher.context import PromptSurface
 from dispatcher.models import StartupError
 from dispatcher.registry import Registry
-from dispatcher.tests.helpers import make_config
+from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR, make_config
 from dispatcher.transports import (
     API_KEY_ENV,
     MISSING_API_KEY,
@@ -15,12 +15,11 @@ from dispatcher.transports import (
     cli,
     make_planner,
 )
-from tests.helpers import REPO_ROOT
 
 
 @pytest.fixture(scope="module")
 def surface():
-    return PromptSurface.build(Registry.load(REPO_ROOT / "skills" / "catalog"), 5)
+    return PromptSurface.build(Registry.load(BUILTIN_SKILLS_DIR), 5)
 
 
 @pytest.fixture

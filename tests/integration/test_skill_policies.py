@@ -9,11 +9,11 @@ import pytest
 
 from contract.policy import MotionCost
 from dispatcher.registry import Registry
+from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR
 from services.robot import protocol, read_state, stop_move
 from skills import detect_object, motion, sit, stretch, turn, walk
-from tests.helpers import REPO_ROOT
 
-REGISTRY = Registry.load(REPO_ROOT / "skills" / "catalog")
+REGISTRY = Registry.load(BUILTIN_SKILLS_DIR)
 
 
 def max_params(name: str) -> dict:

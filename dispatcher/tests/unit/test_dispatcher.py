@@ -25,6 +25,7 @@ from dispatcher.models import (
 from dispatcher.registry import Registry
 from dispatcher.runlog import RunLog, RunLogFactory
 from dispatcher.tests.helpers import (
+    BUILTIN_SKILLS_DIR,
     FakeClock,
     FakeExecutor,
     ScriptedPlanner,
@@ -33,14 +34,13 @@ from dispatcher.tests.helpers import (
     stop_move_result,
 )
 from dispatcher.tests.helpers.fakes import state
-from tests.helpers import REPO_ROOT
 
 WAIT_S = 5.0
 
 
 @pytest.fixture(scope="module")
 def registry():
-    return Registry.load(REPO_ROOT / "skills" / "catalog")
+    return Registry.load(BUILTIN_SKILLS_DIR)
 
 
 def walk(d=0.5, direction="forward"):

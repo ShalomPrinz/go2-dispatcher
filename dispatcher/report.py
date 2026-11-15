@@ -19,7 +19,7 @@ TARGET_CALL_MS = 4000.0  # the advisor's per-call target (dispatcher/docs/run-lo
 CALL_TYPES = ("initial", "plan_complete", "checkpoint", "failure", "schema_retry")
 FIRST_CALL_TYPE = "initial"
 REPLAN_TYPES = frozenset({"plan_complete", "checkpoint", "failure"})
-# by what the skill physically does, not its budget cost; a test keeps these in step with the catalog
+# default lists for the built-in skills (the report reads logs, not the registry); a test checks them against `moves`
 MOTION_SKILLS = frozenset({"walk", "turn", "sit", "stretch"})
 STATIONARY_SKILLS = frozenset({"detect_object"})
 INDEX_REQUIRED = ("file", "ts_start", "outcome", "provider", "model", "registry_hash")

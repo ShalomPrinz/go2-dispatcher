@@ -11,6 +11,7 @@ from contract.env import STUB_FAULT
 from contract.faults import fault_file, take_fault
 from dispatcher.executor import Executor
 from dispatcher.registry import Registry
+from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR
 from dispatcher.tests.helpers.config import make_config
 from tests.helpers import REPO_ROOT
 
@@ -35,7 +36,7 @@ def _route(tmp_path, monkeypatch, fault):
 
     monkeypatch.setattr(ex, "_control", Control)
     monkeypatch.setattr(ex, "_popen", popen)
-    skill = Registry.load(REPO_ROOT / "skills" / "catalog").get("turn")
+    skill = Registry.load(BUILTIN_SKILLS_DIR).get("turn")
     assert skill is not None
     with pytest.raises(_Spawned):
         ex.run(skill, {}, fault=fault, timeout_s=5.0, remaining_task_s=5.0, stop_event=threading.Event())

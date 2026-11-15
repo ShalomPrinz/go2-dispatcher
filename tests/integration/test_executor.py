@@ -13,7 +13,7 @@ import pytest
 from contract.env import vision_socket_path
 from dispatcher.executor import Executor
 from dispatcher.registry import Registry, SkillDescriptor
-from dispatcher.tests.helpers import make_config
+from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR, make_config
 from dispatcher.tests.helpers.skill_modules.env_dump import POLICY as ENV_DUMP_POLICY
 from services.backend import stub_state
 from tests.helpers import REPO_ROOT
@@ -42,7 +42,7 @@ def executor(cfg):
 
 @pytest.fixture(scope="module")
 def registry():
-    return Registry.load(REPO_ROOT / "skills" / "catalog")
+    return Registry.load(BUILTIN_SKILLS_DIR)
 
 
 def run(
