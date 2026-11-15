@@ -5,7 +5,7 @@ requires-python = ">=3.10,<3.11"          # see docs/setup.md
 dependencies = [
   "anthropic",                            # current major; pin in uv.lock
   "httpx",
-  "httpx2",                               # used directly by llm.py (anthropic SDK transport)
+  "httpx2",                               # used directly by dispatcher/llm/anthropic_planner.py (anthropic SDK transport)
   "pydantic>=2",
   "PyYAML",
   "python-telegram-bot>=22.8,<23",
@@ -137,6 +137,29 @@ type = "forbidden"                      # direct imports only: services.robot.st
 source_modules = ["dispatcher"]
 forbidden_modules = ["services.backend"]
 allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Planning and llm are independent of each other"
+type = "independence"                   # directly or through any chain; a plan never depends on a provider, a provider never on the plan
+modules = ["dispatcher.planning", "dispatcher.llm"]
+
+[[tool.importlinter.contracts]]
+name = "Planning imports no run-time, provider or transport package"
+type = "forbidden"                      # it may import contract, dispatcher.registry, dispatcher.prompts and dispatcher.models; dispatcher.llm is covered by the independence contract
+source_modules = ["dispatcher.planning"]
+forbidden_modules = [
+  "dispatcher.context", "dispatcher.runlog", "dispatcher.executor", "dispatcher.robot", "dispatcher.vision",
+  "dispatcher.transports", "dispatcher.dispatcher", "anthropic", "httpx",
+]
+
+[[tool.importlinter.contracts]]
+name = "Llm imports no planning, context, registry, run-time or transport module"
+type = "forbidden"                      # dispatcher.planning is covered by the independence contract
+source_modules = ["dispatcher.llm"]
+forbidden_modules = [
+  "dispatcher.context", "dispatcher.registry", "dispatcher.runlog", "dispatcher.executor", "dispatcher.robot",
+  "dispatcher.vision", "dispatcher.transports", "dispatcher.dispatcher",
+]
 
 [[tool.importlinter.contracts]]
 name = "Only the vision service imports the detector stack"
