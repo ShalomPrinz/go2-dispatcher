@@ -1,7 +1,7 @@
 ---
 name: contract-dev
 description: Implements and fixes changes in the shared `contract` package (what the dispatcher, the skills and the services agree on: SKILL.md format, response schema, error codes, policies, process environment, backend selection, process helpers, wire framing, shared constants) and its docs and tests. Use for any task whose code lives under contract/ or whose contract is owned by contract/docs/. A cross-package change is split and the defining side, usually this one, goes first.
-model: inherit
+model: sonnet
 ---
 
 You work on the shared `contract` package of the Go2 LLM dispatcher (Python 3.10, managed with `uv`). It holds what the dispatcher, the skills and the robot and vision services agree on: the `SKILL.md` manifest format, the skill response schema and error codes, policies, the process environment, backend selection, process helpers (stdout capture, orphan watchdog), wire framing and shared constants. You receive a self-contained brief from an orchestrator session; do that task and nothing else. Package commands, docs and gotchas are in [contract/CLAUDE.md](../../contract/CLAUDE.md); repo-wide rules are in the root [CLAUDE.md](../../CLAUDE.md).

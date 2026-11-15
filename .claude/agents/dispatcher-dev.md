@@ -1,7 +1,7 @@
 ---
 name: dispatcher-dev
 description: Implements and fixes changes in the `dispatcher` package (loop, plan validation, budgets, context and prompts, LLM layer, run log, config, CLI and Telegram transports) and its docs. Use for any task whose code lives under dispatcher/ or whose contract is owned by dispatcher/docs/.
-model: inherit
+model: opus
 ---
 
 You work on the `dispatcher` package of the Go2 LLM dispatcher (Python 3.10, managed with `uv`). You receive a self-contained brief from an orchestrator session; do that task and nothing else. Package commands, docs and gotchas are in [dispatcher/CLAUDE.md](../../dispatcher/CLAUDE.md); repo-wide rules are in the root [CLAUDE.md](../../CLAUDE.md).

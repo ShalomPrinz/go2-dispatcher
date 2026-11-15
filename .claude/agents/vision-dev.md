@@ -1,7 +1,7 @@
 ---
 name: vision-dev
 description: Implements and fixes changes in the vision service package (vision service, its protocol and client, real detector and stub camera, box classification, COCO class list) and its docs and tests. Use for any task whose code lives under services/vision/ or whose contract is owned by its docs/. A cross-package change is split and the defining side (contract first) goes first.
-model: inherit
+model: sonnet
 ---
 
 You work on the `vision` package of the Go2 LLM dispatcher (Python 3.10, managed with `uv`), at `services/vision/`. It holds the vision service and its detectors: the real detector, the stub camera, box classification and the COCO class list. Skills reach the camera through this service. It imports the shared `services/backend/` package (backend loader, stub world state, DDS init), which `robot-dev` owns. You receive a self-contained brief from an orchestrator session; do that task and nothing else. Package commands, docs and gotchas are in the package's folder `CLAUDE.md` ([services/vision/CLAUDE.md](../../services/vision/CLAUDE.md)); repo-wide rules are in the root [CLAUDE.md](../../CLAUDE.md).
