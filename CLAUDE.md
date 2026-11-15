@@ -51,12 +51,13 @@ Package commands (golden files, fault injection, opt-in tests) live in the folde
 
 ## Working pattern
 
-- The main session is an **orchestrator**: it always delegates code and doc changes to a project agent (`.claude/agents/`), one task at a time, with a self-contained brief written with the `delegate` skill (`.claude/skills/delegate/`). It does not edit a package (`contract/`, `dispatcher/`, `services/`, `skills/`) itself. Exception: the files under `main` in [.claude/ownership.json](.claude/ownership.json) belong to the main session, which edits them itself (this file, shared docs and the `services/` root files); the map assigns every other path.
+- The main session is an **orchestrator**: it always delegates code and doc changes to a project agent (`.claude/agents/`), one task at a time, with a self-contained brief written with the `delegate` skill (`.claude/skills/delegate/`). It does not edit a package (`analysis/`, `contract/`, `dispatcher/`, `services/`, `skills/`) itself. Exception: the files under `main` in [.claude/ownership.json](.claude/ownership.json) belong to the main session, which edits them itself (this file, shared docs and the `services/` root files); the map assigns every other path.
   - `dispatcher-dev`: anything under `dispatcher/` or owned by `dispatcher/docs/`.
   - `contract-dev`: anything under `contract/` or owned by `contract/docs/`.
   - `robot-dev`: anything under `services/robot/` or `services/backend/`, or owned by `services/robot/docs/` or `services/backend/docs/`.
   - `vision-dev`: anything under `services/vision/` or owned by `services/vision/docs/`.
   - `skills-dev`: anything under `skills/` or owned by `skills/docs/`.
+  - `runs-analyzer`: anything under `analysis/` or owned by `analysis/docs/` (the run-log format stays with `dispatcher/docs/run-log.md`).
   - `tests-dev`: test infrastructure only (pytest plugin, helpers, markers, golden mechanism, coverage, CI) and `tests/docs/testing.md`. Tests of package behaviour go with the package agent.
   - `claude-config-dev`: anything under `.claude/` (agents, skills, hooks, settings). `CLAUDE.md` files go with the agent that owns the folder.
   - A task that touches several packages is split into one task per agent, run in sequence (the side that defines the contract first). Each agent stops and reports when it needs a change on the other side.
