@@ -59,6 +59,23 @@ Notes for later steps:
 - Integration helper modules `tests/integration/robot.py` and `tests/integration/vision.py` keep their names.
 - Sub-agents with `model: sonnet` worked for the mechanical briefs; several left relative links one level short after the move. A markdown link check (every `](path)` resolves) caught them; run one after any move.
 
+### Step 3 (`refactor-03-backend-interface-faults.md`): done
+
+On `architecture_refactor`, 7 commits from `tooling: map the shared services/backend/ package to robot-dev …` to `docs: record the backend interface, the fault wrapper and the exception-free import contracts in architecture.md`. Registry hash `768d05c6633b8fdc` before and after, goldens unchanged; 590 passed, 1 skipped; 96 integration; 14 import contracts kept, **no exceptions left** (roadmap section gone); basedpyright 13 errors (baseline).
+
+Notes for later steps:
+
+- **User decisions**: the per-step robot fault travels in a **separate sim-only fault file** (`contract.faults.fault_file(state_file)` = `<state file>.fault.json`), written by the dispatcher executor before `arm` and consumed by the sim backend at arm; the wire has no `fault` field and `PROTOCOL_VERSION` stays 1. Skill faults (hang, crash, garbage, error) fire from one hook, `skills.faults.fire()`, in `run_skill` before the body (accepted edge case: a fault on `detect_object` fires before the target check). `services/backend/` is owned by robot-dev.
+- **New modules**: `contract/runtime.py` (generic process runtime: `run_main`, `StateSampler(reader, prepare=…)`, `SkillOutcome`, `emit`, `parse_params`, …), `contract/faults.py` (kinds, `SKILL_FAULTS`/`ROBOT_FAULTS`, fault-file helpers), `contract/stub.py` (stub world format and defaults, `Condition`), `contract.backend.select(table)`/`check()` (`backend_name` is private `_name`); `services/backend/` (`stub_state.py`, `dds.py`; doc `services/backend/docs/backend.md`); `services/robot/backends/__init__.py` (`SportClient`, `RobotBackend`, `ArmHook`, `NoArmHook`, cached `load()`), `backends/faults.py` (`FaultySportClient`, only built by `SimBackend.motion()`); `services/robot/stub.py` (`reset_stub`, the dispatcher's only stub access; kept out of `client.py` so skills never reach the stub world); `skills/faults.py`.
+- **Deleted**: `services/robot/local.py`, `services/robot/faults.py`, `services/robot/stub_state.py` (now `services/backend/stub_state.py`).
+- `Motion(client, wait, store, arm_hook)`: `arm_hook.clear()` runs before the old lease ends, `arm_hook.arm()` after (so the re-arm StopMove is not hit by the old sticky `stop_error` and a new fault cannot reach the old job's Moves). Real backend: `NoArmHook`.
+- `services.robot.protocol` holds `Utility(module, policy)` descriptors `STOP_MOVE`, `READ_STATE`; the utilities take `POLICY` from them; the dispatcher imports no utility module.
+- `skills/` now holds `runner.py` (only `run_skill` and its sampler), `faults.py`, `motion.py`, the five skill modules and `catalog/`; there is **no `skills/process.py`** (process helpers are `contract/process.py`). Step 4's `skills/runtime/` should take `runner.py`, `faults.py` and `motion.py`.
+- `dispatcher/config.py` imports only `contract.backend`, `contract.faults`, `contract.stub` and `services.vision.coco` (`COCO_CLASSES`): the COCO list is the one remaining implementation-package import for step 6.
+- **Open, not fixed (stub only)**: an old action that took `Motion`'s lock before a re-arm's abort, but has not yet reached `FaultySportClient`'s take, could consume the new lease's fault (very small window; the fault was bound per job before). Fix only if a fault test flakes.
+- Root `CLAUDE.md` "Working pattern" agent list still says `robot-dev: anything under robot/` and does not name `services/backend/`; it is not main-owned in `.claude/ownership.json`, so it needs the user or a claude-config decision.
+- Unverified on the robot (moved, not exercised): `RealBackend` wiring (`start_source`, `motion`, `sample_state`, `sleep`), `services/backend/dds.py`, the real detector's DDS import.
+
 ## What this is
 
 The system works and is tested. The refactor changes its **structure**, not its behaviour: the code has outgrown the "two packages, `dispatcher/` and `skills/`" layout. An architecture review found nine faults (below). The series fixes them in an order where each step leaves the repo green, committed and usable, so the series can stop after any step.

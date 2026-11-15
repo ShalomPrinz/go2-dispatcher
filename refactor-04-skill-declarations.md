@@ -9,7 +9,7 @@ Read `refactor-00-context.md` first (same branch as this file: `git show origin/
 
 ## Starting point
 
-After steps 1 to 3: `contract/` holds the manifest schema (`SkillFrontmatter`, `Expectation`, `Precondition`), `SkillPolicy` and `MotionCost`; `services/robot/` and `services/vision/` exist with client surfaces; `skills/` holds `runner.py`, `process.py`, `motion.py`, the five skill modules and `catalog/<name>/SKILL.md`.
+After steps 1 to 3: `contract/` holds the manifest schema (`SkillFrontmatter`, `Expectation`, `Precondition`), `SkillPolicy` and `MotionCost`; `services/robot/` and `services/vision/` exist with client surfaces; `skills/` holds `runner.py` (`run_skill` only; the generic runtime is `contract/runtime.py`), `faults.py` (the skill-fault hook, step 3), `motion.py`, the five skill modules and `catalog/<name>/SKILL.md`; the process helpers are `contract/process.py` (see the step 3 status entry).
 
 The name checks to remove (find by symbol):
 
