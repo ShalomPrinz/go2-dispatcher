@@ -12,13 +12,11 @@ from pathlib import Path
 
 from contract.backend import stub_sleep, time_scale
 from contract.schema import ObstacleDistances, Posture, RobotState
+from contract.stub import Condition, WorldObject, objects
 from services.robot import ramp
-from services.robot.faults import Condition
 from services.robot.stub_state import (
     Command,
     Pose,
-    WorldObject,
-    objects,
     read_state,
     state_file,
     write_command,

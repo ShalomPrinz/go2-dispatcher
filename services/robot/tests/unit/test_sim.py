@@ -138,24 +138,6 @@ def test_stand_down_clears_the_command(state):
     assert sim.Stretch() == sim_backend.STUB_ERR_NOT_STANDING
 
 
-def test_parse_objects_defaults_and_errors():
-    parsed = stub_state.parse_objects({"bottle": {"x": 1, "y": 0}, "car": {"x": 5, "y": 1, "height_m": 1.5}})
-    assert parsed == {"bottle": stub_state.WorldObject(1.0, 0.0, 0.25), "car": stub_state.WorldObject(5.0, 1.0, 1.5)}
-    with pytest.raises(ValueError, match="'car' needs height_m"):
-        stub_state.parse_objects({"car": {"x": 5, "y": 1}})
-    bad_objects = (
-        {"chair": {"x": 1}},
-        {"chair": {"x": 1, "y": 0, "z": 0}},
-        {"chair": {"x": "1", "y": 0}},
-        {"chair": {"x": math.nan, "y": 0}},
-        {"car": {"x": 5, "y": 1, "height_m": 0}},
-        [],
-    )
-    for bad in bad_objects:
-        with pytest.raises(ValueError):
-            stub_state.parse_objects(bad)
-
-
 def test_obstacle_ray_cast_follows_the_pose(state, monkeypatch):
     monkeypatch.setenv(STUB_OBJECTS, json.dumps({"chair": {"x": 2.0, "y": 0.0}, "person": {"x": 0.0, "y": 9.0}}))
     near = 2.0 - sim_backend.OBSTACLE_RADIUS_M

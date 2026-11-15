@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contract import policy
+from contract.runtime import SkillOutcome
 from skills import motion, runner
 
 TIMEOUT_S = 15.0  # (tunable)
@@ -11,7 +12,7 @@ SETTLE_S = 3.0  # wait after StandDown so state_after is sampled at rest (tunabl
 POLICY = policy.SkillPolicy(name="sit", timeout=TIMEOUT_S)
 
 
-def body(params: dict) -> runner.SkillOutcome:
+def body(params: dict) -> SkillOutcome:
     return motion.single_action("StandDown", SETTLE_S)
 
 

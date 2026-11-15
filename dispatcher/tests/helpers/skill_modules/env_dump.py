@@ -9,7 +9,8 @@ from __future__ import annotations
 import os
 
 from contract import policy
-from skills import runner
+from contract.runtime import SkillOutcome
+from skills.runner import run_skill
 
 SKILL = "env_dump"
 
@@ -17,11 +18,11 @@ SKILL = "env_dump"
 POLICY = policy.SkillPolicy(name=SKILL, timeout=10.0)
 
 
-def _body(params: dict) -> runner.SkillOutcome:
-    return runner.SkillOutcome.ok(
+def _body(params: dict) -> SkillOutcome:
+    return SkillOutcome.ok(
         observations={"env_keys": sorted(os.environ)}, timing={"client_init_ms": 0.0, "exec_ms": 0.0}
     )
 
 
 if __name__ == "__main__":
-    runner.run_skill(POLICY, _body, sample_state=False)
+    run_skill(POLICY, _body, sample_state=False)

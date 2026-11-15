@@ -15,8 +15,9 @@ from pathlib import Path
 import pytest
 from pydantic import TypeAdapter
 
+from contract import faults
 from contract.schema import SkillResponse
-from services.robot import faults, protocol, stub_state
+from services.robot import protocol, stub_state
 from services.robot.backends import sim
 from tests.helpers import REPO_ROOT
 from tests.integration import robot

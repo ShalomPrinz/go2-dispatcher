@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
-from contract.schema import ErrorCode
+from contract.runtime import SkillOutcome, StateSampler, build_response, to_json
+from contract.schema import ErrorCode, RobotState
 from dispatcher import prompts
 from dispatcher.executor import _parse_response, _step_outcome
 from dispatcher.models import StopCause
-from skills.runner import SkillOutcome, StateSampler, build_response, to_json
+
+
+def _no_state() -> RobotState:
+    raise AssertionError("the sampler is never taken here")
 
 
 def _reply(outcome: SkillOutcome):
-    return _parse_response(to_json(build_response("walk", outcome, StateSampler(), 0.0)), "walk")
+    return _parse_response(to_json(build_response("walk", outcome, StateSampler(_no_state), 0.0)), "walk")
 
 
 UNAVAILABLE = _reply(

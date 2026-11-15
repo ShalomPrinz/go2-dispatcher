@@ -1,6 +1,6 @@
 # contract/CLAUDE.md
 
-The `contract` package: what the dispatcher, the skills and the services agree on. The `SKILL.md` schema and parser, the skill process environment, the response and robot state schema, the error codes, the policy types, the shared wire framing, the shared constants, the process resources (saved stdout, orphan watchdog) and backend selection. Repo-wide rules are in the root [CLAUDE.md](../CLAUDE.md).
+The `contract` package: what the dispatcher, the skills and the services agree on. The `SKILL.md` schema and parser, the skill process environment, the response and robot state schema, the error codes, the policy types, the shared wire framing, the shared constants, the process resources (saved stdout, orphan watchdog), backend selection, the skill and utility runtime, and the stub's fault kinds and world format. Repo-wide rules are in the root [CLAUDE.md](../CLAUDE.md).
 
 ## Commands
 
@@ -17,7 +17,7 @@ uv run lint-imports                            # import contracts; must pass bef
 
 | Doc | Covers |
 |---|---|
-| [contract.md](docs/contract.md) | The package's modules, `SKILL.md` frontmatter, expectations and preconditions, `SKILL.md` body, invocation and environment, response schema, error codes, timeout and motion-cost policies, wire framing, shared constants, `process` and `backend` |
+| [contract.md](docs/contract.md) | The package's modules, `SKILL.md` frontmatter, expectations and preconditions, `SKILL.md` body, invocation and environment, response schema, error codes, timeout and motion-cost policies, wire framing, shared constants, `process`, `backend`, the skill and utility `runtime`, the stub's `faults` and `stub` world format |
 | [skills.md](../skills/docs/skills.md) | The skills, catalog and registry hash, adding a skill |
 | [vision.md](../services/vision/docs/vision.md) | The vision service (its protocol uses the wire framing) |
 | [service.md](../services/robot/docs/service.md) | The robot service (its protocol uses the wire framing), stub backend and fault injection |

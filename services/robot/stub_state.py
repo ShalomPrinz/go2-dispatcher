@@ -1,30 +1,16 @@
 """The stub's state file (services/robot/docs/service.md): posture, an odometry pose, the running velocity command
-and an injected robot fault in a shared JSON file, and the objects placed in the stub world. Standard library, contract
-and services.robot.faults (the condition names) only."""
+and an injected robot fault in a shared JSON file. Standard library and contract only."""
 
 from __future__ import annotations
 
 import json
-import math
 import os
 import tempfile
-from collections.abc import Mapping
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import Literal, get_args
 
-from contract.env import STUB_OBJECTS, STUB_STATE_FILE
-from services.robot.faults import CONDITIONS, Condition
-
-# Stub defaults: used when the env is unset (manual runs) and as the dispatcher's stub config defaults.
-DEFAULT_STATE_FILE = "logs/.stub_state.json"
-
-StubPosture = Literal["standing", "sitting"]  # the postures the stub can hold; a subset of contract.schema.Posture
-STUB_POSTURES: tuple[StubPosture, ...] = get_args(StubPosture)
-DEFAULT_POSTURE: StubPosture = "standing"
-
-# Object heights for GO2_STUB_OBJECTS entries without height_m.
-DEFAULT_HEIGHTS_M = {"bottle": 0.25, "cup": 0.10, "chair": 0.90, "person": 1.70}
+from contract.env import STUB_STATE_FILE
+from contract.stub import CONDITIONS, DEFAULT_POSTURE, DEFAULT_STATE_FILE, STUB_POSTURES, Condition, StubPosture
 
 
 @dataclass(frozen=True)
@@ -48,55 +34,11 @@ class StubState:
     condition: Condition | None = None  # an injected robot fault: fallen until reset, stuck until the sequence ends
 
 
-@dataclass(frozen=True)
-class WorldObject:
-    x: float
-    y: float
-    height_m: float
-
-
 # --- settings -----------------------------------------------------------------
 
 
 def state_file() -> Path:
     return Path(os.environ.get(STUB_STATE_FILE) or DEFAULT_STATE_FILE)
-
-
-def _finite(value: object, where: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
-        raise ValueError(f"{where} must be a finite number, got {value!r}")
-    return float(value)
-
-
-def parse_objects(data: object) -> dict[str, WorldObject]:
-    """Validate ``{class: {"x", "y", "height_m"?}}``; ``height_m`` defaults from ``DEFAULT_HEIGHTS_M``."""
-    if not isinstance(data, Mapping):
-        raise ValueError(f"stub objects must be an object of objects, got {data!r}")
-    out: dict[str, WorldObject] = {}
-    for name, spec in data.items():
-        if not isinstance(spec, Mapping) or not {"x", "y"} <= set(spec) <= {"x", "y", "height_m"}:
-            raise ValueError(f"stub object {name!r} must have x, y and optional height_m, got {spec!r}")
-        if "height_m" in spec:
-            height = _finite(spec["height_m"], f"stub object {name!r} height_m")
-            if height <= 0:
-                raise ValueError(f"stub object {name!r} height_m must be > 0, got {height!r}")
-        elif name in DEFAULT_HEIGHTS_M:
-            height = DEFAULT_HEIGHTS_M[name]
-        else:
-            raise ValueError(
-                f"stub object {name!r} needs height_m (defaults exist only for {', '.join(DEFAULT_HEIGHTS_M)})"
-            )
-        out[name] = WorldObject(
-            x=_finite(spec["x"], f"stub object {name!r} x"),
-            y=_finite(spec["y"], f"stub object {name!r} y"),
-            height_m=height,
-        )
-    return out
-
-
-def objects() -> dict[str, WorldObject]:
-    raw = os.environ.get(STUB_OBJECTS)
-    return parse_objects(json.loads(raw)) if raw else {}
 
 
 # --- state file -----------------------------------------------------------------

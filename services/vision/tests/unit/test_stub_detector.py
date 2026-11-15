@@ -6,6 +6,7 @@ import math
 
 import pytest
 
+from contract.stub import WorldObject
 from services.robot import stub_state
 from services.vision import boxes
 from services.vision.detectors import stub
@@ -13,9 +14,9 @@ from services.vision.detectors import stub
 BOTTLE_HEIGHT_M = 0.25
 
 
-def bottle_at(depth: float, left: float = 0.0) -> stub_state.WorldObject:
+def bottle_at(depth: float, left: float = 0.0) -> WorldObject:
     """A ``BOTTLE_HEIGHT_M`` bottle at camera depth ``depth`` and ``left`` metres to the left, seen from the origin."""
-    return stub_state.WorldObject(x=stub.CAMERA_OFFSET_M + depth, y=left, height_m=BOTTLE_HEIGHT_M)
+    return WorldObject(x=stub.CAMERA_OFFSET_M + depth, y=left, height_m=BOTTLE_HEIGHT_M)
 
 
 def depth_for(h_frac: float) -> float:
@@ -42,7 +43,7 @@ def test_project_closeness_position_and_confidence():
     assert stub.project(stub_state.Pose(), bottle_at(1.0, left=0.5)).position == "left"
     assert stub.project(stub_state.Pose(), bottle_at(1.0, left=-0.5)).position == "right"
     facing_left = stub_state.Pose(0.0, 0.0, math.pi / 2)  # the same bottle, now seen after a left turn
-    assert stub.project(facing_left, stub_state.WorldObject(0.0, 2.3, BOTTLE_HEIGHT_M)).position == "center"
+    assert stub.project(facing_left, WorldObject(0.0, 2.3, BOTTLE_HEIGHT_M)).position == "center"
 
 
 def test_project_not_found():

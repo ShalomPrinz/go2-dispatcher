@@ -1,5 +1,5 @@
-"""Stub fault injection (services/robot/docs/service.md): the fault kinds, the skill process's side (inject_fault) and
-the robot service's side of a service fault. Standard library and contract only."""
+"""Stub fault injection (services/robot/docs/service.md): the skill process's side (inject_fault) and the robot
+service's side of a service fault; the fault kinds are in contract.faults. Standard library and contract only."""
 
 from __future__ import annotations
 
@@ -7,21 +7,11 @@ import os
 import signal
 import sys
 import time
-from typing import Literal, get_args
 
 from contract import process
 from contract.env import STUB_FAULT
+from contract.faults import CRASH_EXIT_CODE, FAULT_KINDS
 
-STUB_ERR_INJECTED = 99
-FaultKind = Literal[
-    "error", "hang", "crash", "garbage", "service_hang", "service_crash", "stop_error", "rejected", "fallen", "stuck"
-]
-FAULT_KINDS: tuple[FaultKind, ...] = get_args(FaultKind)
-Condition = Literal["fallen", "stuck"]  # robot faults the sim robot keeps in the state file
-CONDITIONS: tuple[Condition, ...] = get_args(Condition)
-# Applied by the robot service; the conditions by the sim robot, the rest by the service itself.
-SERVICE_FAULTS: tuple[FaultKind, ...] = ("service_hang", "service_crash", "stop_error", "rejected", *CONDITIONS)
-CRASH_EXIT_CODE = 139
 GARBAGE_TEXT = "not json\n"
 HANG_POLL_S = 1.0
 

@@ -26,7 +26,9 @@ from typing import Any, NoReturn, Protocol, cast
 
 from contract import backend, process, wire
 from contract.env import ROBOT_SOCKET, robot_lock_path
+from contract.faults import ROBOT_FAULTS, STUB_ERR_INJECTED
 from contract.schema import RobotState
+from contract.stub import CONDITIONS, Condition
 from services.robot import faults, protocol
 from services.robot.backends import sim as sim_backend
 from services.robot.state_store import StateStore
@@ -204,7 +206,7 @@ class Motion:
         """StopMove for a stop already counted in ``_stops_running``; records it and wakes a waiting disarm."""
         t = time.monotonic()
         try:
-            ret: int | None = faults.STUB_ERR_INJECTED if self._stop_error else self._client.StopMove()
+            ret: int | None = STUB_ERR_INJECTED if self._stop_error else self._client.StopMove()
         except Exception:
             traceback.print_exc(file=sys.stderr)
             ret = None
@@ -353,8 +355,8 @@ class Motion:
         elif fault == "rejected":
             with self._lock:
                 self._rejected = True
-        elif fault in faults.CONDITIONS:  # accepted only on the sim backend (_service_fault)
-            cast(sim_backend.SimRobot, self._client).inject(cast(faults.Condition, fault))
+        elif fault in CONDITIONS:  # accepted only on the sim backend (_service_fault)
+            cast(sim_backend.SimRobot, self._client).inject(cast(Condition, fault))
         elif fault is not None:
             faults.apply_service_fault(fault)
 
@@ -512,7 +514,7 @@ def _target(request: dict) -> protocol.MoveTarget | None:
 
 def _service_fault(request: dict, motion: Motion) -> str | None:
     fault = request.get("fault")
-    if fault is not None and (not motion.sim or fault not in faults.SERVICE_FAULTS):
+    if fault is not None and (not motion.sim or fault not in ROBOT_FAULTS):
         raise ValueError(f"fault {fault!r} is not a service fault of the sim backend")
     return fault
 

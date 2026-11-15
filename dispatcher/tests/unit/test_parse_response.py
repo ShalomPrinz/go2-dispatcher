@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import pytest
 
-from contract.schema import ErrorCode
+from contract.runtime import SkillOutcome, StateSampler, build_response, to_json
+from contract.schema import ErrorCode, RobotState
 from dispatcher.executor import _parse_response
-from skills.runner import SkillOutcome, StateSampler, build_response, to_json
 
-LINE = to_json(build_response("walk", SkillOutcome.ok(observations={}, timing={}), StateSampler(), 0.0))
+
+def _no_state() -> RobotState:
+    raise AssertionError("the sampler is never taken here")
+
+
+LINE = to_json(build_response("walk", SkillOutcome.ok(observations={}, timing={}), StateSampler(_no_state), 0.0))
 
 
 @pytest.mark.parametrize(
@@ -19,7 +24,7 @@ LINE = to_json(build_response("walk", SkillOutcome.ok(observations={}, timing={}
             build_response(
                 "walk",
                 SkillOutcome.error(ErrorCode.SDK_ERROR, "y", observations={}, timing={}),
-                StateSampler(),
+                StateSampler(_no_state),
                 0.0,
             )
         )

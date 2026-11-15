@@ -93,11 +93,6 @@ name = "The services import neither skills nor the dispatcher"
 type = "forbidden"
 source_modules = ["services"]
 forbidden_modules = ["skills", "dispatcher"]
-ignore_imports = [
-  "services.robot.stop_move -> skills.runner",   # exception, to be removed: the utilities use the skill runtime
-  "services.robot.read_state -> skills.runner",   # same reason
-  "services.robot.tests.unit.test_stop_move -> skills.runner",   # exception, to be removed: the unit test of a utility that uses the skill runtime
-]
 
 [[tool.importlinter.contracts]]
 name = "The dispatcher imports only the client surfaces of robot and vision"

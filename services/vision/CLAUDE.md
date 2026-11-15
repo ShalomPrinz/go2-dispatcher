@@ -30,7 +30,7 @@ uv run lint-imports                            # import contracts; must pass bef
 - Real-backend code (`detectors/real.py`) cannot be run from an agent: no `--backend real`, no `robot.backend = "real"`, no `--run-robot`. Verify it with unit tests and the stub only ([safety.md](../../docs/safety.md#supervised-operation-rules)).
 - Mark camera and detector facts not yet checked on the robot as *unverified* ([vision.md](docs/vision.md#object-detection)).
 - `skills` and `dispatcher` import only `services.vision.protocol`, `services.vision.client` and `services.vision.coco`; these modules never import a detector, the service or a third-party package ([vision.md](docs/vision.md#the-package)).
-- `vision` imports `contract` only. The two exceptions: `detectors/stub.py` imports `services.robot.stub_state` and `detectors/real.py` imports `services.robot.backends.real` for `init_dds` ([vision.md](docs/vision.md#design-decisions)). `robot` never imports `vision`.
+- `vision` imports `contract` only. The two exceptions: `detectors/stub.py` imports `services.robot.stub_state` (pose only; world objects come from `contract.stub`) and `detectors/real.py` imports `services.robot.backends.real` for `init_dds` ([vision.md](docs/vision.md#design-decisions)). `robot` never imports `vision`.
 - Third-party imports (`ultralytics`, `cv2`, `numpy`, `unitree_sdk2py`) live inside methods in `detectors/real.py`; importing any `vision` module needs only the standard library.
 - The weights file is never downloaded automatically; a missing file is `weights_missing`.
 - The service only reads the camera: it never creates a `SportClient`.

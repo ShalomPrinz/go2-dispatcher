@@ -7,6 +7,7 @@ from dataclasses import replace
 
 from contract import policy
 from contract.constants import YAW_SIGN
+from contract.runtime import SkillOutcome
 from services.robot import ramp
 from services.robot.protocol import MoveTarget
 from skills import motion, runner
@@ -29,7 +30,7 @@ POLICY = policy.SkillPolicy(
 )
 
 
-def body(params: dict) -> runner.SkillOutcome:
+def body(params: dict) -> SkillOutcome:
     direction = params["direction"]
     angle_deg = float(params["angle_deg"])
     sign = YAW_SIGN[direction]

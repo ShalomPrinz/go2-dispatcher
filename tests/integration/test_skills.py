@@ -12,9 +12,11 @@ import time
 import pytest
 from pydantic import TypeAdapter
 
+from contract import faults
 from contract.schema import SkillResponse
-from services.robot import faults, stub_state
+from services.robot import stub_state
 from services.robot.backends import sim
+from services.robot.faults import GARBAGE_TEXT
 from tests.helpers import REPO_ROOT
 from tests.integration import robot, vision
 from tests.integration.skill_process import run_module, single_response, stub_env
@@ -132,9 +134,12 @@ print(json.dumps({"modules": names, "heavy": heavy, "out": buf.getvalue(),
         "contract.backend",
         "contract.constants",
         "contract.env",
+        "contract.faults",
         "contract.policy",
         "contract.process",
+        "contract.runtime",
         "contract.schema",
+        "contract.stub",
         "contract.wire",
         # the client surfaces a skill process loads
         "services.robot.client",
@@ -307,7 +312,7 @@ def test_fault_crash(tmp_path):
 def test_fault_garbage(tmp_path):
     proc = run_module("walk", VALID["walk"], stub_env(tmp_path, fault="garbage"))
     assert proc.returncode == 0
-    assert proc.stdout == faults.GARBAGE_TEXT
+    assert proc.stdout == GARBAGE_TEXT
 
 
 # --- orphan watchdog -------------------------------------------------------------------

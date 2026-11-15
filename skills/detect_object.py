@@ -6,6 +6,7 @@ import difflib
 import time
 
 from contract import backend, policy
+from contract.runtime import SkillOutcome, ms_since
 from contract.schema import ErrorCode
 from services.robot import faults
 from services.vision import client, protocol
@@ -34,20 +35,20 @@ def unsupported_message(target: str) -> str:
     return f"'{target}' is not a detectable object."
 
 
-def body(params: dict) -> runner.SkillOutcome:
+def body(params: dict) -> SkillOutcome:
     target = params["target"].strip().lower()
     obs: dict = {"target": target}
     if target not in COCO_CLASSES:
-        return runner.SkillOutcome.error(
+        return SkillOutcome.error(
             ErrorCode.UNSUPPORTED_OBJECT, unsupported_message(target), observations=obs, timing={}
         )
     t = time.monotonic()
     try:
         conn = client.connect(client.socket_path())
     except DetectorError as e:
-        timing = {"connect_ms": runner.ms_since(t)}
-        return runner.SkillOutcome.error(e.code, protocol.error_message(e), observations=obs, timing=timing)
-    timing = {"connect_ms": runner.ms_since(t)}
+        timing = {"connect_ms": ms_since(t)}
+        return SkillOutcome.error(e.code, protocol.error_message(e), observations=obs, timing=timing)
+    timing = {"connect_ms": ms_since(t)}
     t = time.monotonic()
     try:
         with conn:
@@ -55,9 +56,9 @@ def body(params: dict) -> runner.SkillOutcome:
                 raise CameraUnavailable("injected camera fault")
             found = client.detect(conn, target, REPLY_WAIT_S)
     except DetectorError as e:
-        timing["exec_ms"] = runner.ms_since(t)
-        return runner.SkillOutcome.error(e.code, protocol.error_message(e), observations=obs, timing=timing)
-    timing["exec_ms"] = runner.ms_since(t)
+        timing["exec_ms"] = ms_since(t)
+        return SkillOutcome.error(e.code, protocol.error_message(e), observations=obs, timing=timing)
+    timing["exec_ms"] = ms_since(t)
     obs["object_found"] = bool(found.found)
     if found.found and found.confidence is not None:  # protocol.parse_reply checked the fields
         obs.update(
@@ -65,7 +66,7 @@ def body(params: dict) -> runner.SkillOutcome:
             closeness=found.closeness,
             confidence=round(float(found.confidence), CONFIDENCE_DECIMALS),
         )
-    return runner.SkillOutcome.ok(observations=obs, timing=timing)
+    return SkillOutcome.ok(observations=obs, timing=timing)
 
 
 def main() -> None:

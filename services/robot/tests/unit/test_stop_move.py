@@ -6,15 +6,14 @@ import sys
 
 import pytest
 
-from contract import backend, process
+from contract import backend, process, runtime
 from services.robot import local, stop_move
 from services.robot.protocol import StateUnavailable
 from services.robot.tests.fake_sport import FakeClient
-from skills import runner
 
 
 class Emitted(Exception):
-    """Raised by the patched runner.emit instead of exiting the process."""
+    """Raised by the patched runtime.emit instead of exiting the process."""
 
 
 @pytest.fixture
@@ -38,10 +37,10 @@ def run_stop_move(monkeypatch):
         emitted = []
 
         def emit(skill, outcome, states, total_ms, setup):
-            emitted.append(runner.build_response(skill, outcome, states, total_ms, setup=setup))
+            emitted.append(runtime.build_response(skill, outcome, states, total_ms, setup=setup))
             raise Emitted
 
-        monkeypatch.setattr(runner, "emit", emit)
+        monkeypatch.setattr(runtime, "emit", emit)
         with pytest.raises(Emitted):
             stop_move.main()
         return emitted[0]

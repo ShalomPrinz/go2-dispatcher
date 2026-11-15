@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from contract import policy
+from contract.runtime import SkillOutcome
 from services.robot import ramp
 from skills import motion, runner
 
@@ -25,7 +26,7 @@ POLICY = policy.SkillPolicy(
 )
 
 
-def body(params: dict) -> runner.SkillOutcome:
+def body(params: dict) -> SkillOutcome:
     direction = params["direction"]
     distance_m = float(params["distance_m"])
     sx, sy = DIRECTION_VECTORS[direction]
