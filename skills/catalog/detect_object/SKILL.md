@@ -8,6 +8,7 @@ params:
     description: Object to look for, as a lowercase COCO class name (for example chair, person, bottle, cell phone).
 expect:
   self_reported: true
+uses_vision: true
 ---
 
 ## Use when

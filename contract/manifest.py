@@ -169,8 +169,10 @@ class SkillFrontmatter(_Strict):
     params: dict[Name, ParamSpec] = {}  # frontmatter order
     expect: Expectation | None = None  # absent: the step is unverified; not in the catalog
     requires: Precondition | None = None  # absent: no precondition; not in the catalog
+    uses_vision: Literal[True] | None = None  # absent: not a vision client; not in the catalog
+    moves: Literal[True] | None = None  # absent: commands no robot motion; not in the catalog
 
-    @field_validator("expect", "requires", mode="before")
+    @field_validator("expect", "requires", "uses_vision", "moves", mode="before")
     @classmethod
     def _no_null(cls, v: Any, info: ValidationInfo) -> Any:
         if v is None:

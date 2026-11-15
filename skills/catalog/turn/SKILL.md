@@ -21,6 +21,7 @@ expect:
     tolerance_deg: 10
 requires:
   posture: [standing]
+moves: true
 ---
 
 ## Use when

@@ -16,6 +16,7 @@ params:
     description: Distance to travel.
 requires:
   posture: [standing]
+moves: true
 ---
 
 ## Use when

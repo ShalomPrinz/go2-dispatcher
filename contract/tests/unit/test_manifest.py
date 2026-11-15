@@ -58,6 +58,19 @@ def test_expect_and_requires_parse(tmp_path):
     assert bare.expect is None and bare.requires is None  # absent: unverified, no precondition
 
 
+def test_capability_declarations(tmp_path):
+    bare = parse_skill_file(write(tmp_path, ""))
+    assert not bare.uses_vision and not bare.moves  # absent: false
+    both = parse_skill_file(write(tmp_path, "uses_vision: true\nmoves: true\n"))
+    assert both.uses_vision is True and both.moves is True
+
+
+@pytest.mark.parametrize("key", ["uses_vision", "moves"])
+@pytest.mark.parametrize(("value", "match"), [("false", None), ("", "must not be null")])
+def test_capability_declaration_rejects_false_and_null(tmp_path, key, value, match):
+    assert_error(write(tmp_path, f"{key}: {value}\n"), match or key)
+
+
 @pytest.mark.parametrize(
     ("frontmatter", "match"),
     [

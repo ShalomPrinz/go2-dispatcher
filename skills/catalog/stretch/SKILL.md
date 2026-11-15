@@ -7,6 +7,7 @@ expect:
   mode: 0
 requires:
   posture: [standing]
+moves: true
 ---
 
 ## Use when
