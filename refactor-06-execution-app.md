@@ -23,6 +23,7 @@ Steps 1 to 5 are done: `contract/`, `services/robot/` (with a backend interface 
 - `dispatcher/report.py` reads run logs and imports a few constants from the run log module and config.
 - `needs_vision(skill)` in `executor.py` is now only `skill.uses_vision` (step 4); inline it at its callers. The report's `MOTION_SKILLS` / `STATIONARY_SKILLS` default list is checked against the registry's `moves` declaration by `dispatcher/tests/unit/test_report.py`; when the report moves to `analysis/`, move that check to root `tests/` so `analysis` imports no registry.
 - Result types that step 5 left in `dispatcher/models.py` for this step.
+- Step 5 notes in `refactor-00-context.md` list what `models.py` holds now. `planning` (bounds, verification) and `llm` (`StopCause`) import some of those types, and step 5's import contracts forbid both from importing execution modules, indirectly too: those types must stay in a module outside `execution/` that both may import.
 
 ## Design guidance
 
