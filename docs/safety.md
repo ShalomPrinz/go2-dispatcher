@@ -12,7 +12,7 @@ Everything that limits or stops the robot. The dispatcher bounds what the LLM ca
 - If an outcome ends with `WARNING: the stop command to the robot failed. Stop the robot manually.`, use the remote at once.
 - Do not raise `motion_budget.*`, the walk/turn ranges in `SKILL.md`, or the policy timeouts without recording the reason in the owning document.
 - Stub faults never reach the robot. Robot faults travel in a sim-only fault file that only the sim backend reads; the real backend never reads it and never loads fault code (`services/robot/backends/faults.py`, `contract.faults`), and no protocol message carries a fault, so the robot service's messages are the same on both backends. A test checks that loading the real backend and the robot service imports neither ([service.md](../services/robot/docs/service.md#fault-injection)).
-- Coding agents never run the real backend or robot tests. `.claude/settings.json` denies Claude Code commands containing `--backend real` or `--run-robot`, denies reading `.env`, and asks before `--run-live`. It also asks before editing the fixed texts (`dispatcher/prompts.py`, catalog `SKILL.md` files), since that changes the registry hash ([skills.md](../skills/docs/skills.md)).
+- Coding agents never run the real backend or robot tests. `.claude/settings.json` denies Claude Code commands containing `--backend real` or `--run-robot`, denies reading `.env`, and asks before `--run-live`. It also asks before editing catalog `SKILL.md` files, which change the registry hash ([skills.md](../skills/docs/skills.md)); changes to the fixed texts in `dispatcher/prompts.py` are caught by the golden files and the registry-hash test.
 
 ## The stop path
 
