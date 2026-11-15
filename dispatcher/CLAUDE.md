@@ -29,7 +29,7 @@ uv run go2 report [FOLDER]                     # latency report from existing ru
 
 ## Gotchas
 
-- Fixed texts in `prompts.py` change the golden files and make runs incomparable; only the system text (`SYSTEM_TEMPLATE`) also changes the registry hash ([skills.md](../skills/docs/skills.md#catalog-and-registry-hash)). Regenerate with `--update-golden` and review the diff.
+- Fixed texts in `prompts.py` (model) and `operator_messages.py` (operator outcomes, read again as Previous task) change the golden files and make runs incomparable; `transports/texts.py` (CLI and Telegram) changes only the golden files; only the system text (`SYSTEM_TEMPLATE`) also changes the registry hash ([skills.md](../skills/docs/skills.md#catalog-and-registry-hash)). Regenerate with `--update-golden` and review the diff.
 - Changes to `context.py` (step rendering, user message) change the `context_*.txt` golden files; a `SKILL.md` change on the skills side changes `catalog.txt`.
 - `anthropic` and `httpx` are imported lazily inside `llm.py`; a top-level `anthropic` import breaks the "CLI does not import `anthropic`" test ([llm.md](docs/llm.md#design-decisions)).
 - The dispatcher imports `contract`, `skills` and the client surfaces of `services.robot` and `services.vision` (never `services.robot.service`, `services.robot.backends`, `services.vision.service`, `services.vision.detectors` or `services.backend`; it reaches the stub world only through `services.robot.stub`, enforced by an import contract), never the reverse. `dispatcher/tests/` holds unit tests only; tests that spawn subprocesses or need both packages go in root `tests/` ([testing.md](../tests/docs/testing.md#layout)).

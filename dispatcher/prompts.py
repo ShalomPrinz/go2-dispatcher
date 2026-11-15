@@ -1,20 +1,17 @@
-"""Every fixed wording the LLM reads, and every operator-facing task text (dispatcher/docs/loop-and-context.md).
+"""Every fixed wording the LLM reads (dispatcher/docs/loop-and-context.md).
 
-Console diagnostics and start-up errors stay in their modules, as do the tool schema and the step-line shapes.
+Operator outcome texts are in operator_messages.py, transport texts in transports/texts.py; console diagnostics,
+start-up errors, the tool schema and the step-line shapes stay in their modules.
 Wording is draft (docs/roadmap.md) and must stay identical across experimental conditions.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from .budget import (
     MOTION_BUDGET_MESSAGE,  # re-exported: defined once, in budget.py (dispatcher/docs/loop-and-context.md)
 )
-
-if TYPE_CHECKING:
-    from .models import PreconditionFailure, StepResult, TaskOutcomeCode  # models imports this module
 
 __all__ = [
     "SYSTEM_TEMPLATE",
@@ -74,50 +71,6 @@ __all__ = [
     "VERIFICATION_FAILED_DETAIL",
     "GOAL_NOT_REACHED",
     "FAULT_TEXTS",
-    "fault_note",
-    "OPERATOR_MESSAGES",
-    "SERVICE_LOST_STOP_CONFIRMED",
-    "SERVICE_LOST_STOP_FAILED",
-    "DONE_DEFAULT_MESSAGE",
-    "STOP_MOVE_WARNING",
-    "OutcomeFacts",
-    "operator_message",
-    "BUSY",
-    "STOPPING",
-    "NOTHING_RUNNING",
-    "WORKING",
-    "EMPTY_TASK",
-    "HELP",
-    "help_text",
-    "STEPS_LINE",
-    "OMITTED_LINES",
-    "ERROR_REPLY",
-    "TELEGRAM_OUTCOMES",
-    "TELEGRAM_STOP_MOVE_WARNING",
-    "TELEGRAM_LAST_FAILURE",
-    "STEP_REASONS",
-    "STEP_REASON_FALLBACK",
-    "STEP_REASON_FAULTS",
-    "STEP_REASON_GOAL",
-    "STEP_REASON_WITH_FAULTS",
-    "PROGRESS_THINKING",
-    "PROGRESS_PLAN",
-    "PROGRESS_PLAN_MESSAGE",
-    "PROGRESS_PLAN_STEP",
-    "PROGRESS_PLAN_DONE",
-    "PROGRESS_PLAN_ABORT",
-    "PROGRESS_PLAN_ASK",
-    "PROGRESS_PLAN_MALFORMED",
-    "PROGRESS_PLAN_OVER_BUDGET",
-    "PROGRESS_ASKING_AGAIN",
-    "PROGRESS_GIVING_UP",
-    "PROGRESS_STEP_RUNNING",
-    "PROGRESS_STEP_OK",
-    "PROGRESS_STEP_FAILED",
-    "PROGRESS_DURATION",
-    "PROGRESS_STOP_REQUESTED",
-    "PROGRESS_STOP_MOVE_SENT",
-    "PROGRESS_STOP_MOVE_FAILED",
 ]
 
 # --- System (S1, S2), dispatcher/docs/loop-and-context.md ---------------------------------------------------
@@ -274,186 +227,3 @@ FAULT_TEXTS: dict[str, str] = {
     "fault_mode": "the robot is in a fault mode",
     "command_rejected": "the robot rejected the command",
 }
-
-
-def fault_note(sr: StepResult) -> str | None:
-    """What a step line adds after its outcome: for a ``failed`` verdict, the faults or the missed goal; for a
-    step with no verdict, the detected faults only; else None."""
-    faults = ", ".join(FAULT_TEXTS[f] for f in sr.faults)
-    if sr.verification == "failed":
-        return VERIFICATION_FAILED_DETAIL.format(reasons=faults or GOAL_NOT_REACHED)
-    return faults or None
-
-
-# --- Operator messages (TaskOutcome.message) ---------------------------------------------------
-
-OPERATOR_MESSAGES: dict[str, str] = {
-    "DONE": "{message}",
-    "ABORTED": "{message}",
-    "ASKED": "Question: {message}",
-    "STOPPED": "Stopped on request. A stop command was sent to the robot.",
-    "TIME_LIMIT_EXCEEDED": (
-        "Stopped: the task exceeded its {limit:g}s time limit. A stop command was sent to the robot."
-    ),
-    "FAILURE_BUDGET_EXHAUSTED": (
-        "Stopped: the robot failed {n} times while trying this task. Last failure: {skill}: {error_message}"
-    ),
-    "CALL_BUDGET_EXHAUSTED": ("Stopped: the task reached the limit of {n} planning calls without finishing."),
-    "LLM_INVALID": "Stopped: the model returned an invalid plan twice.",
-    "LLM_ERROR": "Stopped: the model could not be reached ({detail}).",
-    "STATE_UNAVAILABLE": "Stopped: the robot state could not be read ({detail}).",
-    "PRECONDITION_FAILED": "Stopped: {skill} needs the robot to be {required}, but its posture is {posture}.",
-    "ROBOT_SERVICE_LOST": "Stopped: the robot control service was lost ({detail}).",
-    "STOP_FAILED": "Stopped: the robot may still be moving.",  # the always-set warning names the action
-    "INTERNAL_ERROR": "Stopped: internal error ({exception_type}). See run log {run_id}.",
-}
-# ROBOT_SERVICE_LOST details: whether the fallback stop was confirmed (dispatcher/docs/loop-and-context.md)
-SERVICE_LOST_STOP_CONFIRMED = "the fallback stop was confirmed"
-SERVICE_LOST_STOP_FAILED = "the fallback stop failed"
-DONE_DEFAULT_MESSAGE = "Task completed, LLM didn't provide more details."  # DONE without a message
-STOP_MOVE_WARNING = " WARNING: the stop command to the robot failed. Stop the robot manually."
-
-
-@dataclass(frozen=True)
-class OutcomeFacts:
-    """What an operator message is filled from; each outcome's text uses only the fields it names."""
-
-    run_id: str
-    time_limit_s: float
-    max_llm_calls: int
-    failures: int
-    last_failure: StepResult | None = None
-    message: str | None = None  # DONE / ABORTED / ASKED: the model's message
-    detail: str = ""  # LLM_ERROR, STATE_UNAVAILABLE, ROBOT_SERVICE_LOST
-    exception_type: str = "Exception"  # INTERNAL_ERROR
-    precondition: PreconditionFailure | None = None  # PRECONDITION_FAILED
-
-
-def _last_failure(lf: StepResult | None) -> str:
-    """An ``ok`` step: its failed verdict. Else the step's message (or its outcome), then any detected fault."""
-    if lf is None:
-        return ""
-    note = fault_note(lf)
-    if lf.outcome == "ok":
-        return note or lf.outcome
-    return "; ".join(filter(None, [lf.error_message or lf.outcome, note]))
-
-
-def _operator_args(outcome: TaskOutcomeCode, facts: OutcomeFacts) -> dict[str, Any]:
-    if outcome == "DONE":
-        return {"message": facts.message if facts.message and facts.message.strip() else DONE_DEFAULT_MESSAGE}
-    if outcome in ("ABORTED", "ASKED"):
-        return {"message": facts.message or ""}
-    if outcome == "TIME_LIMIT_EXCEEDED":
-        return {"limit": facts.time_limit_s}
-    if outcome == "FAILURE_BUDGET_EXHAUSTED":
-        lf = facts.last_failure
-        return {"n": facts.failures, "skill": lf.ref.skill if lf else "", "error_message": _last_failure(lf)}
-    if outcome == "CALL_BUDGET_EXHAUSTED":
-        return {"n": facts.max_llm_calls}
-    if outcome in ("LLM_ERROR", "STATE_UNAVAILABLE", "ROBOT_SERVICE_LOST"):
-        return {"detail": facts.detail}
-    if outcome == "PRECONDITION_FAILED":
-        pf = facts.precondition
-        assert pf is not None  # the loop sets it with this outcome
-        return {"skill": pf.ref.skill, "required": " or ".join(pf.requires), "posture": pf.posture}
-    if outcome == "INTERNAL_ERROR":
-        return {"exception_type": facts.exception_type, "run_id": facts.run_id}
-    return {}
-
-
-def operator_message(outcome: TaskOutcomeCode, facts: OutcomeFacts, *, stop_move_failed: bool = False) -> str:
-    """Operator text for ``outcome``, plus the StopMove warning if a StopMove failed."""
-    text = OPERATOR_MESSAGES[outcome].format(**_operator_args(outcome, facts))
-    return text + STOP_MOVE_WARNING if stop_move_failed else text
-
-
-# --- Transport texts (docs/running.md) -------------------------------------------------------------------
-# Telegram texts are HTML (parse_mode HTML); the emoji is the colour code (docs/running.md).
-
-BUSY = '⏳ Busy: a task is running. Send "stop" to stop it.'
-STOPPING = "🛑 Stopping."
-NOTHING_RUNNING = "ℹ️ Nothing is running."
-WORKING = "🔵 Working on it."
-EMPTY_TASK = "Send a task, for example: walk forward one metre."
-HELP = 'I control the Go2 robot. Send a task in plain words. Send "stop" to stop the current task. Backend: {backend}.'
-
-
-def help_text(backend: str) -> str:
-    return HELP.format(backend=backend)
-
-
-STEPS_LINE = "Steps: {run} run, {failed} failed"
-OMITTED_LINES = "({n} earlier lines omitted)"
-ERROR_REPLY = "❌ Internal error in the bot. The details are in its console output."
-
-
-# --- Telegram outcome text: categories only, the detail is in the run log (docs/running.md) ----------------
-
-TELEGRAM_OUTCOMES: dict[str, str] = {
-    "DONE": "✅ <b>Done</b>: {message}",
-    "ABORTED": "⚠️ <b>Aborted</b>: {message}",
-    "ASKED": "❓ {message}",  # the operator message already starts with "Question:"
-    "STOPPED": "🛑 <b>Stopped</b> on request. A stop command was sent to the robot.",
-    "TIME_LIMIT_EXCEEDED": "❌ <b>Stopped</b>: the task reached its time limit. A stop command was sent to the robot.",
-    "FAILURE_BUDGET_EXHAUSTED": "❌ <b>Stopped</b>: the robot failed {n} times while trying this task.",
-    "CALL_BUDGET_EXHAUSTED": "❌ <b>Stopped</b>: the task reached the limit of {n} planning calls without finishing.",
-    "LLM_INVALID": "❌ <b>Stopped</b>: the model produced a malformed plan twice.",
-    "LLM_ERROR": "❌ <b>Stopped</b>: the model could not be reached.",
-    "STATE_UNAVAILABLE": "❌ <b>Stopped</b>: the robot state could not be read.",
-    "PRECONDITION_FAILED": "❌ <b>Stopped</b>: a step was not possible in the robot's current posture.",
-    "ROBOT_SERVICE_LOST": "❌ <b>Stopped</b>: the robot control service was lost.",
-    "STOP_FAILED": "❌ <b>Stopped</b>: the robot may still be moving.",
-    "INTERNAL_ERROR": "❌ <b>Stopped</b>: internal error. See run log {run_id}.",
-}
-TELEGRAM_LAST_FAILURE = "Last failure: {skill} {reason}."
-TELEGRAM_STOP_MOVE_WARNING = "⚠️ <b>The stop command to the robot failed. Stop the robot manually.</b>"
-
-# Short reason for a failed step: keyed by step outcome, or by error code for outcome "error"
-STEP_REASONS: dict[str, str] = {
-    "timeout": "timed out",
-    "interrupted": "was stopped",
-    "malformed": "gave no valid answer",
-    "rejected": "was in a malformed plan",
-    "motion_budget_exceeded": "would exceed the motion budget",
-    "invalid_params": "got invalid parameters",
-    "sdk_error": "failed: robot command error",
-    "backend_not_configured": "failed: backend not configured",
-    "exception": "failed: skill error",
-    "unsupported_object": "failed: object not supported",
-    "detector_error": "failed: vision error",
-    "camera_unavailable": "failed: camera unavailable",
-    "bad_frame": "failed: camera unavailable",
-    "weights_missing": "failed: vision error",
-    "vision_unavailable": "failed: vision unavailable",
-    "state_unavailable": "failed: robot state unavailable",
-    "robot_unavailable": "failed: robot unavailable",
-    "motion_rejected": "failed: the robot refused the move",
-    "robot_service_lost": "failed: robot control service lost",
-}
-STEP_REASON_FAULTS = "failed: {faults}"  # an ok step with detected faults ({faults}: FAULT_TEXTS, joined)
-STEP_REASON_GOAL = "did not reach its goal"  # an ok step whose goal check failed
-STEP_REASON_WITH_FAULTS = "{reason}; {faults}"  # a failed step with detected faults
-STEP_REASON_FALLBACK = "failed: {code}"  # an error code without a reason above, underscores as spaces
-
-
-# --- Telegram progress message (docs/running.md) ------------------------------------------------------------
-
-PROGRESS_THINKING = "🔵 <i>Thinking...</i>"
-PROGRESS_PLAN = "ℹ️ <b>Plan</b>"
-PROGRESS_PLAN_MESSAGE = "ℹ️ <b>Plan</b>: {message}"  # PLAN with its optional message
-PROGRESS_PLAN_STEP = "{i}. {call}"
-PROGRESS_PLAN_DONE = "✅ <b>Done</b>: {message}"
-PROGRESS_PLAN_ABORT = "⚠️ <b>Aborted</b>: {message}"
-PROGRESS_PLAN_ASK = "❓ <b>Question</b>: {message}"
-PROGRESS_PLAN_MALFORMED = "❌ The model produced a malformed plan; {then}"
-PROGRESS_PLAN_OVER_BUDGET = "❌ The plan would exceed the motion budget; {then}"
-PROGRESS_ASKING_AGAIN = "asking again"
-PROGRESS_GIVING_UP = "giving up"
-PROGRESS_STEP_RUNNING = "▶️ {call}"
-PROGRESS_STEP_OK = "✅ {step}"
-PROGRESS_STEP_FAILED = "❌ {call} {reason}"
-PROGRESS_DURATION = " ({seconds:.1f}s)"
-PROGRESS_STOP_REQUESTED = "🛑 Stop requested ({source})"
-PROGRESS_STOP_MOVE_SENT = "🛑 StopMove sent ({seconds:.1f}s)"
-PROGRESS_STOP_MOVE_FAILED = "❌ <b>StopMove failed</b> ({seconds:.1f}s)"

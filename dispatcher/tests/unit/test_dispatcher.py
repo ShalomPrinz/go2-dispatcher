@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from dispatcher import prompts
+from dispatcher import operator_messages, prompts
 from dispatcher.context import PromptSurface
 from dispatcher.dispatcher import Dispatcher
 from dispatcher.executor import STDERR_TAIL_CHARS, ExecOutcome
@@ -588,7 +588,7 @@ def test_stop_move_failure_warns(tmp_path, registry):
     o = r.run()
     assert o.outcome == "STOPPED"
     assert o.stop_move_failed is True
-    assert o.message.endswith(prompts.STOP_MOVE_WARNING)
+    assert o.message.endswith(operator_messages.STOP_MOVE_WARNING)
 
 
 def test_fault_lookup(tmp_path, registry):
@@ -674,7 +674,7 @@ def test_failed_stop_with_the_service_alive_ends_the_task_with_no_further_call(t
     o = r.run()
     assert (o.outcome, o.llm_calls, len(r.planner.calls), len(executor.runs)) == ("STOP_FAILED", 1, 1, 1)
     assert o.stop_move_failed is True
-    assert o.message == "Stopped: the robot may still be moving." + prompts.STOP_MOVE_WARNING  # one warning
+    assert o.message == "Stopped: the robot may still be moving." + operator_messages.STOP_MOVE_WARNING  # one warning
     assert [rec["type"] for rec in records(o)][-3:] == ["step_result", "stop_move", "task_end"]
 
 
@@ -688,7 +688,7 @@ def test_interrupted_step_with_a_failed_stop_keeps_its_outcome(tmp_path, registr
     o = r.run()
     assert (o.outcome, o.llm_calls) == (outcome, 1)
     assert o.stop_move_failed is True
-    assert o.message.endswith(prompts.STOP_MOVE_WARNING)
+    assert o.message.endswith(operator_messages.STOP_MOVE_WARNING)
 
 
 def test_dispatcher_stop_move_updates_posture(tmp_path, registry):
@@ -761,7 +761,8 @@ def lost_step(*, stop_ok=True, outcome: ExecOutcome = "error", interrupt_cause=N
         (True, "Stopped: the robot control service was lost (the fallback stop was confirmed)."),
         (
             False,
-            "Stopped: the robot control service was lost (the fallback stop failed)." + prompts.STOP_MOVE_WARNING,
+            "Stopped: the robot control service was lost (the fallback stop failed)."
+            + operator_messages.STOP_MOVE_WARNING,
         ),
     ],
 )

@@ -9,10 +9,10 @@ import pytest
 
 from contract.policy import MotionCost
 from contract.schema import ErrorCode
-from dispatcher import prompts
 from dispatcher.models import StepDispatch, StepOutcome, StepRef, StepResult, TaskOutcome, TaskOutcomeCode
 from dispatcher.registry import Registry
 from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR
+from dispatcher.transports import texts
 from dispatcher.transports.telegram_text import MAX_CHARS, format_outcome, step_reason, trim
 
 
@@ -108,7 +108,7 @@ def test_outcome_categories_without_detail(registry):
         "1. ❌ sit() failed: robot command error",
         "",
         "Last failure: sit failed: robot command error.",
-        prompts.TELEGRAM_STOP_MOVE_WARNING,
+        texts.TELEGRAM_STOP_MOVE_WARNING,
     ]
     llm = outcome([], code="LLM_ERROR", message="Stopped: the model could not be reached (HTTP 529 overloaded).")
     assert "529" not in format_outcome(llm, registry)
@@ -128,7 +128,7 @@ def test_model_text_is_escaped(registry):
 
 def test_every_error_code_has_a_reason():
     for code in ErrorCode:
-        assert step_reason(step(1, "error", code.value)) == prompts.STEP_REASONS[code.value]
+        assert step_reason(step(1, "error", code.value)) == texts.STEP_REASONS[code.value]
     assert step_reason(step(1, "error", "blocked")) == "failed: blocked"
 
 
@@ -145,6 +145,6 @@ def test_trim_drops_whole_lines_and_keeps_markup_balanced(registry):
     m = re.fullmatch(r"\((\d+) earlier lines omitted\)", lines[3])
     assert m is not None
     assert lines[4].startswith(f"{int(m.group(1)) + 1}. ❌ sit()") and lines[-4].startswith("79. ")
-    assert lines[-3] == "" and lines[-1] == prompts.TELEGRAM_STOP_MOVE_WARNING  # the tail is never dropped
+    assert lines[-3] == "" and lines[-1] == texts.TELEGRAM_STOP_MOVE_WARNING  # the tail is never dropped
     one = trim(["<b>head</b>"], ["<i>a</i>" * 1000], ["tail"])  # one line is always kept
     assert one.splitlines()[1] == "<i>a</i>" * 1000

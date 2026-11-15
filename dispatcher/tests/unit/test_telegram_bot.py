@@ -12,7 +12,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from dispatcher import prompts
 from dispatcher.context import PromptSurface
 from dispatcher.dispatcher import Dispatcher
 from dispatcher.models import BusyError, Plan, PlanStep
@@ -28,7 +27,7 @@ from dispatcher.tests.helpers import (
     make_config,
     replies,
 )
-from dispatcher.transports import telegram_bot
+from dispatcher.transports import telegram_bot, texts
 from dispatcher.transports.telegram_bot import (
     SHUTDOWN_EXTRA_S,
     build_application,
@@ -90,7 +89,7 @@ def test_missing_user_or_message_ignored(cfg):
 def test_start_replies_help(cfg):
     u = fake_update("/start", USER)
     call(on_start, u, fake_context(dispatcher=mock_dispatcher(), cfg=cfg))
-    assert replies(u) == [prompts.help_text(cfg.robot.backend)]
+    assert replies(u) == [texts.help_text(cfg.robot.backend)]
 
 
 @pytest.mark.parametrize("handler,text", [(on_text, "stop"), (on_text, "  Stop "), (on_stop, "/stop")])
@@ -99,7 +98,7 @@ def test_stop_while_idle(cfg, handler, text):
     u = fake_update(text, USER)
     call(handler, u, fake_context(dispatcher=d, cfg=cfg))
     d.request_stop.assert_called_once_with("telegram")
-    assert replies(u) == [prompts.NOTHING_RUNNING]
+    assert replies(u) == [texts.NOTHING_RUNNING]
 
 
 @pytest.mark.parametrize("handler,text", [(on_text, "stop"), (on_stop, "/stop")])
@@ -109,7 +108,7 @@ def test_stop_while_busy(cfg, handler, text):
     call(handler, u, fake_context(dispatcher=d, cfg=cfg))
     d.request_stop.assert_called_once_with("telegram")
     d.run_task.assert_not_called()
-    assert replies(u) == [prompts.STOPPING]
+    assert replies(u) == [texts.STOPPING]
 
 
 def test_task_while_busy(cfg):
@@ -117,7 +116,7 @@ def test_task_while_busy(cfg):
     u = fake_update("walk forward", USER)
     call(on_text, u, fake_context(dispatcher=d, cfg=cfg))
     d.run_task.assert_not_called()
-    assert replies(u) == [prompts.BUSY]
+    assert replies(u) == [texts.BUSY]
 
 
 def test_busy_race(cfg):
@@ -125,7 +124,7 @@ def test_busy_race(cfg):
     d.run_task.side_effect = BusyError()
     u = fake_update("walk forward", USER)
     call(on_text, u, fake_context(dispatcher=d, cfg=cfg))
-    assert replies(u) == [prompts.WORKING, prompts.BUSY]
+    assert replies(u) == [texts.WORKING, texts.BUSY]
 
 
 def test_empty_task(cfg):
@@ -133,7 +132,7 @@ def test_empty_task(cfg):
     u = fake_update("   ", USER)
     call(on_text, u, fake_context(dispatcher=d, cfg=cfg))
     d.run_task.assert_not_called()
-    assert replies(u) == [prompts.EMPTY_TASK]
+    assert replies(u) == [texts.EMPTY_TASK]
 
 
 def test_handler_exception_replies_error(cfg, capsys):
@@ -141,7 +140,7 @@ def test_handler_exception_replies_error(cfg, capsys):
     d.run_task.side_effect = RuntimeError("boom")
     u = fake_update("walk forward", USER)
     call(on_text, u, fake_context(dispatcher=d, cfg=cfg))
-    assert replies(u) == [prompts.WORKING, prompts.ERROR_REPLY]
+    assert replies(u) == [texts.WORKING, texts.ERROR_REPLY]
     assert "RuntimeError: boom" in capsys.readouterr().err  # the detail goes to the console, not the phone
 
 
@@ -159,7 +158,7 @@ def test_normal_task(cfg, registry):
     u = fake_update("  turn left  ", USER)
     call(on_text, u, fake_context(dispatcher=d, cfg=cfg))
     got = replies(u)
-    assert got[0] == prompts.WORKING
+    assert got[0] == texts.WORKING
     assert len(got) == 2
     assert got[1].startswith("✅ <b>Done</b>: Turned left.\n\nSteps: 1 run, 0 failed\n1. ✅ turn(")
     assert not d.is_busy()
@@ -174,7 +173,7 @@ def test_run_task_arguments(cfg, registry, monkeypatch):
     monkeypatch.setattr(telegram_bot, "format_outcome", lambda outcome, reg: "formatted")
     call(on_text, u, ctx)
     d.run_task.assert_called_once_with("sit down", source="telegram", sender_id=str(USER))
-    assert replies(u) == [prompts.WORKING, "formatted"]
+    assert replies(u) == [texts.WORKING, "formatted"]
 
 
 def test_build_application(cfg):
@@ -284,4 +283,4 @@ def test_stop_signal_kills_task_before_ptb_waits_for_handlers(cfg, registry, mon
     assert d.events[:2] == ["request_stop:shutdown", "task_stopped"]
     assert d.events[-1] == "shutdown"  # post_stop backstop still runs
     assert elapsed < release_after_s
-    assert sent == [prompts.WORKING, "formatted"]
+    assert sent == [texts.WORKING, "formatted"]

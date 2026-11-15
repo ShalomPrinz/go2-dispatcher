@@ -10,7 +10,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from dispatcher import prompts
 from dispatcher.context import PromptSurface
 from dispatcher.dispatcher import Dispatcher
 from dispatcher.models import ObstacleDistances, Plan, PlanStep, RobotState
@@ -24,6 +23,7 @@ from dispatcher.tests.helpers import (
     make_config,
     replies,
 )
+from dispatcher.transports import texts
 from dispatcher.transports.telegram_bot import on_text
 from dispatcher.transports.telegram_progress import TelegramProgress, robot_line
 
@@ -51,7 +51,7 @@ class Phone:
     """Records progress messages: ``messages[i]`` is the text history of the i-th message."""
 
     def __init__(self, delay_s: float = 0.0):
-        self.messages: list[list[str]] = [[prompts.WORKING]]
+        self.messages: list[list[str]] = [[texts.WORKING]]
         self.delay_s = delay_s
 
     def editor(self, i: int):
@@ -95,7 +95,7 @@ def test_edits_are_coalesced(registry):
 
     final = asyncio.run(main())
     assert 2 <= len(phone.messages[0]) <= 3  # the sent text, then one or two edits
-    assert phone.final() == [final] and final.endswith(prompts.PROGRESS_STOP_REQUESTED.format(source="s29"))
+    assert phone.final() == [final] and final.endswith(texts.PROGRESS_STOP_REQUESTED.format(source="s29"))
 
 
 def test_slow_edits_stay_out_of_task_timing(cfg, registry):
@@ -131,11 +131,11 @@ def test_each_model_call_gets_its_own_message(cfg, registry):
     assert outcome.outcome == "DONE"
     final = phone.final()
     assert final == progress.texts() and len(final) == 5
-    malformed = prompts.PROGRESS_PLAN_MALFORMED.format(then=prompts.PROGRESS_ASKING_AGAIN)
+    malformed = texts.PROGRESS_PLAN_MALFORMED.format(then=texts.PROGRESS_ASKING_AGAIN)
     assert final[0] == malformed
     second = final[1].splitlines()
     assert second[:5] == [
-        prompts.PROGRESS_PLAN_MESSAGE.format(message="Turn &lt;then&gt; walk."),
+        texts.PROGRESS_PLAN_MESSAGE.format(message="Turn &lt;then&gt; walk."),
         "",
         "1. turn(direction=left, angle_deg=90)",
         "2. walk(direction=forward, distance_m=1)",
@@ -144,12 +144,12 @@ def test_each_model_call_gets_its_own_message(cfg, registry):
     assert second[5].startswith("✅ turn(direction=left, angle_deg=90) -&gt; ok (")
     assert second[6].startswith("❌ walk(direction=forward, distance_m=1) failed: the robot refused the move (")
     assert len(second) == 7
-    assert final[2].splitlines() == [prompts.PROGRESS_PLAN, "", "1. walk(distance_m=1)", "", malformed]
-    assert final[3].splitlines()[:3] == [prompts.PROGRESS_PLAN, "", "1. turn(direction=left, angle_deg=90)"]
-    assert final[4] == prompts.PROGRESS_PLAN_DONE.format(message="Turned left twice; the walk was refused.")
+    assert final[2].splitlines() == [texts.PROGRESS_PLAN, "", "1. walk(distance_m=1)", "", malformed]
+    assert final[3].splitlines()[:3] == [texts.PROGRESS_PLAN, "", "1. turn(direction=left, angle_deg=90)"]
+    assert final[4] == texts.PROGRESS_PLAN_DONE.format(message="Turned left twice; the walk was refused.")
     text = "\n".join(final)
     assert "3104" not in text and "missing" not in text
-    assert prompts.PROGRESS_THINKING not in text  # every round's message ends with its own lines
+    assert texts.PROGRESS_THINKING not in text  # every round's message ends with its own lines
 
 
 def test_plan_without_results_has_no_trailing_blank_line(registry):
@@ -162,7 +162,7 @@ def test_plan_without_results_has_no_trailing_blank_line(registry):
         await progress.close()
 
     asyncio.run(main())
-    assert phone.final() == [prompts.PROGRESS_PLAN + "\n\n1. turn(direction=left, angle_deg=90)"]
+    assert phone.final() == [texts.PROGRESS_PLAN + "\n\n1. turn(direction=left, angle_deg=90)"]
 
 
 def test_rejection_that_ends_the_task_gives_up(registry):
@@ -180,8 +180,8 @@ def test_rejection_that_ends_the_task_gives_up(registry):
 
     asyncio.run(main())
     assert phone.final() == [  # the schema retry gets its own message
-        prompts.PROGRESS_PLAN_MALFORMED.format(then=prompts.PROGRESS_ASKING_AGAIN),
-        prompts.PROGRESS_PLAN_MALFORMED.format(then=prompts.PROGRESS_GIVING_UP),
+        texts.PROGRESS_PLAN_MALFORMED.format(then=texts.PROGRESS_ASKING_AGAIN),
+        texts.PROGRESS_PLAN_MALFORMED.format(then=texts.PROGRESS_GIVING_UP),
     ]
 
 
@@ -201,10 +201,8 @@ def test_no_edit_when_the_text_is_unchanged(registry):
         await progress.close()
 
     asyncio.run(main())
-    up = prompts.WORKING + "\n" + robot_line("up", standing)
-    assert phone.messages == [
-        [prompts.WORKING, up, up.replace(robot_line("up", standing), robot_line("down", standing))]
-    ]
+    up = texts.WORKING + "\n" + robot_line("up", standing)
+    assert phone.messages == [[texts.WORKING, up, up.replace(robot_line("up", standing), robot_line("down", standing))]]
 
 
 def test_failed_edit_is_logged_and_task_still_replies(cfg, registry, capsys):
@@ -218,7 +216,7 @@ def test_failed_edit_is_logged_and_task_still_replies(cfg, registry, capsys):
     )
     call(on_text, u, fake_context(dispatcher=d, cfg=cfg, progress=progress))
     got = replies(u)
-    assert got[0] == prompts.WORKING and got[-1].startswith("✅ <b>Done</b>: Turned left.")
+    assert got[0] == texts.WORKING and got[-1].startswith("✅ <b>Done</b>: Turned left.")
     assert failing.edit_text.await_count >= 1
     assert "Telegram progress update failed: RuntimeError" in capsys.readouterr().err
 
@@ -262,5 +260,5 @@ def test_robot_line_follows_the_stream_and_leaves_at_task_end(registry):
         return live, progress.text()
 
     live, final = asyncio.run(main())
-    assert live == prompts.WORKING + "\n🔴 Robot: link down | standing | speed n/a | obstacles n/a"
-    assert final == prompts.WORKING
+    assert live == texts.WORKING + "\n🔴 Robot: link down | standing | speed n/a | obstacles n/a"
+    assert final == texts.WORKING

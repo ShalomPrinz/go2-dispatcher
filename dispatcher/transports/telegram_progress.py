@@ -11,7 +11,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from .. import prompts
+from . import texts
 from .telegram_text import call_html, h, step_line, trim
 
 if TYPE_CHECKING:
@@ -43,9 +43,9 @@ ROBOT_LINK_UP = "🟢 Robot: link up"
 ROBOT_LINK_DOWN = "🔴 Robot: link down"
 # the progress line of a plan that ends the task, by plan status (docs/running.md)
 _PLAN_END_LINES = {
-    "DONE": prompts.PROGRESS_PLAN_DONE,
-    "ABORT": prompts.PROGRESS_PLAN_ABORT,
-    "ASK": prompts.PROGRESS_PLAN_ASK,
+    "DONE": texts.PROGRESS_PLAN_DONE,
+    "ABORT": texts.PROGRESS_PLAN_ABORT,
+    "ASK": texts.PROGRESS_PLAN_ASK,
 }
 
 Edit = Callable[[str], Awaitable[Any]]  # sets a progress message's HTML text, e.g. ``Message.edit_text``
@@ -167,11 +167,11 @@ class TelegramProgress:
             lines.insert(r.plan_end, "")
         robot = self._robot.line if i == len(self._rounds) - 1 else None
         if robot is None and not lines:
-            return prompts.WORKING
-        return trim([], lines or [prompts.WORKING], [robot] if robot is not None else [])
+            return texts.WORKING
+        return trim([], lines or [texts.WORKING], [robot] if robot is not None else [])
 
     async def _pump(self, edit: Edit, new_message: NewMessage, session: _Session) -> None:
-        shown_round, shown = 0, prompts.WORKING  # the newest message sent and its text after the last success
+        shown_round, shown = 0, texts.WORKING  # the newest message sent and its text after the last success
         next_call = 0.0
         loop = asyncio.get_running_loop()
         while True:
@@ -181,11 +181,11 @@ class TelegramProgress:
                 await asyncio.sleep(delay)  # events in between are merged into this call
             session.changed.clear()
             closing = session.closed.is_set()  # set only after the task ended, so this snapshot is final
-            texts = self.texts()[shown_round:]
-            if texts[0] != shown:
-                call, text = edit, texts[0]
-            elif len(texts) > 1:
-                call, text = new_message, texts[1]
+            rounds = self.texts()[shown_round:]
+            if rounds[0] != shown:
+                call, text = edit, rounds[0]
+            elif len(rounds) > 1:
+                call, text = new_message, rounds[1]
             elif closing:
                 return
             else:
@@ -244,12 +244,12 @@ class TelegramProgress:
         self, call_index: int, return_reason: RequestReason, retry_of: ReturnReason | None, user_text: str
     ) -> None:
         with self._lock:
-            self._resolve_rejected(prompts.PROGRESS_ASKING_AGAIN)
+            self._resolve_rejected(texts.PROGRESS_ASKING_AGAIN)
             if self._calls > 0:  # every model call after the first starts a new round, in a new message
                 self._rounds[-1].pending = None
                 self._rounds.append(_Round())
             self._calls += 1
-        self._update(pending=prompts.PROGRESS_THINKING)
+        self._update(pending=texts.PROGRESS_THINKING)
 
     def llm_retry(self, retry: dict[str, Any]) -> None:
         pass  # infrastructure retries stay in the run log (docs/running.md)
@@ -266,10 +266,8 @@ class TelegramProgress:
     def plan(self, call_index: int, plan: Plan, stop_at: int) -> None:
         if plan.status == "PLAN":
             calls = [call_html(s.skill, s.params, self._registry) for s in plan.steps]
-            head = (
-                prompts.PROGRESS_PLAN_MESSAGE.format(message=h(plan.message)) if plan.message else prompts.PROGRESS_PLAN
-            )
-            add = [head, ""] + [prompts.PROGRESS_PLAN_STEP.format(i=i, call=c) for i, c in enumerate(calls, 1)]
+            head = texts.PROGRESS_PLAN_MESSAGE.format(message=h(plan.message)) if plan.message else texts.PROGRESS_PLAN
+            add = [head, ""] + [texts.PROGRESS_PLAN_STEP.format(i=i, call=c) for i, c in enumerate(calls, 1)]
             with self._lock:
                 r = self._rounds[-1]
                 r.plan_end = len(r.lines) + len(add)
@@ -278,7 +276,7 @@ class TelegramProgress:
         self._update(add=add)
 
     def plan_invalid(self, call_index: int, tool_input: Any, check: PlanCheck, horizon: int) -> None:
-        self._reject(prompts.PROGRESS_PLAN_MALFORMED)
+        self._reject(texts.PROGRESS_PLAN_MALFORMED)
 
     def _reject(self, template: str) -> None:
         """Hold a rejected-plan line until the next model call or the task end says what follows."""
@@ -286,27 +284,25 @@ class TelegramProgress:
             self._rejected = template
 
     def step_start(self, ref: StepRef, dispatch: StepDispatch) -> None:
-        self._update(
-            pending=prompts.PROGRESS_STEP_RUNNING.format(call=call_html(ref.skill, ref.params, self._registry))
-        )
+        self._update(pending=texts.PROGRESS_STEP_RUNNING.format(call=call_html(ref.skill, ref.params, self._registry)))
 
     def step_result(self, sr: StepResult, *, budget: MotionBudget, failures: int, posture: Posture) -> None:
         if sr.dispatch is None:  # rejected before running: the plan, not the step, failed
             over = sr.outcome == "motion_budget_exceeded"
-            self._reject(prompts.PROGRESS_PLAN_OVER_BUDGET if over else prompts.PROGRESS_PLAN_MALFORMED)
+            self._reject(texts.PROGRESS_PLAN_OVER_BUDGET if over else texts.PROGRESS_PLAN_MALFORMED)
             self._update()
             return
-        line = step_line(sr, self._registry) + prompts.PROGRESS_DURATION.format(seconds=_secs(sr.duration_ms))
+        line = step_line(sr, self._registry) + texts.PROGRESS_DURATION.format(seconds=_secs(sr.duration_ms))
         self._update(add=[line])
 
     def precondition_failed(self, failure: PreconditionFailure) -> None:
         pass  # the outcome text names the category; the detail is in the run log
 
     def stop_requested(self, source: str, during: str) -> None:
-        self._update(add=[prompts.PROGRESS_STOP_REQUESTED.format(source=h(source))])
+        self._update(add=[texts.PROGRESS_STOP_REQUESTED.format(source=h(source))])
 
     def stop_move(self, smr: StopMoveResult) -> None:
-        template = prompts.PROGRESS_STOP_MOVE_SENT if smr.ok else prompts.PROGRESS_STOP_MOVE_FAILED
+        template = texts.PROGRESS_STOP_MOVE_SENT if smr.ok else texts.PROGRESS_STOP_MOVE_FAILED
         self._update(add=[template.format(seconds=_secs(smr.duration_ms))])
 
     def exception(self, where: str, e: BaseException) -> None:
@@ -316,7 +312,7 @@ class TelegramProgress:
         self, result: TaskOutcome, *, rejections: int, horizon_rejections: int, usage_totals: dict, budget: MotionBudget
     ) -> None:
         with self._lock:
-            self._resolve_rejected(prompts.PROGRESS_GIVING_UP)
+            self._resolve_rejected(texts.PROGRESS_GIVING_UP)
             self._robot = _Robot(ended=True)  # the robot line leaves the final text; later samples are dropped
         self._update()  # the outcome goes out as a new message
 

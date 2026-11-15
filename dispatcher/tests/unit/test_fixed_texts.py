@@ -1,5 +1,5 @@
-"""prompts.py fixed texts as one golden file, plus completeness checks
-(dispatcher/docs/loop-and-context.md, skills/docs/skills.md, tests/docs/testing.md)."""
+"""The fixed texts of prompts.py, operator_messages.py and transports/texts.py as one golden file, plus
+completeness checks (dispatcher/docs/loop-and-context.md, skills/docs/skills.md, tests/docs/testing.md)."""
 
 from __future__ import annotations
 
@@ -8,14 +8,17 @@ from dataclasses import replace
 
 import pytest
 
-from dispatcher import prompts
+from dispatcher import operator_messages, prompts
 from dispatcher.models import PreconditionFailure, RobotState, StepRef, StepResult, TaskOutcomeCode
+from dispatcher.transports import texts
 from tests.helpers import REPO_ROOT
 
+# Model, operator and transport texts, in this order (dispatcher/docs/loop-and-context.md)
+MODULES = (prompts, operator_messages, texts)
 GOLDEN = REPO_ROOT / "dispatcher" / "tests" / "golden" / "fixed_texts.txt"
 ALL_OUTCOMES = typing.get_args(TaskOutcomeCode)
 
-FACTS = prompts.OutcomeFacts(
+FACTS = operator_messages.OutcomeFacts(
     run_id="abc123",
     time_limit_s=300.0,
     max_llm_calls=20,
@@ -99,14 +102,14 @@ TEXT_ARGS: dict[str, dict[str, object]] = {
 
 
 def render_fixed_texts() -> str:
-    """Every fixed text from prompts.py, rendered with example arguments and labelled."""
+    """Every fixed text from ``MODULES``, rendered with example arguments and labelled."""
     parts: list[tuple[str, str]] = []
     for code in ALL_OUTCOMES:
-        parts.append((f"operator_message {code}", prompts.operator_message(code, OUTCOME_FACTS[code])))
+        parts.append((f"operator_message {code}", operator_messages.operator_message(code, OUTCOME_FACTS[code])))
         parts.append(
             (
                 f"operator_message {code} stop_move_failed",
-                prompts.operator_message(code, OUTCOME_FACTS[code], stop_move_failed=True),
+                operator_messages.operator_message(code, OUTCOME_FACTS[code], stop_move_failed=True),
             )
         )
     for reason in prompts.NOTICES:
@@ -115,19 +118,19 @@ def render_fixed_texts() -> str:
         ("motion budget message", prompts.MOTION_BUDGET_MESSAGE.format(need=1.5, unit="m", kind="travel", left=0.5))
     )
     parts.append(("rejection_section", prompts.rejection_section(["a bad\nthing", "b"])))
-    for code, template in prompts.TELEGRAM_OUTCOMES.items():
+    for code, template in texts.TELEGRAM_OUTCOMES.items():
         parts.append((f"TELEGRAM_OUTCOMES {code}", template.format(message="Walked 1 m.", n=3, run_id="abc123")))
-    for key, reason in prompts.STEP_REASONS.items():
+    for key, reason in texts.STEP_REASONS.items():
         parts.append((f"STEP_REASONS {key}", reason))
     for fault, fault_text in prompts.FAULT_TEXTS.items():
         parts.append((f"FAULT_TEXTS {fault}", fault_text))
     for name in ("BUSY", "STOPPING", "NOTHING_RUNNING", "WORKING", "EMPTY_TASK"):
-        parts.append((name, getattr(prompts, name)))
-    parts.append(('help_text("stub")', prompts.help_text("stub")))
+        parts.append((name, getattr(texts, name)))
+    parts.append(('help_text("stub")', texts.help_text("stub")))
     for i, block in enumerate(prompts.system_blocks(5, "<catalog>")):
         parts.append((f"system_blocks(5) block {i}", block))
-    for name in prompts.__all__:
-        value = getattr(prompts, name)
+    for module, name in ((m, n) for m in MODULES for n in m.__all__):
+        value = getattr(module, name)
         if isinstance(value, str) and name not in RENDERED_ABOVE:
             text = value.format(**TEXT_ARGS.get(name, {}))
             parts.append((f"{name} (repr)", repr(text)) if text != text.strip() else (name, text))
@@ -136,11 +139,15 @@ def render_fixed_texts() -> str:
 
 def test_fixed_texts_match_golden(update_golden):
     # Guard: render_fixed_texts() reaches str constants via __all__ and only the containers it loops over.
-    public = {n: v for n, v in vars(prompts).items() if not n.startswith("_")}
-    assert {n for n, v in public.items() if isinstance(v, str)} <= set(prompts.__all__)
-    assert {n for n, v in public.items() if isinstance(v, (dict, list, tuple))} == {
-        *("NOTICES", "OPERATOR_MESSAGES", "TELEGRAM_OUTCOMES", "STEP_REASONS", "FAULT_TEXTS")
+    containers = {
+        prompts: {"NOTICES", "FAULT_TEXTS"},
+        operator_messages: {"OPERATOR_MESSAGES"},
+        texts: {"TELEGRAM_OUTCOMES", "STEP_REASONS"},
     }
+    for module in MODULES:
+        public = {n: v for n, v in vars(module).items() if not n.startswith("_")}
+        assert {n for n, v in public.items() if isinstance(v, str)} <= set(module.__all__), module.__name__
+        assert {n for n, v in public.items() if isinstance(v, (dict, list, tuple))} == containers[module]
     text = render_fixed_texts()
     if update_golden:
         GOLDEN.write_text(text, encoding="utf-8")
@@ -148,17 +155,17 @@ def test_fixed_texts_match_golden(update_golden):
 
 
 def test_every_outcome_has_operator_message():
-    assert set(prompts.OPERATOR_MESSAGES) == set(ALL_OUTCOMES) == set(prompts.TELEGRAM_OUTCOMES)
+    assert set(operator_messages.OPERATOR_MESSAGES) == set(ALL_OUTCOMES) == set(texts.TELEGRAM_OUTCOMES)
     assert set(NOTICE_ARGS) == set(prompts.NOTICES)
     for code in ALL_OUTCOMES:
-        text = prompts.operator_message(code, OUTCOME_FACTS[code])
+        text = operator_messages.operator_message(code, OUTCOME_FACTS[code])
         assert text and "{" not in text
 
 
 def test_done_without_message_gets_default_text():
     for message in (None, "  "):
-        text = prompts.operator_message("DONE", replace(FACTS, message=message))
-        assert text == prompts.DONE_DEFAULT_MESSAGE
+        text = operator_messages.operator_message("DONE", replace(FACTS, message=message))
+        assert text == operator_messages.DONE_DEFAULT_MESSAGE
 
 
 def test_notice_missing_arguments_raises():

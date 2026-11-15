@@ -97,6 +97,15 @@ def _failure_text(sr: StepResult) -> str:
     return f"{sr.outcome}: {msg}" if msg else sr.outcome
 
 
+def fault_note(sr: StepResult) -> str | None:
+    """What a step line adds after its outcome: for a ``failed`` verdict, the faults or the missed goal; for a
+    step with no verdict, the detected faults only; else None."""
+    faults = ", ".join(prompts.FAULT_TEXTS[f] for f in sr.faults)
+    if sr.verification == "failed":
+        return prompts.VERIFICATION_FAILED_DETAIL.format(reasons=faults or prompts.GOAL_NOT_REACHED)
+    return faults or None
+
+
 def render_step(sr: StepResult, registry: Registry, *, numbered: bool) -> str:
     """One line for a recorded step. ``numbered=False`` drops the ``{index}. `` prefix.
     Never includes stderr or tracebacks."""
@@ -107,7 +116,7 @@ def render_step(sr: StepResult, registry: Registry, *, numbered: bool) -> str:
         body = f"{call} -> ok{_observations(sr, registry)}"
     else:
         body = f"{call} -> {_failure_text(sr)}"
-    note = prompts.fault_note(sr)
+    note = fault_note(sr)
     if note is not None:
         body += f"; {note}"
     return f"{sr.dispatch.index}. {body}" if numbered else body

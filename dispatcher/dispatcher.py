@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal, NoReturn
 
-from . import prompts
+from . import operator_messages
 from .bounds import cut_message, precheck
 from .budget import MotionBudget
 from .config import Config
@@ -388,7 +388,7 @@ class Dispatcher:
         step (dispatcher/docs/loop-and-context.md)."""
         self._set_phase("ending")
         smr = self.executor.stop_move(StopCause.ROBOT_SERVICE_LOST)
-        detail = prompts.SERVICE_LOST_STOP_CONFIRMED if smr.ok else prompts.SERVICE_LOST_STOP_FAILED
+        detail = operator_messages.SERVICE_LOST_STOP_CONFIRMED if smr.ok else operator_messages.SERVICE_LOST_STOP_FAILED
         raise _TaskEnded(_Ending("ROBOT_SERVICE_LOST", detail=detail, stop_move=smr)) from None
 
     def _end(
@@ -408,7 +408,7 @@ class Dispatcher:
             self._apply_state(t, None, stop_move)
 
         loop = self.cfg.loop
-        facts = prompts.OutcomeFacts(
+        facts = operator_messages.OutcomeFacts(
             run_id=t.run_id,
             time_limit_s=loop.task_time_limit_s,
             max_llm_calls=loop.max_llm_calls,
@@ -419,7 +419,7 @@ class Dispatcher:
             exception_type=exception_type,
             precondition=precondition,
         )
-        text = prompts.operator_message(outcome, facts, stop_move_failed=t.stop_move_failed)
+        text = operator_messages.operator_message(outcome, facts, stop_move_failed=t.stop_move_failed)
         duration_ms = (self.clock() - t.t_start) * 1000.0
         result = TaskOutcome(
             run_id=t.run_id,
@@ -601,7 +601,11 @@ class Dispatcher:
             raise _TaskEnded(_Ending(ex.interrupt_cause.task_outcome))  # the executor already sent StopMove
         if ex.service_lost:  # every loss ends the task, with no further LLM call (dispatcher/docs/loop-and-context.md)
             confirmed = ex.stop_move is not None and ex.stop_move.ok
-            detail = prompts.SERVICE_LOST_STOP_CONFIRMED if confirmed else prompts.SERVICE_LOST_STOP_FAILED
+            detail = (
+                operator_messages.SERVICE_LOST_STOP_CONFIRMED
+                if confirmed
+                else operator_messages.SERVICE_LOST_STOP_FAILED
+            )
             raise _TaskEnded(_Ending("ROBOT_SERVICE_LOST", detail=detail))
         if ex.stop_move is not None and not ex.stop_move.ok:  # no LLM call without a confirmed stop (docs/safety.md)
             raise _TaskEnded(_Ending("STOP_FAILED"))

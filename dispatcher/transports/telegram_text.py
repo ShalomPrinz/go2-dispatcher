@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from .. import prompts
 from ..context import NOT_DISPATCHED_OUTCOMES, format_call, render_step
+from . import texts
 
 if TYPE_CHECKING:
     from ..models import StepResult, TaskOutcome
@@ -35,20 +36,20 @@ def step_reason(sr: StepResult) -> str:
     detected fault; for an ``ok`` step with a failed verdict, its faults or the missed goal."""
     faults = ", ".join(prompts.FAULT_TEXTS[f] for f in sr.faults)
     if sr.outcome == "ok":
-        return prompts.STEP_REASON_FAULTS.format(faults=faults) if faults else prompts.STEP_REASON_GOAL
+        return texts.STEP_REASON_FAULTS.format(faults=faults) if faults else texts.STEP_REASON_GOAL
     key = (sr.error_code or "") if sr.outcome == "error" else sr.outcome
-    if key in prompts.STEP_REASONS:
-        reason = prompts.STEP_REASONS[key]
+    if key in texts.STEP_REASONS:
+        reason = texts.STEP_REASONS[key]
     else:
-        reason = h(prompts.STEP_REASON_FALLBACK.format(code=key.replace("_", " ") or "error"))
-    return prompts.STEP_REASON_WITH_FAULTS.format(reason=reason, faults=faults) if faults else reason
+        reason = h(texts.STEP_REASON_FALLBACK.format(code=key.replace("_", " ") or "error"))
+    return texts.STEP_REASON_WITH_FAULTS.format(reason=reason, faults=faults) if faults else reason
 
 
 def step_line(sr: StepResult, registry: Registry) -> str:
     """``✅ call -> ok: observations`` or ``❌ call reason``, without number or duration."""
     if sr.outcome == "ok" and not sr.is_failure:
-        return prompts.PROGRESS_STEP_OK.format(step=h(render_step(sr, registry, numbered=False)))
-    return prompts.PROGRESS_STEP_FAILED.format(
+        return texts.PROGRESS_STEP_OK.format(step=h(render_step(sr, registry, numbered=False)))
+    return texts.PROGRESS_STEP_FAILED.format(
         call=call_html(sr.ref.skill, sr.ref.params, registry), reason=step_reason(sr)
     )
 
@@ -60,7 +61,7 @@ def trim(head: list[str], lines: list[str], tail: list[str]) -> str:
     dropped = 0
     while len(text) > MAX_CHARS and dropped < len(lines) - 1:
         dropped += 1
-        text = "\n".join(head + [prompts.OMITTED_LINES.format(n=dropped)] + lines[dropped:] + tail)
+        text = "\n".join(head + [texts.OMITTED_LINES.format(n=dropped)] + lines[dropped:] + tail)
     return text
 
 
@@ -73,14 +74,14 @@ def format_outcome(outcome: TaskOutcome, registry: Registry) -> str:
     then the last failure and the StopMove warning."""
     code = outcome.outcome
     n = outcome.llm_calls if code == "CALL_BUDGET_EXHAUSTED" else outcome.failures
-    first = prompts.TELEGRAM_OUTCOMES[code].format(message=h(outcome.message), n=n, run_id=h(outcome.run_id))
+    first = texts.TELEGRAM_OUTCOMES[code].format(message=h(outcome.message), n=n, run_id=h(outcome.run_id))
     last = _last_failure(outcome) if code == "FAILURE_BUDGET_EXHAUSTED" else None
     tail = []
     if last is not None:
-        tail.append(prompts.TELEGRAM_LAST_FAILURE.format(skill=h(last.ref.skill), reason=step_reason(last)))
+        tail.append(texts.TELEGRAM_LAST_FAILURE.format(skill=h(last.ref.skill), reason=step_reason(last)))
     if outcome.stop_move_failed:
-        tail.append(prompts.TELEGRAM_STOP_MOVE_WARNING)
-    head = [first, "", prompts.STEPS_LINE.format(run=len(outcome.dispatched_steps), failed=outcome.failures)]
+        tail.append(texts.TELEGRAM_STOP_MOVE_WARNING)
+    head = [first, "", texts.STEPS_LINE.format(run=len(outcome.dispatched_steps), failed=outcome.failures)]
     steps = [_numbered(s, registry) for s in outcome.steps]
     return trim(head, steps, [""] + tail if tail else [])  # blank lines around the counts and list
 

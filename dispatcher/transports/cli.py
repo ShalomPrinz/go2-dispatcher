@@ -15,13 +15,13 @@ from typing import Any
 
 from services.robot.stub import reset_stub
 
-from .. import process_lock, prompts, report
+from .. import process_lock, report
 from ..context import PromptSurface
 from ..dispatcher import Dispatcher
 from ..executor import Executor
 from ..models import ConfigError, StartupError, TaskOutcome
 from ..registry import Registry
-from . import build_dispatcher, load_config_and_env, startup_error_text
+from . import build_dispatcher, load_config_and_env, startup_error_text, texts
 from .console_trace import ConsoleTrace
 
 SOURCE = "cli"
@@ -183,7 +183,7 @@ class _Runner:
         if not self.stop_requested and self.d.is_busy():
             self.stop_requested = True
             self.d.request_stop(SOURCE)
-            print(prompts.STOPPING, flush=True)
+            print(texts.STOPPING, flush=True)
             return
         self._hard_exit(EXIT_SIGINT)
 
@@ -210,7 +210,7 @@ class _Runner:
 
 def cmd_run(cfg, task: str) -> int:
     if not task.strip():
-        print(prompts.EMPTY_TASK, file=sys.stderr)
+        print(texts.EMPTY_TASK, file=sys.stderr)
         return EXIT_USAGE
     d = build_dispatcher(cfg, reset_stub=True, observer=ConsoleTrace)
     runner = _Runner(d)
