@@ -20,6 +20,7 @@ from dispatcher.tests.helpers import (
     ScriptedPlanner,
     exec_result,
     make_config,
+    make_runlog,
 )
 from dispatcher.transports.console_trace import ConsoleTrace
 
@@ -88,8 +89,9 @@ def test_dispatcher_feeds_the_trace(tmp_path, registry):
         registry,
         planner,
         FakeExecutor([exec_result()]),
+        runlog=make_runlog(cfg, planner),
         clock=FakeClock().now,
-        observer=ConsoleTrace(registry, out, ansi=False),
+        observers=[ConsoleTrace(registry, out, ansi=False)],
     )
     outcome = d.run_task("walk", source="test")
     lines = out.getvalue().splitlines()
@@ -118,7 +120,15 @@ def test_observer_hears_stop_only_after_the_kill(tmp_path, registry):
         return exec_result()
 
     executor = FakeExecutor([step])
-    d = Dispatcher(cfg, registry, planner, executor, clock=FakeClock().now, observer=Observer())
+    d = Dispatcher(
+        cfg,
+        registry,
+        planner,
+        executor,
+        runlog=make_runlog(cfg, planner),
+        clock=FakeClock().now,
+        observers=[Observer()],
+    )
     assert d.run_task("walk", source="test").outcome == "STOPPED"
     assert kills_seen == [1]
 
@@ -139,8 +149,9 @@ def test_message_not_on_a_plan_line_is_printed_before_the_summary(tmp_path, regi
         registry,
         planner,
         FakeExecutor([step]),
+        runlog=make_runlog(cfg, planner),
         clock=FakeClock().now,
-        observer=ConsoleTrace(registry, out, ansi=False),
+        observers=[ConsoleTrace(registry, out, ansi=False)],
     )
     outcome = d.run_task("walk", source="test")
     lines = out.getvalue().splitlines()

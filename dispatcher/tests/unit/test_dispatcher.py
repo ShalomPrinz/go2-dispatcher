@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -25,6 +26,7 @@ from dispatcher.tests.helpers import (
     ScriptedPlanner,
     exec_result,
     make_config,
+    make_runlog,
     stop_move_result,
 )
 from dispatcher.tests.helpers.fakes import state
@@ -68,6 +70,7 @@ class Rig:
         on_call=None,
         executor=None,
         posture: Posture = "standing",
+        runlog: type[RunLogFactory] = RunLogFactory,
         **cfg,
     ):
         self.cfg = make_config(tmp_path, **cfg)
@@ -75,7 +78,14 @@ class Rig:
         self.planner = ScriptedPlanner(items, surface, on_call=on_call)
         self.executor = executor or FakeExecutor(results, fresh=state(posture))
         self.clock = FakeClock()
-        self.d = Dispatcher(self.cfg, registry, self.planner, self.executor, clock=self.clock.now)
+        self.d = Dispatcher(
+            self.cfg,
+            registry,
+            self.planner,
+            self.executor,
+            runlog=make_runlog(self.cfg, self.planner, runlog),
+            clock=self.clock.now,
+        )
 
     def run(self, task="do the thing"):
         return self.d.run_task(task, source="test")
@@ -482,16 +492,29 @@ def test_internal_error_stop_move_stderr_tail_is_cut(tmp_path, registry):
     assert sm["stderr_tail"].endswith("x")
 
 
-def test_task_end_write_fails_index_row_still_written(tmp_path, registry, monkeypatch, capsys):
-    emit = RunLog.emit
-
-    def task_end_fails(self, event):
+class _TaskEndFails(RunLog):
+    def emit(self, event):
         if isinstance(event, TaskEnd):
             raise OSError("disk full")
-        emit(self, event)
+        super().emit(event)
 
-    monkeypatch.setattr(RunLog, "emit", task_end_fails)
-    r = Rig(tmp_path, registry, [done()])
+
+class _TaskEndFailsFactory(RunLogFactory):
+    def open(self, run_id, t_start_mono, *, clock=time.monotonic):
+        log = super().open(run_id, t_start_mono, clock=clock)
+        log.close()  # reopened in append mode as the failing log
+        return _TaskEndFails(
+            log.path,
+            session=self.session,
+            session_id=self.session_id,
+            run_id=run_id,
+            t_start_mono=t_start_mono,
+            clock=clock,
+        )
+
+
+def test_task_end_write_fails_index_row_still_written(tmp_path, registry, capsys):
+    r = Rig(tmp_path, registry, [done()], runlog=_TaskEndFailsFactory)
     o = r.run()
     assert o.outcome == "DONE"
     assert records(o, "task_end") == []
@@ -745,12 +768,13 @@ def test_shutdown_task_ends_within_wait(tmp_path, registry):
     assert executor.stop_moves == ["operator"]
 
 
-def test_log_open_fails_internal_error_without_index_row(tmp_path, registry, monkeypatch):
-    def open_fails(self, *args, **kwargs):
+class _OpenFailsFactory(RunLogFactory):
+    def open(self, *args, **kwargs):
         raise OSError("read-only file system")
 
-    monkeypatch.setattr(RunLogFactory, "open", open_fails)
-    r = Rig(tmp_path, registry, [done()])
+
+def test_log_open_fails_internal_error_without_index_row(tmp_path, registry):
+    r = Rig(tmp_path, registry, [done()], runlog=_OpenFailsFactory)
     o = r.run()
     assert o.outcome == "INTERNAL_ERROR" and o.log_path == ""
     assert not (r.cfg.run_log_dir / "index.jsonl").exists()

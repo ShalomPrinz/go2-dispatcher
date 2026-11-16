@@ -2,7 +2,7 @@
 
 from .config import BUILTIN_SKILLS_DIR, make_config
 from .fake_telegram import fake_context, fake_update, replies
-from .fakes import FakeClock, FakeExecutor, exec_result, stop_move_result
+from .fakes import FakeClock, FakeExecutor, exec_result, make_runlog, stop_move_result
 from .planner import SCRIPTED_USAGE, ScriptedPlanner
 
 __all__ = [
@@ -13,6 +13,7 @@ __all__ = [
     "FakeClock",
     "FakeExecutor",
     "exec_result",
+    "make_runlog",
     "stop_move_result",
     "fake_update",
     "fake_context",

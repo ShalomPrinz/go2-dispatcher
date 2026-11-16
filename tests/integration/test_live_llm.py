@@ -12,7 +12,7 @@ from dispatcher.context import build_prompt_surface
 from dispatcher.dispatcher import Dispatcher
 from dispatcher.llm.anthropic_planner import AnthropicPlanner
 from dispatcher.registry import Registry
-from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR, make_config
+from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR, make_config, make_runlog
 from services.backend import stub_state
 
 pytestmark = [pytest.mark.live_llm, pytest.mark.timeout(300)]
@@ -28,7 +28,8 @@ def test_live_turn_and_find_chair(tmp_path):
     stub_state.reset(cfg.stub.initial_posture, cfg.stub.state_file)
     registry = Registry.load(BUILTIN_SKILLS_DIR)
     surface = build_prompt_surface(registry, cfg.loop.planning_horizon)
-    d = Dispatcher(cfg, registry, AnthropicPlanner(key, cfg.llm, surface), build_executor(cfg))
+    planner = AnthropicPlanner(key, cfg.llm, surface)
+    d = Dispatcher(cfg, registry, planner, build_executor(cfg), runlog=make_runlog(cfg, planner))
     try:
         o = d.run_task(TASK, source="test")
     finally:

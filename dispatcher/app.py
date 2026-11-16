@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import os
+import uuid
 from collections.abc import Callable
 from pathlib import Path
 
@@ -30,7 +31,9 @@ from .llm.openrouter_planner import OpenRouterPlanner
 from .llm.surface import PromptSurface
 from .models import RobotState, StartupError
 from .registry import Registry
+from .runlog.session import SessionInfo
 from .runlog.sinks import Observer
+from .runlog.writer import RunLogFactory
 
 __all__ = [
     "build_dispatcher",
@@ -86,7 +89,8 @@ def build_dispatcher(
     cfg: Config, *, reset_stub: bool, observer: Callable[[Registry], Observer] | None = None
 ) -> Dispatcher:
     """Lock, registry, stub reset, planner, executor, robot service start, dispatcher, vision service start
-    (docs/running.md). ``observer`` builds the dispatcher's task observer from the registry. Raises
+    (docs/running.md). ``observer`` builds the dispatcher's task observer from the registry; the run log copies
+    the planner's surface (dispatcher/docs/run-log.md). Raises
     ``StartupError``; process-lifetime hooks are the caller's, and ``Dispatcher.shutdown`` stops both services."""
     process_lock.acquire(cfg.log.dir)  # the root, so all provider/backend folders share one lock
     registry = Registry.load(cfg.skills.dir)
@@ -102,7 +106,8 @@ def build_dispatcher(
             registry,
             planner,
             executor,
-            observer=observer(registry) if observer is not None else None,
+            runlog=RunLogFactory(cfg.run_log_dir, uuid.uuid4().hex, SessionInfo.collect(cfg, planner.surface)),
+            observers=(observer(registry),) if observer is not None else (),
         )
     except BaseException:
         executor.close()  # no dispatcher, so no shutdown hook stops the robot service

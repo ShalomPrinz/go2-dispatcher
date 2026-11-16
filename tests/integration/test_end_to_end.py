@@ -21,7 +21,7 @@ from dispatcher.execution.process import UtilityRun
 from dispatcher.planning.plan import Plan, PlanStep
 from dispatcher.registry import Registry
 from dispatcher.runlog.format import INDEX_FILE, stream_path
-from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR, ScriptedPlanner, make_config
+from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR, ScriptedPlanner, make_config, make_runlog
 from services.backend import stub_state
 from services.robot.client import RobotClient
 from services.robot.protocol import StopSent
@@ -47,7 +47,9 @@ def build(tmp_path, registry, items, **cfg_over):
     surface = build_prompt_surface(registry, cfg.loop.planning_horizon)
     planner = ScriptedPlanner(items, surface)
     executor = build_executor(cfg)
-    d = Dispatcher(cfg, registry, planner, executor)  # the first fresh read starts the robot service
+    d = Dispatcher(
+        cfg, registry, planner, executor, runlog=make_runlog(cfg, planner)
+    )  # the first fresh read starts the robot service
     return d, planner, cfg
 
 

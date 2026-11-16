@@ -1,14 +1,17 @@
-"""FakeClock and FakeExecutor for dispatcher loop tests (tests/docs/testing.md)."""
+"""FakeClock, FakeExecutor and make_runlog for dispatcher loop tests (tests/docs/testing.md)."""
 
 from __future__ import annotations
 
 import threading
 import time
+import uuid
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
 from contract.schema import SCHEMA_VERSION
+from dispatcher.config import Config
+from dispatcher.llm.client import PlannerClient
 from dispatcher.models import (
     ExecOutcome,
     ExecResult,
@@ -23,9 +26,17 @@ from dispatcher.models import (
     StopMoveResult,
 )
 from dispatcher.registry import SkillDescriptor
+from dispatcher.runlog.session import SessionInfo
 from dispatcher.runlog.sinks import Observer
+from dispatcher.runlog.writer import RunLogFactory
 
 FAKE_CLOCK_START = 1000.0
+
+
+def make_runlog(cfg: Config, planner: PlannerClient, factory: type[RunLogFactory] = RunLogFactory) -> RunLogFactory:
+    """The run log ``app.build_dispatcher`` gives the dispatcher: under ``cfg``, from ``planner``'s surface.
+    ``factory`` is a ``RunLogFactory`` subclass, e.g. one whose ``open`` fails."""
+    return factory(cfg.run_log_dir, uuid.uuid4().hex, SessionInfo.collect(cfg, planner.surface))
 
 
 class FakeClock:

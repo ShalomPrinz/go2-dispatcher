@@ -6,7 +6,7 @@ import sys
 import threading
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -63,7 +63,6 @@ from .runlog.events import (
     TaskStart,
 )
 from .runlog.format import stream_path
-from .runlog.session import SessionInfo
 from .runlog.sinks import Observer, publish
 from .runlog.writer import RunLog, RunLogFactory
 
@@ -145,21 +144,18 @@ class Dispatcher:
         planner: PlannerClient,
         executor: SkillExecutor,
         *,
+        runlog: RunLogFactory,
         clock: Callable[[], float] = time.monotonic,
-        observer: Observer | None = None,
+        observers: Sequence[Observer] = (),
     ):
         self.cfg = cfg
         self.registry = registry
         self.planner = planner
         self.executor = executor
-        # the log copies the surface the planner sends (dispatcher/docs/run-log.md)
-        self.runlog_factory = RunLogFactory(
-            cfg.run_log_dir, uuid.uuid4().hex, SessionInfo.collect(cfg, planner.surface)
-        )
+        self.runlog_factory = runlog  # built from this planner's surface by the caller (dispatcher/docs/run-log.md)
         self.registry_hash = planner.surface.registry_hash
         self.clock = clock
-        self.observer = observer  # sees every event, e.g. the CLI console trace (dispatcher/docs/run-log.md)
-        self._observers: tuple[Observer, ...] = (observer,) if observer is not None else ()
+        self._observers = tuple(observers)  # see every event, e.g. the CLI console trace (dispatcher/docs/run-log.md)
         self.previous: TaskSummary | None = None
 
         self._task_lock = threading.Lock()

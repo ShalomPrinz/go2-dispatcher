@@ -12,7 +12,7 @@ import sys
 import traceback
 from collections.abc import Awaitable, Callable, Coroutine
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from telegram import Update
 from telegram.constants import ParseMode
@@ -29,6 +29,7 @@ from ..app import STOP_MOVE_TIMEOUT_S, build_dispatcher
 from ..config import TOKEN_ENV, Config, load_config_and_env
 from ..dispatcher import Dispatcher
 from ..models import BusyError, StartupError
+from ..registry import Registry
 from . import startup_error_text, texts
 from .telegram_progress import Edit, TelegramProgress
 from .telegram_text import format_outcome, h
@@ -225,9 +226,16 @@ def _serve(config_path: Path | None) -> int:
         return 2
     if not cfg.telegram.allowed_user_ids:
         print(NO_ALLOWED_USERS_WARNING, file=sys.stderr)
-    dispatcher = build_dispatcher(cfg, reset_stub=True, observer=TelegramProgress)
+    progress: TelegramProgress | None = None
+
+    def make_progress(registry: Registry) -> TelegramProgress:
+        nonlocal progress  # the bot keeps the observer it gives the dispatcher
+        progress = TelegramProgress(registry)
+        return progress
+
+    dispatcher = build_dispatcher(cfg, reset_stub=True, observer=make_progress)
     atexit.register(dispatcher.shutdown, 0)
-    build_application(dispatcher, cfg, token, cast(TelegramProgress, dispatcher.observer)).run_polling()
+    build_application(dispatcher, cfg, token, progress).run_polling()
     return 0
 
 

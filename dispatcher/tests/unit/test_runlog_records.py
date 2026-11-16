@@ -14,7 +14,14 @@ from dispatcher.models import StopCause
 from dispatcher.planning.plan import Plan, PlanStep
 from dispatcher.registry import Registry
 from dispatcher.runlog.writer import RunLog
-from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR, FakeClock, FakeExecutor, ScriptedPlanner, make_config
+from dispatcher.tests.helpers import (
+    BUILTIN_SKILLS_DIR,
+    FakeClock,
+    FakeExecutor,
+    ScriptedPlanner,
+    make_config,
+    make_runlog,
+)
 
 ENVELOPE_LEN = 6  # ts, t_mono_ms, session_id, run_id, seq, type
 WALK = PlanStep(skill="walk", params={"direction": "forward", "distance_m": 0.5})
@@ -29,7 +36,8 @@ def payload(tmp_path, registry, items, results=(), *, type_: str, **cfg) -> list
     """The one ``type_`` record of a task, without the envelope, as ordered (key, value) pairs."""
     config = make_config(tmp_path, **cfg)
     planner = ScriptedPlanner(items, build_prompt_surface(registry, config.loop.planning_horizon))
-    d = Dispatcher(config, registry, planner, FakeExecutor(list(results)), clock=FakeClock().now)
+    executor = FakeExecutor(list(results))
+    d = Dispatcher(config, registry, planner, executor, runlog=make_runlog(config, planner), clock=FakeClock().now)
     o = d.run_task("do the thing", source="test")
     with open(o.log_path, encoding="utf-8") as f:
         (rec,) = [r for r in map(json.loads, f) if r["type"] == type_]

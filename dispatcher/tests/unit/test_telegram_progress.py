@@ -31,6 +31,7 @@ from dispatcher.tests.helpers import (
     exec_result,
     fake_context,
     make_config,
+    make_runlog,
     replies,
 )
 from dispatcher.transports import texts
@@ -81,7 +82,9 @@ class Phone:
 
 def make_dispatcher(cfg, registry, progress, items, results):
     surface = build_prompt_surface(registry, cfg.loop.planning_horizon)
-    return Dispatcher(cfg, registry, ScriptedPlanner(items, surface), FakeExecutor(results), observer=progress)
+    planner = ScriptedPlanner(items, surface)
+    runlog = make_runlog(cfg, planner)
+    return Dispatcher(cfg, registry, planner, FakeExecutor(results), runlog=runlog, observers=[progress])
 
 
 async def run(d, progress, phone, task="turn left"):

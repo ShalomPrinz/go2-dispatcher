@@ -26,6 +26,7 @@ from dispatcher.tests.helpers import (
     fake_context,
     fake_update,
     make_config,
+    make_runlog,
     replies,
 )
 from dispatcher.transports import telegram_bot, texts
@@ -154,6 +155,7 @@ def test_normal_task(cfg, registry):
         registry,
         planner,
         FakeExecutor([exec_result("ok", skill="turn")]),
+        runlog=make_runlog(cfg, planner),
         clock=FakeClock().now,
     )
     u = fake_update("  turn left  ", USER)
