@@ -6,7 +6,8 @@ import sys
 import threading
 import time
 import uuid
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -118,7 +119,7 @@ class _Task:
 
 @dataclass(frozen=True)
 class _Ending:
-    """How a task ended: the arguments ``Dispatcher._end`` is called with (dispatcher/docs/loop-and-context.md)."""
+    """How a task ended, passed whole to ``Dispatcher._end`` (dispatcher/docs/loop-and-context.md)."""
 
     outcome: TaskOutcomeCode
     message: str | None = None
@@ -230,16 +231,7 @@ class Dispatcher:
                         stream = self.executor.state_stream(stream_path(t.log.path), t.t_start, t.observers)
                     self._loop(t)
                 except _TaskEnded as ended:  # the one place a task ends (dispatcher/docs/loop-and-context.md)
-                    end = ended.ending
-                    return self._end(
-                        t,
-                        end.outcome,
-                        message=end.message,
-                        detail=end.detail,
-                        exception_type=end.exception_type,
-                        stop_move=end.stop_move,
-                        precondition=end.precondition,
-                    )
+                    return self._end(t, ended.ending)
             except Exception as e:  # noqa: BLE001 - every unhandled error ends the task (dispatcher/docs/loop-and-context.md)
                 return self._internal_error(t, e)
             finally:
@@ -295,6 +287,15 @@ class Dispatcher:
     def _set_phase(self, phase: Phase) -> None:
         with self._state_lock:
             self._phase = phase
+
+    @contextmanager
+    def _in_phase(self, phase: Phase) -> Iterator[None]:
+        """Set ``phase`` for the block and ``between`` on exit, also when it raises."""
+        self._set_phase(phase)
+        try:
+            yield
+        finally:
+            self._set_phase("between")
 
     def _remaining_s(self, t: _Task) -> float:
         return t.deadline - self.clock()
@@ -352,28 +353,22 @@ class Dispatcher:
         """One planner call. Raises ``_TaskEnded`` if the call ended the task
         (interrupted, unavailable, or a stop/deadline that arrived during the call)."""
         call_index = t.llm_calls + 1
-        self._set_phase("llm_call")
-        t.emit(LlmRequest(call_index, return_reason, retry_of, user))
         try:
-            res = self.planner.plan(
-                user=user,
-                call_index=call_index,
-                remaining_s=lambda: self._remaining_s(t),
-                stop_event=self._stop_event,
-                on_infra_retry=lambda retry: t.emit(LlmRetry(retry)),
-            )
+            with self._in_phase("llm_call"):  # a stop_requested record during the call says llm_call
+                t.emit(LlmRequest(call_index, return_reason, retry_of, user))
+                res = self.planner.plan(
+                    user=user,
+                    call_index=call_index,
+                    remaining_s=lambda: self._remaining_s(t),
+                    stop_event=self._stop_event,
+                    on_infra_retry=lambda retry: t.emit(LlmRetry(retry)),
+                )
         except LLMInterrupted as e:
-            self._set_phase("between")
             t.emit(LlmInterrupted(call_index, e.cause))
             self._stop(t, e.cause)
         except LLMUnavailable as e:
-            self._set_phase("between")
             t.emit(LlmError(call_index, e.detail))
             raise _TaskEnded(_Ending("LLM_ERROR", detail=e.detail)) from None
-        except BaseException:
-            self._set_phase("between")
-            raise
-        self._set_phase("between")
 
         t.llm_calls += 1
         for k, v in _numeric_usage(res.usage).items():
@@ -416,18 +411,9 @@ class Dispatcher:
         detail = operator_messages.SERVICE_LOST_STOP_CONFIRMED if smr.ok else operator_messages.SERVICE_LOST_STOP_FAILED
         raise _TaskEnded(_Ending("ROBOT_SERVICE_LOST", detail=detail, stop_move=smr)) from None
 
-    def _end(
-        self,
-        t: _Task,
-        outcome: TaskOutcomeCode,
-        *,
-        message: str | None = None,
-        detail: str = "",
-        exception_type: str = "Exception",
-        stop_move: StopMoveResult | None = None,
-        precondition: PreconditionFailure | None = None,
-    ) -> TaskOutcome:
+    def _end(self, t: _Task, ending: _Ending) -> TaskOutcome:
         self._set_phase("ending")
+        outcome, stop_move = ending.outcome, ending.stop_move
         if stop_move is not None:
             t.emit(StopMove(stop_move))
             self._apply_state(t, None, stop_move)
@@ -439,10 +425,10 @@ class Dispatcher:
             max_llm_calls=loop.max_llm_calls,
             failures=t.failures,
             last_failure=t.last_failure,
-            message=message,
-            detail=detail,
-            exception_type=exception_type,
-            precondition=precondition,
+            message=ending.message,
+            detail=ending.detail,
+            exception_type=ending.exception_type,
+            precondition=ending.precondition,
         )
         text = operator_messages.operator_message(outcome, facts, stop_move_failed=t.stop_move_failed)
         duration_ms = (self.clock() - t.t_start) * 1000.0
@@ -501,7 +487,7 @@ class Dispatcher:
                 )
         finally:
             # also runs if a BaseException (e.g. KeyboardInterrupt) arrives above; it then propagates
-            outcome = self._end(t, "INTERNAL_ERROR", stop_move=smr, exception_type=type(e).__name__)
+            outcome = self._end(t, _Ending("INTERNAL_ERROR", stop_move=smr, exception_type=type(e).__name__))
         return outcome
 
     # --- the loop (dispatcher/docs/loop-and-context.md) --------------------------------------------------------------
@@ -595,9 +581,8 @@ class Dispatcher:
         )
         t.budget.charge(dispatch.motion_cost)
 
-        self._set_phase("step")
-        t.emit(StepStart(ref, dispatch))
-        try:
+        with self._in_phase("step"):
+            t.emit(StepStart(ref, dispatch))
             ex = self.executor.run(
                 desc,
                 params,
@@ -606,8 +591,6 @@ class Dispatcher:
                 remaining_task_s=self._remaining_s(t),
                 stop_event=self._stop_event,
             )
-        finally:
-            self._set_phase("between")
 
         check = verify(desc.expect, params, ex.response, ok=ex.outcome == "ok")
         sr = StepResult(

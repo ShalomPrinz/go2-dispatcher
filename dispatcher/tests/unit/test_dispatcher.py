@@ -382,6 +382,32 @@ def test_stop_during_llm_call_skips_retry(tmp_path, registry):
     assert r.executor.stop_moves == ["operator"]
 
 
+def test_stop_requested_during_names_the_phase(tmp_path, registry):
+    def stop(r):
+        assert r.d.request_stop("test") == "stopping"
+
+    def step(call):
+        stop(r)
+        return exec_result()
+
+    class StopBeforeStep(FakeExecutor):
+        def fresh_state(self, *, start=True):
+            if not start:  # the pre-step read runs between the plan and the step
+                stop(r)
+            return super().fresh_state(start=start)
+
+    cases = {
+        "llm_call": dict(items=[done()], on_call=lambda _: stop(r)),
+        "step": dict(items=[plan(walk())], results=[step]),
+        "between": dict(items=[plan(walk())], executor=StopBeforeStep([exec_result()])),
+    }
+    for during, kw in cases.items():
+        r = Rig(tmp_path / during, registry, **kw)
+        o = r.run()
+        assert o.outcome == "STOPPED"
+        assert [rec["during"] for rec in records(o, "stop_requested")] == [during]
+
+
 def test_request_stop_idle(tmp_path, registry):
     r = Rig(tmp_path, registry, [])
     assert r.d.request_stop("test") == "idle"
