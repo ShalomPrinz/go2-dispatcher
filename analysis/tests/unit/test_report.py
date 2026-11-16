@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from analysis import logs, report
-from dispatcher.runlog import INDEX_FILE
+from dispatcher.runlog.format import INDEX_FILE
 
 
 def request(index: int, reason: str) -> dict[str, Any]:

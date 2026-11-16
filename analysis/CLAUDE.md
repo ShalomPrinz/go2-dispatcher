@@ -23,6 +23,6 @@ uv run lint-imports                            # import contracts; must pass bef
 
 ## Gotchas
 
-- `analysis` imports from the project only `dispatcher.runlog` (file-format constants, `TOKEN_KEYS`) and `dispatcher.config` (`Provider`); only `dispatcher.transports.cli` and root `tests` import it. Both are import contracts, and they cover `analysis/tests/` too, so a test that runs `go2 report` through the CLI lives with the CLI's tests ([report.md](docs/report.md#the-package)).
+- `analysis` imports from the project only `dispatcher.runlog.format` (file-format constants, `TOKEN_KEYS`) and `dispatcher.config` (`Provider`); only `dispatcher.transports.cli` and root `tests` import it. Both are import contracts, and they cover `analysis/tests/` too, so a test that runs `go2 report` through the CLI lives with the CLI's tests ([report.md](docs/report.md#the-package)).
 - A new log field the report needs is a run-log change owned by `dispatcher/docs/run-log.md`, made there first; old logs lack it and are skipped as `older log, fields missing` ([report.md](docs/report.md#what-it-computes)).
 - `MOTION_SKILLS` and `STATIONARY_SKILLS` must classify every built-in skill; a test checks them against each `SKILL.md`'s `moves` ([report.md](docs/report.md#skill-lists)).

@@ -29,7 +29,7 @@ CONTRACTS: tuple[tuple[str, str], ...] = (
     ("skills/*/SKILL.md", "built-in skills: registry hash and golden files change (skills/docs/skills.md)"),
     ("dispatcher/tests/golden/*", "golden file (tests/docs/testing.md)"),
     ("dispatcher/registry.py", "registry hash (skills/docs/skills.md)"),
-    ("dispatcher/runlog.py", "run-log records (dispatcher/docs/run-log.md)"),
+    ("dispatcher/runlog/*.py", "run-log records (dispatcher/docs/run-log.md)"),
     ("dispatcher/config.py", "config keys (docs/configuration.md)"),
     ("config.example.toml", "config keys (docs/configuration.md)"),
     ("dispatcher/models.py", "step and task result types, exceptions (dispatcher/docs/loop-and-context.md)"),

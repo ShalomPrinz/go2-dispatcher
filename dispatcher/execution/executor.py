@@ -27,7 +27,7 @@ from .stop_path import StopPath
 from .vision_service import VisionSupervisor
 
 if TYPE_CHECKING:
-    from ..runlog import TaskObserver
+    from ..runlog.sinks import TaskObserver
 
 POLL_INTERVAL_S = 0.05  # wait-loop poll period (docs/safety.md)
 

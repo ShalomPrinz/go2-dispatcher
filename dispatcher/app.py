@@ -30,7 +30,7 @@ from .llm.openrouter_planner import OpenRouterPlanner
 from .llm.surface import PromptSurface
 from .models import RobotState, StartupError
 from .registry import Registry
-from .runlog import TaskObserver
+from .runlog.sinks import TaskObserver
 
 __all__ = [
     "build_dispatcher",

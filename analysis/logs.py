@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from dispatcher.config import Provider
-from dispatcher.runlog import FILE_TIME_FORMAT, INDEX_FILE, STREAM_SUFFIX, TOKEN_KEYS
+from dispatcher.runlog.format import FILE_TIME_FORMAT, INDEX_FILE, STREAM_SUFFIX, TOKEN_KEYS
 
 REPLAN_TYPES = frozenset({"plan_complete", "checkpoint", "failure"})
 INDEX_REQUIRED = ("file", "ts_start", "outcome", "provider", "model", "registry_hash")

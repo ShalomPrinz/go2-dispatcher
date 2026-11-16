@@ -23,7 +23,7 @@ from dispatcher.models import (
     StopMoveResult,
 )
 from dispatcher.registry import SkillDescriptor
-from dispatcher.runlog import TaskObserver
+from dispatcher.runlog.sinks import TaskObserver
 
 FAKE_CLOCK_START = 1000.0
 

@@ -15,7 +15,7 @@ from services.robot.client import RobotClient
 from services.robot.protocol import LinkEvent
 
 if TYPE_CHECKING:
-    from ..runlog import TaskObserver
+    from ..runlog.sinks import TaskObserver
 
 STREAM_PERIOD_S = 0.1  # state_stream.jsonl at 10 Hz (tunable, dispatcher/docs/run-log.md)
 STREAM_POLL_S = 0.2  # the stream thread's wait per event, so close() ends it within this

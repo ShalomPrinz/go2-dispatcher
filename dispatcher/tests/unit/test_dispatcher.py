@@ -16,7 +16,7 @@ from dispatcher.llm.client import InfraRetry, LLMInterrupted, LLMUnavailable
 from dispatcher.models import BusyError, ExecOutcome, ObstacleDistances, Posture, StopCause
 from dispatcher.planning.plan import Plan, PlanStep
 from dispatcher.registry import Registry
-from dispatcher.runlog import RunLog, RunLogFactory
+from dispatcher.runlog.writer import RunLog, RunLogFactory
 from dispatcher.tests.helpers import (
     BUILTIN_SKILLS_DIR,
     FakeClock,

@@ -12,7 +12,7 @@ from ..registry import SkillDescriptor
 from .executor import Executor
 
 if TYPE_CHECKING:
-    from ..runlog import TaskObserver
+    from ..runlog.sinks import TaskObserver
 
 __all__ = ["Executor", "SkillExecutor", "StreamHandle"]
 

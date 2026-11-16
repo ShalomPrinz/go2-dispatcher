@@ -41,7 +41,10 @@ from .planning.plan import Plan
 from .planning.validation import PlanCheck, check_reply
 from .planning.verification import verify
 from .registry import Registry
-from .runlog import NullLog, RunLogFactory, SessionInfo, TaskLog, TaskObserver, TeeLog, notify, stream_path
+from .runlog.format import stream_path
+from .runlog.session import SessionInfo
+from .runlog.sinks import NullLog, TaskLog, TaskObserver, TeeLog, notify
+from .runlog.writer import RunLogFactory
 
 __all__ = ["Dispatcher"]
 

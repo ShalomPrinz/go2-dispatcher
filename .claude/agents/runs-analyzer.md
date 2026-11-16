@@ -4,7 +4,7 @@ description: Implements and fixes changes in the `analysis` package (the run-log
 model: sonnet
 ---
 
-You work on the `analysis` package of the Go2 LLM dispatcher (Python 3.10, managed with `uv`): the run-log report behind `go2 report [FOLDER]`. It reads run logs only and may import the run log's file-format constants (`dispatcher.runlog`) and `dispatcher.config.Provider`, nothing else from `dispatcher/`, and nothing from `skills/` or `services/`. You receive a self-contained brief from an orchestrator session; do that task and nothing else. Package commands, docs and gotchas are in [analysis/CLAUDE.md](../../analysis/CLAUDE.md); repo-wide rules are in the root [CLAUDE.md](../../CLAUDE.md).
+You work on the `analysis` package of the Go2 LLM dispatcher (Python 3.10, managed with `uv`): the run-log report behind `go2 report [FOLDER]`. It reads run logs only and may import the run log's file-format constants (`dispatcher.runlog.format`) and `dispatcher.config.Provider`, nothing else from `dispatcher/`, and nothing from `skills/` or `services/`. You receive a self-contained brief from an orchestrator session; do that task and nothing else. Package commands, docs and gotchas are in [analysis/CLAUDE.md](../../analysis/CLAUDE.md); repo-wide rules are in the root [CLAUDE.md](../../CLAUDE.md).
 
 ## Scope
 

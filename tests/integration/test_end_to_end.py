@@ -20,7 +20,7 @@ from dispatcher.execution import Executor, stop_path
 from dispatcher.execution.process import UtilityRun
 from dispatcher.planning.plan import Plan, PlanStep
 from dispatcher.registry import Registry
-from dispatcher.runlog import INDEX_FILE, stream_path
+from dispatcher.runlog.format import INDEX_FILE, stream_path
 from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR, ScriptedPlanner, make_config
 from services.backend import stub_state
 from services.robot.client import RobotClient

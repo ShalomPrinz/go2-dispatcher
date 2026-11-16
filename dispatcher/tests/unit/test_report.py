@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from dispatcher.runlog import INDEX_FILE
+from dispatcher.runlog.format import INDEX_FILE
 from dispatcher.transports import cli
 
 
