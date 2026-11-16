@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from contract.constants import Link
 
     from ..context import RequestReason, ReturnReason
-    from ..llm.client import LLMResult
+    from ..llm.client import InfraRetry, LLMResult
     from ..models import (
         Posture,
         PreconditionFailure,
@@ -252,7 +252,7 @@ class TelegramProgress:
             self._calls += 1
         self._update(pending=texts.PROGRESS_THINKING)
 
-    def llm_retry(self, retry: dict[str, Any]) -> None:
+    def llm_retry(self, retry: InfraRetry) -> None:
         pass  # infrastructure retries stay in the run log (docs/running.md)
 
     def llm_response(self, call_index: int, res: LLMResult) -> None:

@@ -9,7 +9,7 @@ import httpx
 import pytest
 
 from dispatcher import prompts
-from dispatcher.llm.client import LLMResult, LLMUnavailable
+from dispatcher.llm.client import InfraRetry, LLMResult, LLMUnavailable
 from dispatcher.llm.openrouter_planner import OPENROUTER_URL, OpenRouterPlanner
 from dispatcher.llm.surface import PromptSurface
 from dispatcher.planning.schema import TOOL_NAME, plan_tool_schema
@@ -52,7 +52,7 @@ class Harness:
         self.replies = list(replies)
         self.requests: list[httpx.Request] = []
         self.sleeps: list[float] = []
-        self.retries: list[dict] = []
+        self.retries: list[InfraRetry] = []
         cfg = make_config(tmp_path, llm={"provider": "openrouter", "model": "vendor/free-model"})
         client = httpx.Client(transport=httpx.MockTransport(self._handle))
         self.planner = OpenRouterPlanner("test-key", cfg.llm, SURFACE, http_client=client, wait=self._wait)
@@ -121,13 +121,13 @@ def test_retryable_status_then_ok(tmp_path, status):
     h = Harness(tmp_path, [httpx.Response(status, json={"error": {}}, headers={"retry-after": "2"}), ok()])
     r = h.plan()
     assert r.attempts == 2 and h.sleeps == [2.0]
-    assert h.retries[0]["status_code"] == status and h.retries[0]["error_type"] == "HTTPStatusError"
+    assert h.retries[0].status_code == status and h.retries[0].error_type == "HTTPStatusError"
 
 
 def test_error_body_with_200_is_retried(tmp_path):
     h = Harness(tmp_path, [httpx.Response(200, json={"error": {"code": 502, "message": "upstream"}}), ok()])
     assert h.plan().attempts == 2
-    assert h.retries[0]["error_type"] == "OpenRouterError" and h.retries[0]["status_code"] == 502
+    assert h.retries[0].error_type == "OpenRouterError" and h.retries[0].status_code == 502
 
 
 def test_non_retryable_4xx(tmp_path):

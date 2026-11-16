@@ -6,7 +6,7 @@ import threading
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from dispatcher.llm.client import LLMResult
+from dispatcher.llm.client import InfraRetry, LLMResult
 from dispatcher.llm.surface import PromptSurface
 from dispatcher.planning.plan import Plan
 from dispatcher.planning.schema import TOOL_NAME
@@ -48,7 +48,7 @@ class ScriptedPlanner:
         call_index: int,
         remaining_s: Callable[[], float],
         stop_event: threading.Event,
-        on_infra_retry: Callable[[dict], None],
+        on_infra_retry: Callable[[InfraRetry], None],
     ) -> LLMResult:
         kwargs = {
             "user": user,

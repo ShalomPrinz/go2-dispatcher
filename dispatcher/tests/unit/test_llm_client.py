@@ -10,7 +10,7 @@ import pytest
 
 from dispatcher import prompts
 from dispatcher.llm.anthropic_planner import AnthropicPlanner
-from dispatcher.llm.client import LLMInterrupted, LLMResult, LLMUnavailable
+from dispatcher.llm.client import InfraRetry, LLMInterrupted, LLMResult, LLMUnavailable
 from dispatcher.llm.surface import PromptSurface
 from dispatcher.planning.schema import TOOL_NAME, plan_tool_schema
 from dispatcher.planning.validation import PlanCheck, check_reply
@@ -59,7 +59,7 @@ class Harness:
         self.replies = list(replies)
         self.requests: list[httpx.Request] = []
         self.sleeps: list[float] = []
-        self.retries: list[dict] = []
+        self.retries: list[InfraRetry] = []
         self.stop_event = threading.Event()
         self.wait_result = wait_result
         cfg = make_config(tmp_path, llm=llm or {})
@@ -180,9 +180,8 @@ def test_529_then_200(tmp_path):
     assert h.sleeps == [1.0]
     assert len(h.retries) == 1
     rec = h.retries[0]
-    assert set(rec) == {"call_index", "attempt", "error_type", "status_code", "attempt_latency_ms", "sleep_s"}
-    assert rec["call_index"] == 7 and rec["attempt"] == 1
-    assert rec["status_code"] == 529 and rec["sleep_s"] == 1.0
+    assert rec.call_index == 7 and rec.attempt == 1
+    assert rec.status_code == 529 and rec.sleep_s == 1.0
 
 
 def test_429_retry_after(tmp_path):
@@ -227,8 +226,8 @@ def test_connection_error_retried(tmp_path):
     h = Harness(tmp_path, [httpx.ConnectError("boom"), ok()])
     r = h.plan()
     assert r.attempts == 2 and len(h.requests) == 2
-    assert h.retries[0]["error_type"] == "APIConnectionError"
-    assert h.retries[0]["status_code"] is None
+    assert h.retries[0].error_type == "APIConnectionError"
+    assert h.retries[0].status_code is None
 
 
 def test_connection_errors_exhausted(tmp_path):

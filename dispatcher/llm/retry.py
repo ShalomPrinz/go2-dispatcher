@@ -11,7 +11,7 @@ from typing import Any, TypeVar
 
 from ..config import LLMConfig
 from ..models import StopCause
-from .client import LLMInterrupted, LLMUnavailable
+from .client import InfraRetry, LLMInterrupted, LLMUnavailable
 
 RETRYABLE_STATUS_CODES = frozenset({408, 409, 429})  # plus every status >= 500
 RETRY_AFTER_CAP_S = 30.0
@@ -60,7 +60,7 @@ def call_with_retries(
     call_index: int,
     remaining_s: Callable[[], float],
     stop_event: threading.Event,
-    on_infra_retry: Callable[[dict], None],
+    on_infra_retry: Callable[[InfraRetry], None],
     wait: Callable[[threading.Event, float], bool],
 ) -> tuple[_T, float, int]:
     """Runs ``send(attempt_timeout_s)`` under the infra-retry rules (dispatcher/docs/llm.md).
@@ -88,14 +88,14 @@ def call_with_retries(
             if sleep_s >= remaining_s():
                 raise LLMInterrupted(StopCause.TASK_TIME_LIMIT) from e
             on_infra_retry(
-                {
-                    "call_index": call_index,
-                    "attempt": retries + 1,
-                    "error_type": failure.error_type,
-                    "status_code": failure.status_code,
-                    "attempt_latency_ms": attempt_latency_ms,
-                    "sleep_s": sleep_s,
-                }
+                InfraRetry(
+                    call_index=call_index,
+                    attempt=retries + 1,
+                    error_type=failure.error_type,
+                    status_code=failure.status_code,
+                    attempt_latency_ms=attempt_latency_ms,
+                    sleep_s=sleep_s,
+                )
             )
             if wait(stop_event, sleep_s):
                 raise LLMInterrupted(StopCause.OPERATOR) from e

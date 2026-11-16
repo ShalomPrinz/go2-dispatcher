@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 from pydantic import BaseModel, ConfigDict
@@ -28,6 +29,18 @@ class LLMInterrupted(Exception):
     def __init__(self, cause: StopCause):
         super().__init__(cause)
         self.cause = StopCause(cause)
+
+
+@dataclass(frozen=True)
+class InfraRetry:
+    """One infra retry of an LLM call: the ``llm_retry`` record (dispatcher/docs/run-log.md)."""
+
+    call_index: int
+    attempt: int  # 1-based number of the attempt that failed
+    error_type: str
+    status_code: int | None  # None for connection errors and timeouts
+    attempt_latency_ms: float
+    sleep_s: float
 
 
 class LLMResult(BaseModel):
@@ -65,5 +78,5 @@ class PlannerClient(Protocol):
         call_index: int,
         remaining_s: Callable[[], float],
         stop_event: threading.Event,
-        on_infra_retry: Callable[[dict], None],
+        on_infra_retry: Callable[[InfraRetry], None],
     ) -> LLMResult: ...

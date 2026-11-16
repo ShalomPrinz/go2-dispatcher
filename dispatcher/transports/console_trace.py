@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from contract.constants import Link
 
     from ..context import RequestReason, ReturnReason
-    from ..llm.client import LLMResult
+    from ..llm.client import InfraRetry, LLMResult
     from ..models import (
         Posture,
         PreconditionFailure,
@@ -138,9 +138,9 @@ class ConsoleTrace:
         why = "" if return_reason == "initial" else self._style(f" ({return_reason})", DIM)
         self._open(self._style("Thinking...", CYAN) + why)
 
-    def llm_retry(self, retry: dict[str, Any]) -> None:
-        status = f" {retry['status_code']}" if retry.get("status_code") else ""
-        text = f"LLM retry {retry.get('attempt')}: {retry.get('error_type')}{status}, waiting {retry.get('sleep_s')}s"
+    def llm_retry(self, retry: InfraRetry) -> None:
+        status = f" {retry.status_code}" if retry.status_code else ""
+        text = f"LLM retry {retry.attempt}: {retry.error_type}{status}, waiting {retry.sleep_s}s"
         self._line(self._style(text, YELLOW))
 
     def llm_response(self, call_index: int, res: LLMResult) -> None:

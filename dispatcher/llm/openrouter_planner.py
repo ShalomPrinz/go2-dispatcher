@@ -9,7 +9,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from ..config import LLMConfig
-from .client import LLMResult
+from .client import InfraRetry, LLMResult
 from .retry import Failure, call_with_retries, default_wait, retry_after_s, retryable_status
 from .surface import PromptSurface
 
@@ -110,7 +110,7 @@ class OpenRouterPlanner:
         call_index: int,
         remaining_s: Callable[[], float],
         stop_event: threading.Event,
-        on_infra_retry: Callable[[dict], None],
+        on_infra_retry: Callable[[InfraRetry], None],
     ) -> LLMResult:
         body = self._body(user)
 

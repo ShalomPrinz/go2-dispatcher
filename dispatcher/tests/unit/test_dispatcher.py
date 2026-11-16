@@ -12,7 +12,7 @@ from dispatcher import operator_messages, prompts
 from dispatcher.context import build_prompt_surface
 from dispatcher.dispatcher import Dispatcher
 from dispatcher.execution.process import STDERR_TAIL_CHARS
-from dispatcher.llm.client import LLMInterrupted, LLMUnavailable
+from dispatcher.llm.client import InfraRetry, LLMInterrupted, LLMUnavailable
 from dispatcher.models import BusyError, ExecOutcome, ObstacleDistances, Posture, StopCause
 from dispatcher.planning.plan import Plan, PlanStep
 from dispatcher.registry import Registry
@@ -693,6 +693,16 @@ def test_dispatcher_stop_move_updates_posture(tmp_path, registry):
     o = r.run()
     assert o.outcome == "STOPPED"
     assert o.final_posture == "sitting"
+
+
+def test_llm_retry_record_keys_and_values(tmp_path, registry):
+    retry = InfraRetry(
+        call_index=1, attempt=1, error_type="APIStatusError", status_code=529, attempt_latency_ms=12.5, sleep_s=1.0
+    )
+    r = Rig(tmp_path, registry, [done()], on_call=lambda _: r.planner.calls[-1]["on_infra_retry"](retry))
+    (rec,) = records(r.run(), "llm_retry")
+    assert list(rec)[6:] == ["call_index", "attempt", "error_type", "status_code", "attempt_latency_ms", "sleep_s"]
+    assert [rec[k] for k in list(rec)[6:]] == [1, 1, "APIStatusError", 529, 12.5, 1.0]
 
 
 def test_llm_interrupted_time_limit(tmp_path, registry):

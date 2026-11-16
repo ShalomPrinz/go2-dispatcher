@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from contract.constants import Link
 
     from .context import RequestReason, ReturnReason
-    from .llm.client import LLMResult
+    from .llm.client import InfraRetry, LLMResult
     from .llm.surface import PromptSurface
     from .models import (
         Posture,
@@ -203,8 +203,16 @@ class RunLog:
             "llm_request", call_index=call_index, return_reason=return_reason, retry_of=retry_of, user_text=user_text
         )
 
-    def llm_retry(self, retry: dict) -> None:
-        self._write("llm_retry", **retry)
+    def llm_retry(self, retry: InfraRetry) -> None:
+        self._write(
+            "llm_retry",
+            call_index=retry.call_index,
+            attempt=retry.attempt,
+            error_type=retry.error_type,
+            status_code=retry.status_code,
+            attempt_latency_ms=retry.attempt_latency_ms,
+            sleep_s=retry.sleep_s,
+        )
 
     def llm_response(self, call_index: int, res: LLMResult) -> None:
         self._write(
@@ -309,7 +317,7 @@ class TaskRecords(Protocol):
         self, call_index: int, return_reason: RequestReason, retry_of: ReturnReason | None, user_text: str
     ) -> None: ...
 
-    def llm_retry(self, retry: dict) -> None: ...
+    def llm_retry(self, retry: InfraRetry) -> None: ...
 
     def llm_response(self, call_index: int, res: LLMResult) -> None: ...
 
@@ -384,7 +392,7 @@ class NullLog:
     ) -> None:
         pass
 
-    def llm_retry(self, retry: dict) -> None:
+    def llm_retry(self, retry: InfraRetry) -> None:
         pass
 
     def llm_response(self, call_index: int, res: LLMResult) -> None:
@@ -472,7 +480,7 @@ class TeeLog:
         self._log.llm_request(call_index, return_reason, retry_of, user_text)
         self._notify(lambda o: o.llm_request(call_index, return_reason, retry_of, user_text))
 
-    def llm_retry(self, retry: dict) -> None:
+    def llm_retry(self, retry: InfraRetry) -> None:
         self._log.llm_retry(retry)
         self._notify(lambda o: o.llm_retry(retry))
 
