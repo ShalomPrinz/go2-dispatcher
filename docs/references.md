@@ -4,7 +4,7 @@ External sources the project depends on or builds on.
 
 ## Robot
 
-- **Unitree SDK2 Python** — https://github.com/unitreerobotics/unitree_sdk2_python — The SDK every skill uses to drive the Go2 over DDS (`SportClient`, `SportModeState`). Installed from git through the `robot` extra ([setup.md](setup.md), [robot.md](../skills/docs/robot.md)).
+- **Unitree SDK2 Python** — https://github.com/unitreerobotics/unitree_sdk2_python — The SDK every skill uses to drive the Go2 over DDS (`SportClient`, `SportModeState`). Installed from git through the `robot` extra ([setup.md](setup.md), [robot.md](../services/robot/docs/robot.md)).
 
 ## LLM
 

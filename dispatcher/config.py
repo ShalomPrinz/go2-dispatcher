@@ -21,8 +21,10 @@ from pydantic import (
     model_validator,
 )
 
-from skills.coco import COCO_CLASSES
-from skills.stub import DEFAULT_POSTURE, DEFAULT_STATE_FILE, DEFAULT_TIME_SCALE, FaultKind, StubPosture, parse_objects
+from contract.backend import DEFAULT_TIME_SCALE
+from contract.faults import FaultKind
+from contract.stub import DEFAULT_POSTURE, DEFAULT_STATE_FILE, StubPosture, parse_objects
+from contract.vision import COCO_CLASSES
 
 from .models import ConfigError
 
@@ -95,7 +97,7 @@ class MotionBudgetConfig(_Section):
 
 
 class SkillsConfig(_Section):
-    dir: Path = Path("skills/catalog")
+    dir: Path = Path("skills")
 
 
 class RobotConfig(_Section):
@@ -113,7 +115,7 @@ class StubConfig(_Section):
     time_scale: FiniteFloat = Field(default=DEFAULT_TIME_SCALE, gt=0)
     initial_posture: StubPosture = DEFAULT_POSTURE
     state_file: Path = Path(DEFAULT_STATE_FILE)
-    objects: dict[str, dict[str, Any]] = {}  # world frame, metres (skills/docs/skills.md)
+    objects: dict[str, dict[str, Any]] = {}  # world frame, metres (services/robot/docs/service.md)
     faults: list[FaultConfig] = []
 
     @field_validator("objects")

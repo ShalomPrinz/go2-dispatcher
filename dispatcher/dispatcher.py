@@ -6,26 +6,26 @@ import sys
 import threading
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 from typing import Literal, NoReturn
 
-from . import prompts
-from .bounds import cut_message, precheck
-from .budget import MotionBudget
+from . import operator_messages
 from .config import Config
-from .context import ContextInput, Feedback, RequestReason, ReturnReason, build_user_message, schema_retry_message
-from .executor import STDERR_TAIL_CHARS, SkillExecutor
-from .llm import LLMResult, PlanCheck, PlannerClient, check_reply
+from .context import ContextInput, Feedback, build_user_message, schema_retry_message
+from .execution import SkillExecutor
+from .execution.process import STDERR_TAIL_CHARS
+from .llm.client import LLMInterrupted, LLMResult, LLMUnavailable, PlannerClient
 from .models import (
     KILLED_OUTCOMES,
     BusyError,
-    LLMInterrupted,
-    LLMUnavailable,
-    Plan,
     Posture,
     PreconditionFailure,
+    RequestReason,
+    ReturnReason,
     RobotServiceLostError,
     RobotState,
     StartState,
@@ -39,9 +39,33 @@ from .models import (
     TaskOutcomeCode,
     TaskSummary,
 )
+from .planning.bounds import cut_message, precheck
+from .planning.budget import MotionBudget
+from .planning.plan import Plan
+from .planning.validation import PlanCheck, check_reply
+from .planning.verification import verify
 from .registry import Registry
-from .runlog import NullLog, RunLogFactory, SessionInfo, TaskLog, TaskObserver, TeeLog, notify, stream_path
-from .verification import verify
+from .runlog.events import (
+    ExceptionRaised,
+    LlmError,
+    LlmInterrupted,
+    LlmRequest,
+    LlmResponse,
+    LlmRetry,
+    PlanInvalid,
+    PlanRecord,
+    PreconditionFailed,
+    StepRecord,
+    StepStart,
+    StopMove,
+    StopRequested,
+    TaskEnd,
+    TaskEvent,
+    TaskStart,
+)
+from .runlog.format import stream_path
+from .runlog.sinks import Observer, publish
+from .runlog.writer import RunLog, RunLogFactory
 
 __all__ = ["Dispatcher"]
 
@@ -67,7 +91,8 @@ class _Task:
     ts_start: str
     deadline: float
     budget: MotionBudget
-    log: TaskLog = field(default_factory=NullLog)
+    observers: tuple[Observer, ...]
+    log: RunLog | None = None  # set once the file opens (dispatcher/docs/run-log.md)
     steps: list[StepResult] = field(default_factory=list)
     dispatched_count: int = 0
     failures: int = 0
@@ -84,10 +109,17 @@ class _Task:
     def posture(self) -> Posture:
         return self.state.posture if self.state is not None else "unknown"
 
+    @property
+    def log_path(self) -> Path | None:
+        return self.log.path if self.log is not None else None
+
+    def emit(self, event: TaskEvent) -> None:
+        publish(event, self.log, self.observers)
+
 
 @dataclass(frozen=True)
 class _Ending:
-    """How a task ended: the arguments ``Dispatcher._end`` is called with (dispatcher/docs/loop-and-context.md)."""
+    """How a task ended, passed whole to ``Dispatcher._end`` (dispatcher/docs/loop-and-context.md)."""
 
     outcome: TaskOutcomeCode
     message: str | None = None
@@ -113,27 +145,25 @@ class Dispatcher:
         planner: PlannerClient,
         executor: SkillExecutor,
         *,
+        runlog: RunLogFactory,
         clock: Callable[[], float] = time.monotonic,
-        observer: TaskObserver | None = None,
+        observers: Sequence[Observer] = (),
     ):
         self.cfg = cfg
         self.registry = registry
         self.planner = planner
         self.executor = executor
-        # the log copies the surface the planner sends (dispatcher/docs/run-log.md)
-        self.runlog_factory = RunLogFactory(
-            cfg.run_log_dir, uuid.uuid4().hex, SessionInfo.collect(cfg, planner.surface)
-        )
+        self.runlog_factory = runlog  # built from this planner's surface by the caller (dispatcher/docs/run-log.md)
         self.registry_hash = planner.surface.registry_hash
         self.clock = clock
-        self.observer = observer  # sees every record, e.g. the CLI console trace (dispatcher/docs/run-log.md)
+        self._observers = tuple(observers)  # see every event, e.g. the CLI console trace (dispatcher/docs/run-log.md)
         self.previous: TaskSummary | None = None
 
         self._task_lock = threading.Lock()
         self._state_lock = threading.Lock()
         self._phase: Phase = "idle"
         self._stop_event = threading.Event()
-        self._log: TaskLog | None = None  # the plain log, without the observer (dispatcher/docs/run-log.md)
+        self._log: RunLog | None = None  # the plain log, without the observer (dispatcher/docs/run-log.md)
         self._pending_stop: tuple[str, Phase] | None = None  # a stop before the log opened, logged once it has
 
     # --- public interface (dispatcher/docs/loop-and-context.md) ------------------------------------------------------
@@ -147,14 +177,15 @@ class Dispatcher:
                 return "idle"
             self._stop_event.set()
             during = self._phase
+            event = StopRequested(source, during)
             logged = self._log is not None
             if self._log is not None:
-                self._log.stop_requested(source, during)
+                self._log.emit(event)
             elif self._pending_stop is None:
                 self._pending_stop = (source, during)
         self.executor.kill_current(StopCause.OPERATOR)
         if logged:  # the observer runs after the kill and outside the lock (dispatcher/docs/run-log.md)
-            notify(self.observer, lambda o: o.stop_requested(source, during))
+            publish(event, None, self._observers)
         return "stopping"
 
     def shutdown(self, wait_s: float) -> None:
@@ -173,13 +204,13 @@ class Dispatcher:
             self._task_lock.release()
             return
         self.executor.kill_current(StopCause.SHUTDOWN)
-        smr = self.executor.stop_move(StopCause.SHUTDOWN)
+        event = StopMove(self.executor.stop_move(StopCause.SHUTDOWN))
         with self._state_lock:
             logged = self._log is not None
             if self._log is not None:
-                self._log.stop_move(smr)
+                self._log.emit(event)
         if logged:
-            notify(self.observer, lambda o: o.stop_move(smr))
+            publish(event, None, self._observers)
 
     def run_task(self, task: str, *, source: str, sender_id: str | None = None) -> TaskOutcome:
         if not task.strip():
@@ -196,20 +227,11 @@ class Dispatcher:
                 try:
                     if start.error is not None:  # no plan without a fresh state (dispatcher/docs/loop-and-context.md)
                         self._state_unavailable(start.error)
-                    if t.log.path is not None:
-                        stream = self.executor.state_stream(stream_path(t.log.path), t.t_start, self.observer)
+                    if t.log is not None:
+                        stream = self.executor.state_stream(stream_path(t.log.path), t.t_start, t.observers)
                     self._loop(t)
                 except _TaskEnded as ended:  # the one place a task ends (dispatcher/docs/loop-and-context.md)
-                    end = ended.ending
-                    return self._end(
-                        t,
-                        end.outcome,
-                        message=end.message,
-                        detail=end.detail,
-                        exception_type=end.exception_type,
-                        stop_move=end.stop_move,
-                        precondition=end.precondition,
-                    )
+                    return self._end(t, ended.ending)
             except Exception as e:  # noqa: BLE001 - every unhandled error ends the task (dispatcher/docs/loop-and-context.md)
                 return self._internal_error(t, e)
             finally:
@@ -239,11 +261,8 @@ class Dispatcher:
             ts_start=datetime.now().astimezone().isoformat(),
             deadline=now + self.cfg.loop.task_time_limit_s,
             budget=MotionBudget(mb.max_distance_m, mb.max_rotation_deg),
-            log=self._observed(NullLog()),
+            observers=self._observers,
         )
-
-    def _observed(self, log: TaskLog) -> TaskLog:
-        return log if self.observer is None else TeeLog(log, self.observer)
 
     def _read_start_state(self, t: _Task) -> StartState:
         """Read the state for the task's first plan through the robot service (dispatcher/docs/loop-and-context.md)."""
@@ -254,22 +273,29 @@ class Dispatcher:
         return StartState(age_ms=t.state.age_ms)
 
     def _open_log(self, t: _Task, start_state: StartState) -> None:
-        plain = self.runlog_factory.open(t.run_id, t.t_start, clock=self.clock)
-        log = self._observed(plain)
-        t.log = log
-        log.task_start(t.task, t.source, t.sender_id, self.previous, t.posture, start_state)
+        t.log = self.runlog_factory.open(t.run_id, t.t_start, clock=self.clock)
+        t.emit(TaskStart(t.task, t.source, t.sender_id, self.previous, t.posture, start_state))
         with self._state_lock:  # task_start stays the first record, even with a stop during the start
-            self._log = plain
+            self._log = t.log
             self._phase = "between"
             pending, self._pending_stop = self._pending_stop, None
         if pending is not None:
-            log.stop_requested(*pending)
+            t.emit(StopRequested(*pending))
 
     # --- helpers ------------------------------------------------------------------------------
 
     def _set_phase(self, phase: Phase) -> None:
         with self._state_lock:
             self._phase = phase
+
+    @contextmanager
+    def _in_phase(self, phase: Phase) -> Iterator[None]:
+        """Set ``phase`` for the block and ``between`` on exit, also when it raises."""
+        self._set_phase(phase)
+        try:
+            yield
+        finally:
+            self._set_phase("between")
 
     def _remaining_s(self, t: _Task) -> float:
         return t.deadline - self.clock()
@@ -283,9 +309,9 @@ class Dispatcher:
             t.last_failure = sr
         if sr.dispatch is None:
             t.rejections += 1
-        t.log.step_result(sr, budget=t.budget, failures=t.failures, posture=t.posture)
+        t.emit(StepRecord(sr, t.budget, t.failures, t.posture))
         if stop is not None:
-            t.log.stop_move(stop)
+            t.emit(StopMove(stop))
 
     def _apply_state(self, t: _Task, sr: StepResult | None, stop: StopMoveResult | None) -> None:
         """Update the last known state and the StopMove flag (dispatcher/docs/loop-and-context.md)."""
@@ -327,40 +353,34 @@ class Dispatcher:
         """One planner call. Raises ``_TaskEnded`` if the call ended the task
         (interrupted, unavailable, or a stop/deadline that arrived during the call)."""
         call_index = t.llm_calls + 1
-        self._set_phase("llm_call")
-        t.log.llm_request(call_index, return_reason, retry_of, user)
         try:
-            res = self.planner.plan(
-                user=user,
-                call_index=call_index,
-                remaining_s=lambda: self._remaining_s(t),
-                stop_event=self._stop_event,
-                on_infra_retry=t.log.llm_retry,
-            )
+            with self._in_phase("llm_call"):  # a stop_requested record during the call says llm_call
+                t.emit(LlmRequest(call_index, return_reason, retry_of, user))
+                res = self.planner.plan(
+                    user=user,
+                    call_index=call_index,
+                    remaining_s=lambda: self._remaining_s(t),
+                    stop_event=self._stop_event,
+                    on_infra_retry=lambda retry: t.emit(LlmRetry(retry)),
+                )
         except LLMInterrupted as e:
-            self._set_phase("between")
-            t.log.llm_interrupted(call_index, e.cause)
+            t.emit(LlmInterrupted(call_index, e.cause))
             self._stop(t, e.cause)
         except LLMUnavailable as e:
-            self._set_phase("between")
-            t.log.llm_error(call_index, e.detail)
+            t.emit(LlmError(call_index, e.detail))
             raise _TaskEnded(_Ending("LLM_ERROR", detail=e.detail)) from None
-        except BaseException:
-            self._set_phase("between")
-            raise
-        self._set_phase("between")
 
         t.llm_calls += 1
         for k, v in _numeric_usage(res.usage).items():
             t.usage_totals[k] = t.usage_totals.get(k, 0) + v
-        t.log.llm_response(call_index, res)
+        t.emit(LlmResponse(call_index, res))
         self._check_interrupts(t)
         return res
 
     def _log_invalid(self, t: _Task, res: LLMResult, check: PlanCheck) -> None:
         if check.rejection_kind == "horizon":
             t.horizon_rejections += 1
-        t.log.plan_invalid(t.llm_calls, res.tool_input, check, self.cfg.loop.planning_horizon)
+        t.emit(PlanInvalid(t.llm_calls, res.tool_input, check, self.cfg.loop.planning_horizon))
 
     # --- interrupts and end ----------------------------------------------------------------------
 
@@ -388,38 +408,29 @@ class Dispatcher:
         step (dispatcher/docs/loop-and-context.md)."""
         self._set_phase("ending")
         smr = self.executor.stop_move(StopCause.ROBOT_SERVICE_LOST)
-        detail = prompts.SERVICE_LOST_STOP_CONFIRMED if smr.ok else prompts.SERVICE_LOST_STOP_FAILED
+        detail = operator_messages.SERVICE_LOST_STOP_CONFIRMED if smr.ok else operator_messages.SERVICE_LOST_STOP_FAILED
         raise _TaskEnded(_Ending("ROBOT_SERVICE_LOST", detail=detail, stop_move=smr)) from None
 
-    def _end(
-        self,
-        t: _Task,
-        outcome: TaskOutcomeCode,
-        *,
-        message: str | None = None,
-        detail: str = "",
-        exception_type: str = "Exception",
-        stop_move: StopMoveResult | None = None,
-        precondition: PreconditionFailure | None = None,
-    ) -> TaskOutcome:
+    def _end(self, t: _Task, ending: _Ending) -> TaskOutcome:
         self._set_phase("ending")
+        outcome, stop_move = ending.outcome, ending.stop_move
         if stop_move is not None:
-            t.log.stop_move(stop_move)
+            t.emit(StopMove(stop_move))
             self._apply_state(t, None, stop_move)
 
         loop = self.cfg.loop
-        facts = prompts.OutcomeFacts(
+        facts = operator_messages.OutcomeFacts(
             run_id=t.run_id,
             time_limit_s=loop.task_time_limit_s,
             max_llm_calls=loop.max_llm_calls,
             failures=t.failures,
             last_failure=t.last_failure,
-            message=message,
-            detail=detail,
-            exception_type=exception_type,
-            precondition=precondition,
+            message=ending.message,
+            detail=ending.detail,
+            exception_type=ending.exception_type,
+            precondition=ending.precondition,
         )
-        text = prompts.operator_message(outcome, facts, stop_move_failed=t.stop_move_failed)
+        text = operator_messages.operator_message(outcome, facts, stop_move_failed=t.stop_move_failed)
         duration_ms = (self.clock() - t.t_start) * 1000.0
         result = TaskOutcome(
             run_id=t.run_id,
@@ -432,22 +443,16 @@ class Dispatcher:
             stop_move_failed=t.stop_move_failed,
             duration_ms=duration_ms,
             final_posture=t.posture,
-            log_path=str(t.log.path) if t.log.path is not None else "",
+            log_path=str(t.log_path) if t.log_path is not None else "",
         )
         try:
-            t.log.task_end(
-                result,
-                rejections=t.rejections,
-                horizon_rejections=t.horizon_rejections,
-                usage_totals=t.usage_totals,
-                budget=t.budget,
-            )
+            t.emit(TaskEnd(result, t.rejections, t.horizon_rejections, t.usage_totals, t.budget))
         except Exception as e:  # noqa: BLE001 - the index row must still be written (dispatcher/docs/loop-and-context.md)
             print(
                 f"go2-dispatcher: failed to write task_end for run {t.run_id}: {type(e).__name__}: {e}", file=sys.stderr
             )
         finally:
-            if t.log.path is not None:  # the index row points at the task's log file
+            if t.log is not None:  # the index row points at the task's log file
                 self.runlog_factory.append_index(
                     t.log.path, result, ts_start=t.ts_start, source=t.source, usage_totals=t.usage_totals
                 )
@@ -462,7 +467,7 @@ class Dispatcher:
         smr: StopMoveResult | None = None
         try:
             try:
-                t.log.exception(EXCEPTION_WHERE, e)
+                t.emit(ExceptionRaised(EXCEPTION_WHERE, e))
             except Exception:  # noqa: BLE001
                 pass
             try:
@@ -482,7 +487,7 @@ class Dispatcher:
                 )
         finally:
             # also runs if a BaseException (e.g. KeyboardInterrupt) arrives above; it then propagates
-            outcome = self._end(t, "INTERNAL_ERROR", stop_move=smr, exception_type=type(e).__name__)
+            outcome = self._end(t, _Ending("INTERNAL_ERROR", stop_move=smr, exception_type=type(e).__name__))
         return outcome
 
     # --- the loop (dispatcher/docs/loop-and-context.md) --------------------------------------------------------------
@@ -507,7 +512,7 @@ class Dispatcher:
             if t.llm_calls >= self.cfg.loop.max_llm_calls:
                 raise _TaskEnded(_Ending("CALL_BUDGET_EXHAUSTED"))
             res = self._call(t, request, return_reason, retry_of)
-            check = check_reply(res, self.cfg.loop.planning_horizon)
+            check = check_reply(res.tool_input, cut_off=res.cut_off, horizon=self.cfg.loop.planning_horizon)
             if check.plan is not None:
                 return check.plan
             self._log_invalid(t, res, check)
@@ -522,7 +527,7 @@ class Dispatcher:
     def _execute_plan(self, t: _Task, plan: Plan) -> Feedback:
         """Run a valid plan up to ``stop_at``. Returns the feedback for the next call, or raises ``_TaskEnded``."""
         stop_at = plan.replan_after or len(plan.steps)
-        t.log.plan(t.llm_calls, plan, stop_at)
+        t.emit(PlanRecord(t.llm_calls, plan, stop_at))
         if plan.status == "DONE":
             raise _TaskEnded(_Ending("DONE", message=plan.message))
         if plan.status == "ABORT":
@@ -560,7 +565,7 @@ class Dispatcher:
         requires = self.registry[ref.skill].requires
         if requires is not None and t.state.posture not in requires.posture:
             failure = PreconditionFailure(ref=ref, requires=list(requires.posture), state=t.state)
-            t.log.precondition_failed(failure)
+            t.emit(PreconditionFailed(failure))
             raise _TaskEnded(_Ending("PRECONDITION_FAILED", precondition=failure))
 
     def _run_step(self, t: _Task, ref: StepRef) -> StepResult:
@@ -576,9 +581,8 @@ class Dispatcher:
         )
         t.budget.charge(dispatch.motion_cost)
 
-        self._set_phase("step")
-        t.log.step_start(ref, dispatch)
-        try:
+        with self._in_phase("step"):
+            t.emit(StepStart(ref, dispatch))
             ex = self.executor.run(
                 desc,
                 params,
@@ -587,13 +591,19 @@ class Dispatcher:
                 remaining_task_s=self._remaining_s(t),
                 stop_event=self._stop_event,
             )
-        finally:
-            self._set_phase("between")
 
-        exec_fields = {k: v for k, v in ex if k not in ("interrupt_cause", "stop_move", "service_lost")}  # 1:1
-        exec_fields["error_message"] = cut_message(ex.error_message) if ex.error_message else None
         check = verify(desc.expect, params, ex.response, ok=ex.outcome == "ok")
-        sr = StepResult(ref=ref, dispatch=dispatch, verification=check.verdict, faults=check.faults, **exec_fields)
+        sr = StepResult(
+            ref=ref,
+            dispatch=dispatch,
+            outcome=ex.outcome,
+            error_code=ex.error_code,
+            error_message=cut_message(ex.error_message) if ex.error_message else None,
+            duration_ms=ex.duration_ms,
+            process=ex.process,
+            verification=check.verdict,
+            faults=check.faults,
+        )
         self._record(t, sr, ex.stop_move)
 
         if sr.outcome == "interrupted":
@@ -601,7 +611,11 @@ class Dispatcher:
             raise _TaskEnded(_Ending(ex.interrupt_cause.task_outcome))  # the executor already sent StopMove
         if ex.service_lost:  # every loss ends the task, with no further LLM call (dispatcher/docs/loop-and-context.md)
             confirmed = ex.stop_move is not None and ex.stop_move.ok
-            detail = prompts.SERVICE_LOST_STOP_CONFIRMED if confirmed else prompts.SERVICE_LOST_STOP_FAILED
+            detail = (
+                operator_messages.SERVICE_LOST_STOP_CONFIRMED
+                if confirmed
+                else operator_messages.SERVICE_LOST_STOP_FAILED
+            )
             raise _TaskEnded(_Ending("ROBOT_SERVICE_LOST", detail=detail))
         if ex.stop_move is not None and not ex.stop_move.ok:  # no LLM call without a confirmed stop (docs/safety.md)
             raise _TaskEnded(_Ending("STOP_FAILED"))

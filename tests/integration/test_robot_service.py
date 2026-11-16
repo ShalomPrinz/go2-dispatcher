@@ -1,6 +1,6 @@
 """The robot service as a process on the stub backend: skills sample state and move through it, a killed skill or
 a gone dispatcher stops the robot, the service faults, a rejected Move, a failed StopMove reported by the disarm,
-one service per socket (skills/docs/skills.md)."""
+one service per socket (services/robot/docs/service.md)."""
 
 from __future__ import annotations
 
@@ -15,10 +15,14 @@ from pathlib import Path
 import pytest
 from pydantic import TypeAdapter
 
-from skills import robot_service, stub
-from skills.schema import SkillResponse
-from tests.helpers import REPO_ROOT, run_module, single_response, stub_env
+from contract import faults
+from contract.schema import SkillResponse
+from services.backend import stub_state
+from services.robot import protocol
+from services.robot.backends.faults import SDK_ERR_CLIENT_SEND
+from tests.helpers import REPO_ROOT
 from tests.integration import robot
+from tests.integration.skill_process import run_module, run_utility, single_response, stub_env
 
 pytestmark = pytest.mark.integration
 
@@ -36,7 +40,7 @@ def until(check, wait_s: float = 5.0) -> bool:
 
 
 def command(tmp_path: Path):
-    return stub.read_state(tmp_path / "stub_state.json").command
+    return stub_state.read_state(tmp_path / "stub_state.json").command
 
 
 def start_skill(name: str, params: dict, env: dict[str, str]) -> subprocess.Popen:
@@ -86,7 +90,7 @@ def test_killed_skill_stops_the_robot(tmp_path):
 
 def test_service_stops_the_robot_when_the_dispatcher_dies(tmp_path):
     """The orphan watchdog sends StopMove before the service exits."""
-    stub.write_command((0.3, 0.0, 0.0), tmp_path / "stub_state.json")  # a robot left moving
+    stub_state.write_command((0.3, 0.0, 0.0), tmp_path / "stub_state.json")  # a robot left moving
     env = robot.with_socket(stub_env(tmp_path, GO2_PARENT_PID=str(os.getppid() or 1)))
     proc = robot.start(env)
     try:
@@ -98,50 +102,48 @@ def test_service_stops_the_robot_when_the_dispatcher_dies(tmp_path):
 
 def test_service_crash_leaves_the_robot_moving_until_the_fallback_stop(tmp_path):
     with robot.running(stub_env(tmp_path, GO2_STUB_TIME_SCALE="1")) as svc:
-        proc = run_module("walk", LONG_WALK, {**svc.arm(), "GO2_STUB_FAULT": "service_crash"})
-        assert svc.proc.wait(timeout=5) == stub.CRASH_EXIT_CODE
+        proc = run_module("walk", LONG_WALK, svc.arm(fault="service_crash"))
+        assert svc.proc.wait(timeout=5) == faults.CRASH_EXIT_CODE
     resp = RESPONSE.validate_python(single_response(proc))
     assert resp.error is not None and resp.error.code == "robot_unavailable"
     assert command(tmp_path) == (1.0 * 0.3, 0.0, 0.0)  # worst case: the robot keeps its last velocity
-    stop = RESPONSE.validate_python(single_response(run_module("stop_move", {}, stub_env(tmp_path))))
+    stop = RESPONSE.validate_python(single_response(run_utility("stop_move", {}, stub_env(tmp_path))))
     assert stop.status == "ok" and command(tmp_path) is None
 
 
 def test_failed_stop_ending_a_walk_is_reported_by_the_disarm(tmp_path):
     """stop_error: the walk's closing StopMove and the lease-end one fail, the robot keeps moving, the disarm tells."""
     with robot.running(stub_env(tmp_path)) as svc:
-        proc = run_module(
-            "walk", {"direction": "forward", "distance_m": 0.1}, {**svc.arm(), "GO2_STUB_FAULT": "stop_error"}
-        )
+        proc = run_module("walk", {"direction": "forward", "distance_m": 0.1}, svc.arm(fault="stop_error"))
         failed = svc.control.disarm()
     resp = RESPONSE.validate_python(single_response(proc))
     assert resp.error is not None and (resp.error.code, resp.error.message) == ("sdk_error", "StopMove returned 99")
-    assert failed is not None and failed.ret == stub.STUB_ERR_INJECTED
+    assert failed is not None and failed.ret == faults.STUB_ERR_INJECTED
     assert failed.reason in ("lease connection closed", "disarmed")
     assert command(tmp_path) is not None  # worst case: the robot keeps its last velocity
-    stop = RESPONSE.validate_python(single_response(run_module("stop_move", {}, stub_env(tmp_path))))
+    stop = RESPONSE.validate_python(single_response(run_utility("stop_move", {}, stub_env(tmp_path))))
     assert stop.status == "ok" and command(tmp_path) is None
 
 
 def test_rejected_move_ends_the_walk_as_an_sdk_error(tmp_path):
     """rejected: the service's Move fails with the SDK's send code, the skill reports it as on the robot."""
     with robot.running(stub_env(tmp_path)) as svc:
-        proc = run_module("walk", LONG_WALK, {**svc.arm(), "GO2_STUB_FAULT": "rejected"})
+        proc = run_module("walk", LONG_WALK, svc.arm(fault="rejected"))
     resp = RESPONSE.validate_python(single_response(proc))
     assert resp.error is not None and (resp.error.code, resp.error.message) == ("sdk_error", "Move returned 3102")
-    assert resp.observations["sdk_ret"] == stub.SDK_ERR_CLIENT_SEND and command(tmp_path) is None
+    assert resp.observations["sdk_ret"] == SDK_ERR_CLIENT_SEND and command(tmp_path) is None
 
 
 def test_service_hang_stops_the_whole_service(tmp_path):
     with robot.running(stub_env(tmp_path, GO2_STUB_TIME_SCALE="1")) as svc:
-        walk = start_skill("walk", LONG_WALK, {**svc.arm(), "GO2_STUB_FAULT": "service_hang"})
+        walk = start_skill("walk", LONG_WALK, svc.arm(fault="service_hang"))
         try:
             stopped = until(lambda: Path(f"/proc/{svc.proc.pid}/stat").read_text().split()[2] == "T")
         finally:
             walk.kill()
             walk.communicate()
         assert stopped and command(tmp_path) is not None
-        stop = RESPONSE.validate_python(single_response(run_module("stop_move", {}, stub_env(tmp_path))))
+        stop = RESPONSE.validate_python(single_response(run_utility("stop_move", {}, stub_env(tmp_path))))
         assert stop.status == "ok" and command(tmp_path) is None  # the fallback works beside a hung service
         os.kill(svc.proc.pid, signal.SIGKILL)
 
@@ -151,7 +153,7 @@ def test_second_service_is_refused(tmp_path):
     first = robot.start(env)
     try:
         second = robot.start(env, wait_ready=False)
-        assert second.wait(timeout=10) == robot_service.EXIT_LOCKED
+        assert second.wait(timeout=10) == protocol.EXIT_LOCKED
         robot.stop(second)
         assert first.poll() is None and os.path.exists(env["GO2_ROBOT_SOCKET"])
     finally:

@@ -1,7 +1,7 @@
 ---
 name: dispatcher-dev
 description: Implements and fixes changes in the `dispatcher` package (loop, plan validation, budgets, context and prompts, LLM layer, run log, config, CLI and Telegram transports) and its docs. Use for any task whose code lives under dispatcher/ or whose contract is owned by dispatcher/docs/.
-model: inherit
+model: opus
 ---
 
 You work on the `dispatcher` package of the Go2 LLM dispatcher (Python 3.10, managed with `uv`). You receive a self-contained brief from an orchestrator session; do that task and nothing else. Package commands, docs and gotchas are in [dispatcher/CLAUDE.md](../../dispatcher/CLAUDE.md); repo-wide rules are in the root [CLAUDE.md](../../CLAUDE.md).
@@ -10,7 +10,7 @@ You work on the `dispatcher` package of the Go2 LLM dispatcher (Python 3.10, man
 
 - Write paths: your list in [.claude/ownership.json](../ownership.json), enforced by the `scope.py` hook. Use root `tests/integration/` only where the task is cross-service, and a shared doc in `docs/` only when the change touches its topic.
 - Docs you own: `dispatcher/docs/` (see the table in `docs/README.md`).
-- Do not change `skills/` code or `skills/docs/`. If the task needs a skills-side change, stop and report what is needed.
+- Do not change `analysis/`, `skills/`, `contract/`, `services/robot/`, `services/backend/` or `services/vision/` code or their docs; those packages belong to `runs-analyzer` (`analysis/`), `skills-dev`, `contract-dev`, `robot-dev` (both `services/robot/` and `services/backend/`) and `vision-dev`. If the task needs a change there, stop and report what is needed.
 
 ## Before you start
 
@@ -18,7 +18,7 @@ Read only what the task needs: the owning doc for the topic (see the table in `d
 
 ## Agent rules
 
-- Change fixed texts in `dispatcher/prompts.py` only if the brief asks.
+- Change fixed texts in `dispatcher/prompts.py` (model-facing) and `dispatcher/operator_messages.py` (reach the model via "Previous task") only if the brief asks; both change the golden files.
 - Do not run `--run-live` tests or `go2 run` unless the brief asks (they call the paid API).
 - Do not commit; the orchestrator commits.
 

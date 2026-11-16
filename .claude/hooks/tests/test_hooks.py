@@ -77,7 +77,13 @@ def decision(name: str, payload: object, tmpdir: Path) -> str:
 
 def test_scope_main_session_and_builtin_agents_denied_packages_only(repo: Path, tmpdir_env: Path) -> None:
     for agent in (None, "general-purpose"):
-        for rel in ("dispatcher/loop.py", "skills/catalog/x/SKILL.md"):
+        for rel in (
+            "dispatcher/loop.py",
+            "skills/x/SKILL.md",
+            "contract/x.py",
+            "services/robot/x.py",
+            "services/backend/x.py",
+        ):
             reason = decision("scope.py", write(rel, repo, agent), tmpdir_env)
             assert rel in reason and "in a package" in reason
         for rel in ("docs/roadmap.md", "tests/test_x.py", ".claude/settings.json", "README.md"):
@@ -89,6 +95,16 @@ def test_scope_project_agent_allowed_in_scope_and_denied_outside(repo: Path, tmp
         assert decision("scope.py", write(rel, repo, "dispatcher-dev"), tmpdir_env) == "allow"
     reason = decision("scope.py", write("skills/x.py", repo, "dispatcher-dev"), tmpdir_env)
     assert "outside the dispatcher-dev scope" in reason and "In scope of: skills-dev" in reason
+    for rel, agent in (
+        ("contract/x.py", "contract-dev"),
+        ("services/robot/backends/x.py", "robot-dev"),
+        ("services/backend/dds.py", "robot-dev"),
+        ("services/vision/docs/vision.md", "vision-dev"),
+    ):
+        assert decision("scope.py", write(rel, repo, agent), tmpdir_env) == "allow"
+        assert f"In scope of: {agent}" in decision("scope.py", write(rel, repo, "dispatcher-dev"), tmpdir_env)
+    assert decision("scope.py", write("contract/x.py", repo, "skills-dev"), tmpdir_env) != "allow"
+    assert decision("scope.py", write("services/__init__.py", repo), tmpdir_env) == "allow"
     for rel in ("tests/test_x.py", "docs/README.md", ".claude/settings.json"):
         assert decision("scope.py", write(rel, repo, "dispatcher-dev"), tmpdir_env) != "allow"
 
@@ -99,9 +115,9 @@ def test_scope_reviewer_denied_everything(repo: Path, tmpdir_env: Path) -> None:
 
 
 def test_scope_conftest_anywhere_for_tests_dev(repo: Path, tmpdir_env: Path) -> None:
-    for rel in ("conftest.py", "dispatcher/tests/conftest.py", "skills/catalog/x/conftest.py"):
+    for rel in ("conftest.py", "dispatcher/tests/conftest.py", "skills/x/conftest.py"):
         assert decision("scope.py", write(rel, repo, "tests-dev"), tmpdir_env) == "allow"
-    assert decision("scope.py", write("skills/catalog/x/notconftest.py", repo, "tests-dev"), tmpdir_env) != "allow"
+    assert decision("scope.py", write("skills/x/notconftest.py", repo, "tests-dev"), tmpdir_env) != "allow"
 
 
 def test_scope_worktree_checked_like_the_checkout(repo: Path, tmpdir_env: Path, tmp_path: Path) -> None:
@@ -181,7 +197,7 @@ def test_typecheck_reports_nothing_touched(repo: Path, tmpdir_env: Path) -> None
 
 
 def test_ownership_paths_exist_in_the_repo() -> None:
-    """Every map path exists; `**/name` patterns are skipped, since they cover files that may not exist yet."""
+    """Every map path exists, except `**/name` patterns (files that may not exist yet)."""
     assert OWNERSHIP is not None, "ownership.json missing or malformed"
     scopes, packages = OWNERSHIP
     for p in {p for ps in scopes.values() for p in ps} | set(packages) | set(MAIN_ONLY):

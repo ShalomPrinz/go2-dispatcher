@@ -1,0 +1,27 @@
+# services/CLAUDE.md
+
+The `services` package: the two long-lived processes the dispatcher supervises, the robot service ([robot/CLAUDE.md](robot/CLAUDE.md)) and the vision service ([vision/CLAUDE.md](vision/CLAUDE.md)), plus the shared backend package both import ([backend/CLAUDE.md](backend/CLAUDE.md)). Each subpackage has its own docs, tests and `CLAUDE.md`; `robot-dev` owns `robot/` and `backend/`, `vision-dev` owns `vision/`. Besides them, this folder holds only this file and an empty `__init__.py`. Repo-wide rules are in the root [CLAUDE.md](../CLAUDE.md).
+
+## Commands
+
+```bash
+uv run pytest -q services                      # unit tests of both services and the shared backend
+uv run pytest -m integration                   # after touching either service: real processes on the stub backend
+uv run lint-imports                            # import contracts; must pass before a commit
+```
+
+## Docs
+
+| Doc | Covers |
+|---|---|
+| [service.md](robot/docs/service.md) | The robot package, the robot service and its lease, the stub backend, fault injection |
+| [backend.md](backend/docs/backend.md) | The shared backend package: stub state file, DDS init |
+| [robot.md](robot/docs/robot.md) | Robot facts, SDK and DDS usage, the real backend, supervised robot checklist |
+| [vision.md](vision/docs/vision.md) | The vision package, the vision service, the stub camera, object detection on the robot |
+| [architecture.md](../docs/architecture.md) | Why the services are grouped here, and the package dependency directions |
+| [testing.md](../tests/docs/testing.md) | Import contracts |
+
+## Gotchas
+
+- `services.robot` and `services.vision` import `contract` and `services.backend`, never `skills` or `dispatcher`, and never each other; `services.backend` imports neither service. Import-linter contracts in `pyproject.toml` enforce this without exceptions ([testing.md](../tests/docs/testing.md#import-boundaries)).
+- Each service keeps its own protocol and client; the shared framing is `contract.wire`. Backend selection and the process helpers live in `contract`, because skills use them.

@@ -1,5 +1,5 @@
 """Skill policies: timeouts cover the commanded motion and the SDK reply waits, motion costs
-(skills/docs/skills.md)."""
+(contract/docs/contract.md)."""
 
 from __future__ import annotations
 
@@ -7,12 +7,18 @@ import math
 
 import pytest
 
+from contract.policy import MotionCost
 from dispatcher.registry import Registry
-from skills import detect_object, motion, read_state, robot_ipc, sit, stop_move, stretch, turn, walk
-from skills.policy import MotionCost
-from tests.helpers import REPO_ROOT
+from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR
+from services.robot import protocol, read_state, stop_move
+from skills.detect_object import skill as detect_object
+from skills.runtime import motion
+from skills.sit import skill as sit
+from skills.stretch import skill as stretch
+from skills.turn import skill as turn
+from skills.walk import skill as walk
 
-REGISTRY = Registry.load(REPO_ROOT / "skills" / "catalog")
+REGISTRY = Registry.load(BUILTIN_SKILLS_DIR)
 
 
 def max_params(name: str) -> dict:
@@ -53,7 +59,7 @@ def test_timeout_exceeds_motion_at_max_params(name):
 def test_sport_client_timeouts_cover_a_lost_reply():
     """A lost SDK reply in the service ends as sdk_error, not a kill: overhead + one reply wait + motion or settle
     fits."""
-    budget_s = motion.PROCESS_OVERHEAD_S + robot_ipc.SPORT_CLIENT_TIMEOUT_S
+    budget_s = motion.PROCESS_OVERHEAD_S + protocol.SPORT_CLIENT_TIMEOUT_S
     for name in ("walk", "turn", "sit", "stretch"):
         p = max_params(name)
         assert REGISTRY[name].policy.timeout_s(p) >= budget_s + MOTION_S[name](p), name

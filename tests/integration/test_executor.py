@@ -1,4 +1,4 @@
-"""Executor on real subprocesses with the stub backend (docs/safety.md, tests/docs/testing.md)."""
+"""Executor and its parts on real subprocesses with the stub backend (docs/safety.md, tests/docs/testing.md)."""
 
 from __future__ import annotations
 
@@ -10,13 +10,14 @@ import time
 
 import pytest
 
-from dispatcher.executor import Executor
+from contract.env import vision_socket_path
+from dispatcher.app import build_executor, read_robot_state
+from dispatcher.execution import process
 from dispatcher.registry import Registry, SkillDescriptor
-from dispatcher.tests.helpers import make_config
-from dispatcher.tests.helpers.skill_modules.env_dump import POLICY as ENV_DUMP_POLICY
-from skills import stub
-from skills.env import vision_socket_path
+from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR, make_config
+from services.backend import stub_state
 from tests.helpers import REPO_ROOT
+from tests.integration.env_dump import POLICY as ENV_DUMP_POLICY
 
 pytestmark = pytest.mark.integration
 
@@ -35,14 +36,14 @@ def cfg(tmp_path):
 
 @pytest.fixture
 def executor(cfg):
-    ex = Executor(cfg, REPO_ROOT)
+    ex = build_executor(cfg, REPO_ROOT)
     yield ex
     ex.close()  # stops a vision service a test started
 
 
 @pytest.fixture(scope="module")
 def registry():
-    return Registry.load(REPO_ROOT / "skills" / "catalog")
+    return Registry.load(BUILTIN_SKILLS_DIR)
 
 
 def run(
@@ -76,7 +77,7 @@ def test_ok(executor, registry):
     res = run(executor, registry)
     assert res.outcome == "ok", res
     assert res.response is not None and res.response.skill == "turn"
-    assert res.exit_code == 0 and res.pid and res.duration_ms > 0
+    assert res.process is not None and res.process.exit_code == 0 and res.process.pid and res.duration_ms > 0
     assert res.stop_move is None and res.error_code is None
 
 
@@ -96,31 +97,31 @@ class FailingRead:
         self.pipe.close()
 
 
-def record_popen(executor, monkeypatch, wrap=None):
-    """Record the pipes of each process ``executor`` starts; ``wrap`` replaces each before the readers get it."""
+def record_popen(monkeypatch, wrap=None):
+    """Record the pipes of each process spawned; ``wrap`` replaces each before the readers get it."""
     pipes = []
-    popen = executor._popen
+    spawn = process.spawn
 
     def recording(*args):
-        proc = popen(*args)
+        proc = spawn(*args)
         pipes.append((proc.stdout, proc.stderr))
         if wrap is not None:
             proc.stdout, proc.stderr = wrap(proc.stdout), wrap(proc.stderr)
         return proc
 
-    monkeypatch.setattr(executor, "_popen", recording)
+    monkeypatch.setattr(process, "spawn", recording)
     return pipes
 
 
 def test_run_closes_both_pipes_at_eof(executor, registry, monkeypatch):
-    pipes = record_popen(executor, monkeypatch)
+    pipes = record_popen(monkeypatch)
     assert run(executor, registry).outcome == "ok"
     [(stdout, stderr)] = pipes
     assert stdout.closed and stderr.closed  # the reader threads have ended: run joined them
 
 
 def test_run_closes_both_pipes_when_the_read_fails(executor, registry, monkeypatch):
-    pipes = record_popen(executor, monkeypatch, wrap=FailingRead)
+    pipes = record_popen(monkeypatch, wrap=FailingRead)
     assert run(executor, registry).outcome == "malformed"  # nothing was read
     [(stdout, stderr)] = pipes
     assert stdout.closed and stderr.closed
@@ -130,12 +131,12 @@ def test_fault_error(executor, registry):
     res = run(executor, registry, fault="error")
     assert res.outcome == "error"
     assert res.error_code == "sdk_error" and res.error_message
-    assert res.exit_code == 1 and res.stop_move is None
+    assert res.process is not None and res.process.exit_code == 1 and res.stop_move is None
 
 
 def test_fault_crash(executor, registry):
     res = run(executor, registry, fault="crash")
-    assert res.outcome == "malformed" and res.exit_code == 139
+    assert res.outcome == "malformed" and res.process is not None and res.process.exit_code == 139
     assert res.error_code == "malformed"
     assert res.error_message == "skill process exited with code 139 without a valid response"
     assert res.response is None
@@ -144,7 +145,7 @@ def test_fault_crash(executor, registry):
 def test_fault_garbage(executor, registry):
     res = run(executor, registry, fault="garbage")
     assert res.outcome == "malformed" and res.error_code == "malformed"
-    assert res.exit_code == 0 and res.response is None
+    assert res.process is not None and res.process.exit_code == 0 and res.response is None
 
 
 def test_wrong_skill_name_is_malformed(executor, registry):
@@ -168,7 +169,7 @@ def test_hang_timeout(executor, registry):
     assert time.monotonic() - t0 < 1.0 + 5.0
     assert res.outcome == "timeout" and res.interrupt_cause is None
     assert res.error_code == "timeout" and res.error_message == "killed after 1s timeout"
-    assert_group_gone(res.pid)
+    assert_group_gone(res.process.pid)
     assert res.stop_move is not None and res.stop_move.ok
     assert res.stop_move.reason == "step_timeout" and res.stop_move.stop_path == "service"
     assert res.stop_move.state_after.posture == "standing"
@@ -188,7 +189,7 @@ def test_kill_current_operator(executor, registry):
     assert res.error_code == "stopped_by_operator" and res.error_message == "stopped by operator"
     assert elapsed < 2.0 + 0.5
     assert res.stop_move is not None and res.stop_move.reason == "operator"
-    assert_group_gone(res.pid)
+    assert_group_gone(res.process.pid)
     assert executor.kill_current("operator") is False
 
 
@@ -219,10 +220,9 @@ def test_child_env_has_no_secrets(executor, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-secret")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "tg-secret")
     monkeypatch.setenv("GO2_STUB_FAULT", "crash")  # must not leak either
-    monkeypatch.setenv("PYTHONPATH", str(REPO_ROOT / "dispatcher" / "tests" / "helpers"))
     desc = SkillDescriptor(
         name="env_dump",
-        entrypoint="skill_modules.env_dump",
+        entrypoint="tests.integration.env_dump",
         description="dump env keys",
         params={},
         sections=(),
@@ -240,18 +240,19 @@ def test_child_env_has_no_secrets(executor, monkeypatch):
         assert k in keys
 
 
-def test_read_state(executor, cfg):
-    stub.write_posture("sitting", cfg.stub.state_file)
-    state = executor.read_state()
+def test_read_robot_state(cfg):
+    stub_state.write_posture("sitting", cfg.stub.state_file)
+    state = read_robot_state(cfg)
     assert state is not None and state.backend == "stub" and state.posture == "sitting"
-    stub.write_posture("standing", cfg.stub.state_file)
-    assert executor.read_state().posture == "standing"
+    stub_state.write_posture("standing", cfg.stub.state_file)
+    state = read_robot_state(cfg)
+    assert state is not None and state.posture == "standing"
 
 
 def test_killed_walk_stops_through_the_service(tmp_path, registry):
     """A kill mid-walk sends the service's stop with the kill; the sim command is cleared (docs/safety.md)."""
     cfg = make_config(tmp_path, stub={"time_scale": 1.0})  # a walk that is still moving at the kill
-    executor = Executor(cfg, REPO_ROOT)
+    executor = build_executor(cfg, REPO_ROOT)
     stop_event = threading.Event()
     threading.Timer(STOP_AFTER_S, stop_event.set).start()
     try:
@@ -268,7 +269,7 @@ def test_killed_walk_stops_through_the_service(tmp_path, registry):
         and not smr.service_lost
     )
     assert smr.kill_to_stop_ms is not None and smr.kill_to_stop_ms < 1000.0
-    assert stub.read_state(cfg.stub.state_file).command is None
+    assert stub_state.read_state(cfg.stub.state_file).command is None
 
 
 def test_service_hang_falls_back(executor, registry, cfg):
@@ -280,13 +281,13 @@ def test_service_hang_falls_back(executor, registry, cfg):
     smr = res.stop_move
     assert smr is not None and smr.ok and smr.stop_path == "fallback" and smr.service_error and smr.service_lost
     assert executor.robot.pid is None  # killed; only the next task's state read starts it again
-    assert stub.read_state(cfg.stub.state_file).command is None
+    assert stub_state.read_state(cfg.stub.state_file).command is None
     assert executor.fresh_state().backend == "stub"
 
 
 def test_failed_service_stop_after_a_walk_runs_the_fallback(executor, registry, cfg):
     """stop_error: the service's own StopMove ending the walk fails; the disarm reports it, the service is kept."""
-    stub.write_posture("standing", cfg.stub.state_file)
+    stub_state.write_posture("standing", cfg.stub.state_file)
     res = run(executor, registry, "walk", {"direction": "forward", "distance_m": 0.1}, fault="stop_error")
     assert (res.outcome, res.error_code, res.service_lost) == ("error", "sdk_error", False)
     smr = res.stop_move
@@ -294,7 +295,16 @@ def test_failed_service_stop_after_a_walk_runs_the_fallback(executor, registry, 
     assert smr.service_error is not None and smr.service_error.startswith("StopMove returned 99 (")
     assert smr.stop_call_ms is not None and not smr.service_lost and smr.kill_to_stop_ms is None
     assert executor.robot.pid is not None  # the service answered, so it is kept
-    assert stub.read_state(cfg.stub.state_file).command is None
+    assert stub_state.read_state(cfg.stub.state_file).command is None
+
+
+def test_robot_fault_reaches_only_its_step(executor, registry, cfg):
+    """stuck goes in the fault file for its step's arm; the next step is armed clean and turns."""
+    stub_state.write_posture("standing", cfg.stub.state_file)
+    stuck = run(executor, registry, fault="stuck")
+    clean = run(executor, registry)
+    assert stuck.outcome == "ok" and stuck.response is not None and stuck.response.observations["turned_deg"] == 0.0
+    assert clean.outcome == "ok" and clean.response is not None and clean.response.observations["turned_deg"] > 20.0
 
 
 def test_step_does_not_start_a_dead_service(executor, registry):
@@ -307,7 +317,7 @@ def test_step_does_not_start_a_dead_service(executor, registry):
         remaining_task_s=LONG_REMAINING_S,
         stop_event=threading.Event(),
     )
-    assert res.service_lost and res.outcome == "error" and res.pid is None
+    assert res.service_lost and res.outcome == "error" and res.process is None
     assert res.stop_move is not None and res.stop_move.ok and res.stop_move.stop_path == "fallback"
     assert executor.robot.pid is None
 
@@ -324,7 +334,7 @@ def test_stop_move_never_raises(executor, monkeypatch):
     def boom(*a, **k):
         raise OSError("cannot spawn")
 
-    monkeypatch.setattr(executor, "_popen", boom)
+    monkeypatch.setattr(process, "spawn", boom)
     smr = executor.stop_move("internal_error")
     assert smr.ok is False and smr.reason == "internal_error"
     assert "OSError: cannot spawn" in smr.stderr_tail

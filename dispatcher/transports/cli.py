@@ -13,15 +13,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from skills import stub
+from analysis import report
 
-from .. import process_lock, prompts, report
-from ..context import PromptSurface
+from .. import app
+from ..config import load_config_and_env
 from ..dispatcher import Dispatcher
-from ..executor import Executor
 from ..models import ConfigError, StartupError, TaskOutcome
-from ..registry import Registry
-from . import build_dispatcher, load_config_and_env, startup_error_text
+from . import startup_error_text, texts
 from .console_trace import ConsoleTrace
 
 SOURCE = "cli"
@@ -114,8 +112,7 @@ def _overrides(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def cmd_catalog(cfg) -> int:
-    registry = Registry.load(cfg.skills.dir)
-    surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
+    surface = app.load_prompt_surface(cfg)
     print(surface.system[0])
     print()
     print(surface.system[1])
@@ -128,7 +125,7 @@ def cmd_catalog(cfg) -> int:
 
 
 def cmd_state(cfg) -> int:
-    state = Executor(cfg, cfg.base_dir).read_state()
+    state = app.read_robot_state(cfg)
     if state is None:
         print("Robot state unavailable.", file=sys.stderr)
         return EXIT_FAIL
@@ -140,14 +137,13 @@ def cmd_reset_stub(cfg) -> int:
     if cfg.robot.backend != "stub":
         print('--reset-stub needs robot.backend = "stub".', file=sys.stderr)
         return EXIT_USAGE
-    process_lock.acquire(cfg.log.dir)
-    stub.reset(cfg.stub.initial_posture, cfg.stub.state_file)
+    app.reset_stub(cfg)
     print(f"Stub reset: {cfg.stub.initial_posture} ({cfg.stub.state_file}).")
     return EXIT_OK
 
 
 def cmd_report(args: argparse.Namespace) -> int:
-    # An explicit folder needs no config, so a report never depends on the current config (docs/running.md).
+    # An explicit folder needs no config, so a report never depends on the current config (analysis/docs/report.md).
     folder = args.folder
     if folder is None:
         folder = load_config_and_env(args.config, _overrides(args)).log.dir / report.STUDY_FOLDER
@@ -183,7 +179,7 @@ class _Runner:
         if not self.stop_requested and self.d.is_busy():
             self.stop_requested = True
             self.d.request_stop(SOURCE)
-            print(prompts.STOPPING, flush=True)
+            print(texts.STOPPING, flush=True)
             return
         self._hard_exit(EXIT_SIGINT)
 
@@ -210,9 +206,9 @@ class _Runner:
 
 def cmd_run(cfg, task: str) -> int:
     if not task.strip():
-        print(prompts.EMPTY_TASK, file=sys.stderr)
+        print(texts.EMPTY_TASK, file=sys.stderr)
         return EXIT_USAGE
-    d = build_dispatcher(cfg, reset_stub=True, observer=ConsoleTrace)
+    d = app.build_dispatcher(cfg, reset_stub=True, observer=ConsoleTrace)
     runner = _Runner(d)
     runner.install()
     outcome = runner.run(task)  # the ConsoleTrace is the only output (docs/running.md)
@@ -240,7 +236,7 @@ def cmd_batch(cfg, tasks_file: Path) -> int:
     except OSError as e:
         print(f"Cannot read {tasks_file}: {e}", file=sys.stderr)
         return EXIT_USAGE
-    d = build_dispatcher(cfg, reset_stub=True, observer=ConsoleTrace)
+    d = app.build_dispatcher(cfg, reset_stub=True, observer=ConsoleTrace)
     runner = _Runner(d)
     runner.install()
     for i, task in enumerate(tasks, 1):

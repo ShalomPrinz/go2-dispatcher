@@ -1,6 +1,7 @@
-"""Skill registry: discovery, entrypoint and POLICY checks, catalog rendering, registry hash (skills/docs/skills.md).
+"""Skill registry: discovery, entrypoint, POLICY and declaration checks, catalog rendering, registry hash
+(contract/docs/contract.md, skills/docs/skills.md).
 
-SKILL.md parsing (frontmatter and body sections) and validation live in skills/manifest.py.
+SKILL.md parsing (frontmatter and body sections) and validation live in contract/manifest.py.
 """
 
 from __future__ import annotations
@@ -8,10 +9,11 @@ from __future__ import annotations
 import hashlib
 import importlib
 import json
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from skills.manifest import (
+from contract.manifest import (
     SKILL_FILE,
     Expectation,
     ParamSpec,
@@ -20,7 +22,8 @@ from skills.manifest import (
     SkillSection,
     parse_skill_file,
 )
-from skills.policy import SkillPolicy
+from contract.policy import MotionCost, SkillPolicy
+from services.vision import client as vision_client
 
 from .models import RegistryError
 
@@ -37,9 +40,18 @@ class SkillDescriptor:
     policy: SkillPolicy
     expect: Expectation | None = None  # goal verification; None: unverified (dispatcher/docs/loop-and-context.md)
     requires: Precondition | None = None  # checked before dispatch; None: no precondition
+    uses_vision: bool = False  # a vision service client: the executor starts vision first
+    moves: bool = False  # commands robot motion
 
 
 # --- loading ---------------------------------------------------------------------
+
+
+def _imports_vision(entrypoint: str) -> bool:
+    """True iff the entry module or a loaded submodule of it has the vision client module as a global."""
+    prefix = entrypoint + "."
+    mods = [m for n, m in list(sys.modules.items()) if n == entrypoint or n.startswith(prefix)]
+    return any(v is vision_client for m in mods for v in vars(m).values())
 
 
 def _load_skill(folder: Path) -> SkillDescriptor:
@@ -64,6 +76,16 @@ def _load_skill(folder: Path) -> SkillDescriptor:
     if policy.name != name:
         raise RegistryError(f"{path}: POLICY.name '{policy.name}' does not match name '{name}'")
 
+    uses_vision, moves = bool(fm.uses_vision), bool(fm.moves)
+    imports_vision = _imports_vision(entrypoint)
+    if uses_vision != imports_vision:
+        found = "imports" if imports_vision else "does not import"
+        raise RegistryError(
+            f"{path}: uses_vision is {str(uses_vision).lower()} but '{entrypoint}' {found} {vision_client.__name__}"
+        )
+    if policy.cost != MotionCost() and not moves:  # a callable cost counts as motion
+        raise RegistryError(f"{path}: {entrypoint}.POLICY has a motion cost but the skill does not declare moves: true")
+
     return SkillDescriptor(
         name=name,
         entrypoint=entrypoint,
@@ -73,6 +95,8 @@ def _load_skill(folder: Path) -> SkillDescriptor:
         policy=policy,
         expect=fm.expect,
         requires=fm.requires,
+        uses_vision=uses_vision,
+        moves=moves,
     )
 
 

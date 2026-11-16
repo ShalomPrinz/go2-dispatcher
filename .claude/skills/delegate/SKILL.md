@@ -1,6 +1,6 @@
 ---
 name: delegate
-description: Turn a task into a self-contained brief and hand it to the owning project agent (dispatcher-dev, skills-dev, tests-dev, claude-config-dev). Use whenever the main session delegates code or doc work, which CLAUDE.md requires for every change.
+description: Turn a task into a self-contained brief and hand it to the owning project agent (dispatcher-dev, skills-dev, contract-dev, robot-dev, vision-dev, runs-analyzer, tests-dev, claude-config-dev). Use whenever the main session delegates code or doc work, which CLAUDE.md requires for every change.
 ---
 
 The main session orchestrates; project agents do the work (CLAUDE.md, Working pattern). A subagent starts cold: it knows only CLAUDE.md, its own agent file and the brief. Everything else it needs must be in the brief.

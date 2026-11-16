@@ -1,14 +1,15 @@
 """stop_move and read_state utilities on the stub backend
-(docs/safety.md, skills/docs/robot.md, tests/docs/testing.md)."""
+(docs/safety.md, services/robot/docs/robot.md, tests/docs/testing.md)."""
 
 from __future__ import annotations
 
 import pytest
 from pydantic import TypeAdapter
 
-from skills import stub
-from skills.schema import SkillResponse
-from tests.helpers import run_module, single_response, stub_env
+from contract.schema import SkillResponse
+from services.backend import stub_state
+from services.robot.backends import sim
+from tests.integration.skill_process import run_utility, single_response, stub_env
 
 pytestmark = pytest.mark.integration
 
@@ -19,7 +20,7 @@ UTILITIES = ["stop_move", "read_state"]
 
 @pytest.mark.parametrize("name", UTILITIES)
 def test_contract_valid(tmp_path, name):
-    proc = run_module(name, {}, stub_env(tmp_path))
+    proc = run_utility(name, {}, stub_env(tmp_path))
     resp = RESPONSE.validate_python(single_response(proc))
     assert proc.returncode == 0, proc.stderr
     assert resp.skill == name and resp.status == "ok"
@@ -30,7 +31,7 @@ def test_contract_valid(tmp_path, name):
 
 
 def test_stop_move_details(tmp_path):
-    resp = single_response(run_module("stop_move", {}, stub_env(tmp_path)))
+    resp = single_response(run_utility("stop_move", {}, stub_env(tmp_path)))
     assert resp["observations"] == {"sdk_ret": 0}
     assert {"dds_init_ms", "client_init_ms", "stop_call_ms", "state_ms", "total_ms"} <= set(resp["timing"])
     assert resp["timing"]["stop_call_ms"] <= resp["timing"]["total_ms"]
@@ -39,15 +40,15 @@ def test_stop_move_details(tmp_path):
 @pytest.mark.parametrize("name", UTILITIES)
 def test_reports_sitting_from_state_file(tmp_path, name):
     env = stub_env(tmp_path)
-    stub.write_posture("sitting", tmp_path / "stub_state.json")
-    resp = single_response(run_module(name, {}, env))
+    stub_state.write_posture("sitting", tmp_path / "stub_state.json")
+    resp = single_response(run_utility(name, {}, env))
     assert resp["state_after"]["posture"] == "sitting"
-    assert resp["state_after"]["body_height"] == stub.BODY_HEIGHT_SITTING_M
+    assert resp["state_after"]["body_height"] == sim.BODY_HEIGHT_SITTING_M
 
 
 @pytest.mark.parametrize("name", UTILITIES)
 def test_invalid_params(tmp_path, name):
-    proc = run_module(name, "not json", stub_env(tmp_path))
+    proc = run_utility(name, "not json", stub_env(tmp_path))
     resp = RESPONSE.validate_python(single_response(proc))
     assert proc.returncode == 1
     assert resp.status == "error" and resp.error is not None and resp.error.code == "invalid_params"
@@ -57,7 +58,7 @@ def test_invalid_params(tmp_path, name):
 def test_backend_not_configured(tmp_path, name):
     """The three bad values are tested in process (skills/tests/unit/test_skill_helpers.py)."""
     env = stub_env(tmp_path, GO2_BACKEND="simulator")
-    proc = run_module(name, {}, env)
+    proc = run_utility(name, {}, env)
     resp = RESPONSE.validate_python(single_response(proc))
     assert proc.returncode == 1
     assert resp.error is not None
@@ -68,6 +69,6 @@ def test_backend_not_configured(tmp_path, name):
 @pytest.mark.parametrize("name", UTILITIES)
 def test_utilities_ignore_faults(tmp_path, name):
     """One `os.environ.pop` covers every kind; hang is the one whose failure is dangerous."""
-    proc = run_module(name, {}, stub_env(tmp_path, fault="hang"), timeout=10)
+    proc = run_utility(name, {}, stub_env(tmp_path, fault="hang"), timeout=10)
     resp = RESPONSE.validate_python(single_response(proc))
     assert proc.returncode == 0 and resp.status == "ok"

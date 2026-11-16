@@ -5,18 +5,25 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Literal, NamedTuple
 
-from pydantic import BaseModel, ConfigDict, StrictInt, StrictStr, model_validator
+from pydantic import BaseModel, ConfigDict, SerializerFunctionWrapHandler, StrictInt, model_serializer
 
-from skills.policy import MotionCost
+from contract.policy import MotionCost
 
-# the response schema is owned by skills and re-exported here (skills/docs/skills.md)
-from skills.schema import ObstacleDistances as ObstacleDistances
-from skills.schema import Posture as Posture
-from skills.schema import RobotState as RobotState
-from skills.schema import SkillError as SkillError
-from skills.schema import SkillResponse as SkillResponse
+# the response schema is owned by contract and re-exported here (contract/docs/contract.md)
+from contract.schema import ObstacleDistances as ObstacleDistances
+from contract.schema import Posture as Posture
+from contract.schema import RobotState as RobotState
+from contract.schema import SkillError as SkillError
+from contract.schema import SkillResponse as SkillResponse
 
 from . import prompts
+
+
+class Model(BaseModel):
+    """Shared base for the dispatcher's pydantic models: unknown fields are rejected."""
+
+    model_config = ConfigDict(extra="forbid")
+
 
 # --- Exceptions (docs/architecture.md) -------------------------------------------------------
 
@@ -49,47 +56,10 @@ class BusyError(Exception):
     """run_task called while a task is running."""
 
 
-class LLMUnavailable(Exception):
-    """Infra retries exhausted, or a non-retryable API error."""
+# --- Return reasons (dispatcher/docs/loop-and-context.md) --------------------------------------------
 
-    def __init__(self, detail: str):
-        super().__init__(detail)
-        self.detail = detail
-
-
-class LLMInterrupted(Exception):
-    """Stop (``OPERATOR``) or task deadline (``TASK_TIME_LIMIT``) hit while waiting to retry an LLM call."""
-
-    def __init__(self, cause: StopCause):
-        super().__init__(cause)
-        self.cause = StopCause(cause)
-
-
-class _Model(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-# --- Plan (dispatcher/docs/loop-and-context.md) -------------------------------------------------------------
-
-
-class PlanStep(_Model):
-    skill: StrictStr
-    params: dict[str, Any] = {}
-
-
-class Plan(_Model):
-    status: Literal["PLAN", "DONE", "ABORT", "ASK"]
-    steps: list[PlanStep] = []
-    replan_after: StrictInt | None = None  # 1-based step index within this plan
-    message: StrictStr | None = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def _normalise_status(cls, data: Any) -> Any:
-        # the API does not guarantee enum casing in non-strict mode
-        if isinstance(data, dict) and isinstance(data.get("status"), str):
-            data = {**data, "status": data["status"].strip().upper()}
-        return data
+ReturnReason = Literal["initial", "plan_complete", "checkpoint", "failure"]
+RequestReason = ReturnReason | Literal["schema_retry"]  # logged on llm_request (dispatcher/docs/run-log.md)
 
 
 # --- StepResult (dispatcher/docs/run-log.md) --------------------------------------------------------
@@ -147,7 +117,7 @@ KILLED_OUTCOMES = frozenset(k.outcome for k in _KILLS.values())  # posture unkno
 StopPath = Literal["service", "fallback"]
 
 
-class StopMoveResult(_Model):
+class StopMoveResult(Model):
     """One run of the stop path: the service's ``stop``, or the fresh-process ``stop_move`` (docs/safety.md)."""
 
     ok: bool
@@ -164,7 +134,7 @@ class StopMoveResult(_Model):
     stderr_tail: str | None = None  # fallback: the stop_move process's stderr
 
 
-class StepDispatch(_Model):
+class StepDispatch(Model):
     """What the dispatcher decided for a dispatched step; built once per step (dispatcher/docs/run-log.md)."""
 
     index: StrictInt  # 1-based count of dispatched steps in the task
@@ -173,7 +143,7 @@ class StepDispatch(_Model):
     fault: str | None = None  # stub fault kind injected, if any
 
 
-class StepRef(_Model):
+class StepRef(Model):
     """Which plan step this is; every recorded step has one, built once (dispatcher/docs/run-log.md)."""
 
     call_index: StrictInt  # LLM call that produced the plan (1-based)
@@ -186,19 +156,79 @@ Verdict = Literal["verified", "failed", "unverified", "unavailable"]
 Fault = Literal["fallen", "fault_mode", "command_rejected"]
 
 
-class StepResult(_Model):
+class ProcessRun(Model):
+    """What one skill process left behind: its reply, exit code, pid and stderr tail (contract/docs/contract.md)."""
+
+    response: SkillResponse | None = None  # None if stdout held no valid response line
+    exit_code: int
+    pid: int  # LOG ONLY
+    stderr_tail: str | None = None  # last 2000 chars; LOG ONLY, never in context
+
+
+ExecOutcome = Literal["ok", "error", "timeout", "malformed", "interrupted"]
+
+
+class ExecResult(Model):
+    """One step as the executor ran it (dispatcher/docs/execution.md)."""
+
+    outcome: ExecOutcome
+    interrupt_cause: StopCause | None = None  # set iff outcome is interrupted
+    error_code: str | None = None
+    error_message: str | None = None
+    duration_ms: float
+    process: ProcessRun | None = None  # None if the step never started
+    stop_move: StopMoveResult | None = None
+
+    @property
+    def service_lost(self) -> bool:
+        """The robot service was lost during the step and killed; owned by ``stop_move`` (docs/safety.md)."""
+        return self.stop_move is not None and self.stop_move.service_lost
+
+    @property
+    def response(self) -> SkillResponse | None:
+        return self.process.response if self.process is not None else None
+
+
+# the step_result record's key order; ``process`` is flattened into it (dispatcher/docs/run-log.md)
+_STEP_RESULT_KEYS = (
+    "ref",
+    "dispatch",
+    "outcome",
+    "error_code",
+    "error_message",
+    "response",
+    "duration_ms",
+    "exit_code",
+    "pid",
+    "stderr_tail",
+    "verification",
+    "faults",
+)
+
+
+class StepResult(Model):
     ref: StepRef
     dispatch: StepDispatch | None = None  # None if not dispatched (rejected)
     outcome: StepOutcome
     error_code: str | None = None
     error_message: str | None = None  # one line, <= 200 chars, safe for LLM context
-    response: SkillResponse | None = None
     duration_ms: float = 0.0  # wall clock around the subprocess; 0 if not dispatched
-    exit_code: int | None = None
-    pid: int | None = None  # LOG ONLY
-    stderr_tail: str | None = None  # last 2000 chars; LOG ONLY, never in context
+    process: ProcessRun | None = None  # None if no skill process ran (rejected, or never started)
     verification: Verdict | None = None  # None: not dispatched, or the outcome is not ok (loop-and-context.md)
     faults: list[Fault] = []  # faults detected in the step's response; on an ok step any forces "failed"
+
+    @model_serializer(mode="wrap")
+    def _flatten_process(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Dump ``process`` as top-level ``response``, ``exit_code``, ``pid``, ``stderr_tail`` (null without one)."""
+        data = handler(self)
+        process = data.pop("process", None) or {}
+        data.update({k: process.get(k) for k in ProcessRun.model_fields})
+        ordered = {k: data.pop(k) for k in _STEP_RESULT_KEYS if k in data}
+        return ordered | data
+
+    @property
+    def response(self) -> SkillResponse | None:
+        return self.process.response if self.process is not None else None
 
     @property
     def is_failure(self) -> bool:
@@ -227,7 +257,7 @@ TaskOutcomeCode = Literal[
 ]
 
 
-class TaskOutcome(_Model):
+class TaskOutcome(Model):
     run_id: str
     task: str
     outcome: TaskOutcomeCode
@@ -246,21 +276,21 @@ class TaskOutcome(_Model):
         return [s for s in self.steps if s.dispatch is not None]
 
 
-class TaskSummary(_Model):
+class TaskSummary(Model):
     task: str
     outcome: TaskOutcomeCode
     message: str
     last_step: StepResult | None  # last dispatched step, if any
 
 
-class StartState(_Model):
+class StartState(Model):
     """The task-start state read through the robot service (dispatcher/docs/loop-and-context.md)."""
 
     age_ms: float | None  # age of the state message at the read; None when the read failed
     error: str | None = None  # why the read failed; the task then ends STATE_UNAVAILABLE
 
 
-class PreconditionFailure(_Model):
+class PreconditionFailure(Model):
     """A step not dispatched because the robot's state did not meet its ``requires``
     (dispatcher/docs/loop-and-context.md)."""
 

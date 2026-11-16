@@ -1,14 +1,19 @@
-"""The executor parses the response line from skill stdout (skills/docs/skills.md)."""
+"""The executor parses the response line from skill stdout (contract/docs/contract.md)."""
 
 from __future__ import annotations
 
 import pytest
 
-from dispatcher.executor import _parse_response
-from skills.runner import SkillOutcome, StateSampler, build_response, to_json
-from skills.schema import ErrorCode
+from contract.runtime import SkillOutcome, StateSampler, build_response, to_json
+from contract.schema import ErrorCode, RobotState
+from dispatcher.execution.process import parse_response
 
-LINE = to_json(build_response("walk", SkillOutcome.ok(observations={}, timing={}), StateSampler(), 0.0))
+
+def _no_state() -> RobotState:
+    raise AssertionError("the sampler is never taken here")
+
+
+LINE = to_json(build_response("walk", SkillOutcome.ok(observations={}, timing={}), StateSampler(_no_state), 0.0))
 
 
 @pytest.mark.parametrize(
@@ -19,7 +24,7 @@ LINE = to_json(build_response("walk", SkillOutcome.ok(observations={}, timing={}
             build_response(
                 "walk",
                 SkillOutcome.error(ErrorCode.SDK_ERROR, "y", observations={}, timing={}),
-                StateSampler(),
+                StateSampler(_no_state),
                 0.0,
             )
         )
@@ -30,7 +35,7 @@ LINE = to_json(build_response("walk", SkillOutcome.ok(observations={}, timing={}
     ids=["last_line_wins", "trailing_blank_lines"],
 )
 def test_parse_response_last_nonempty_line(stdout):
-    r = _parse_response(stdout, "walk")
+    r = parse_response(stdout, "walk")
     assert r is not None and r.status == "ok"
 
 
@@ -38,4 +43,4 @@ def test_parse_response_last_nonempty_line(stdout):
     "stdout", ["", LINE + "\n{not json", LINE.replace("walk", "turn")], ids=["empty", "invalid_json", "other_skill"]
 )
 def test_parse_response_none(stdout):
-    assert _parse_response(stdout, "walk") is None
+    assert parse_response(stdout, "walk") is None

@@ -1,5 +1,5 @@
 """Start the robot service for tests that run skills as subprocesses, and arm their leases on a control
-connection as the dispatcher does (skills/docs/skills.md)."""
+connection as the dispatcher does (services/robot/docs/service.md)."""
 
 from __future__ import annotations
 
@@ -12,9 +12,10 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from skills import robot_service
-from skills.env import LEASE_TOKEN, ROBOT_SOCKET, STUB_STATE_FILE
-from skills.robot_ipc import RobotClient
+from contract.env import LEASE_TOKEN, ROBOT_SOCKET, STUB_STATE_FILE
+from contract.faults import RobotFault, write_fault
+from services.robot import protocol
+from services.robot.client import RobotClient
 from tests.helpers import REPO_ROOT
 
 READY_WAIT_S = 10.0
@@ -27,9 +28,9 @@ def with_socket(env: dict[str, str]) -> dict[str, str]:
 
 
 def start(env: dict[str, str], *, wait_ready: bool = True) -> subprocess.Popen:
-    """Start ``python -m skills.robot_service`` with ``env``; by default wait for its ready line."""
+    """Start ``python -m services.robot.service`` with ``env``; by default wait for its ready line."""
     proc = subprocess.Popen(
-        [sys.executable, "-m", "skills.robot_service"],
+        [sys.executable, "-m", protocol.SERVICE_MODULE],
         env=env,
         cwd=REPO_ROOT,
         stdin=subprocess.DEVNULL,
@@ -43,7 +44,7 @@ def start(env: dict[str, str], *, wait_ready: bool = True) -> subprocess.Popen:
     assert proc.stdout is not None
     with selectors.DefaultSelector() as sel:
         sel.register(proc.stdout, selectors.EVENT_READ)
-        ready = sel.select(READY_WAIT_S) and proc.stdout.readline().strip() == robot_service.READY_LINE
+        ready = sel.select(READY_WAIT_S) and proc.stdout.readline().strip() == protocol.READY_LINE
     if not ready:
         stop(proc)
         raise AssertionError(f"robot service not ready within {READY_WAIT_S:g}s (exit {proc.returncode})")
@@ -53,7 +54,7 @@ def start(env: dict[str, str], *, wait_ready: bool = True) -> subprocess.Popen:
 def stop(proc: subprocess.Popen) -> None:
     proc.terminate()
     try:
-        proc.wait(robot_service.STOP_GRACE_S)
+        proc.wait(protocol.STOP_GRACE_S)
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait()
@@ -69,8 +70,13 @@ class Service:
     env: dict[str, str]
     control: RobotClient
 
-    def arm(self, env: dict[str, str] | None = None, timeout_s: float = ARM_TIMEOUT_S) -> dict[str, str]:
-        """Arm a lease for one skill run; returns ``env`` (default: the service's) with its token."""
+    def arm(
+        self, env: dict[str, str] | None = None, timeout_s: float = ARM_TIMEOUT_S, *, fault: RobotFault | None = None
+    ) -> dict[str, str]:
+        """Arm a lease for one skill run, with ``fault`` in the stub fault file as the dispatcher writes it; returns
+        ``env`` (default: the service's) with its token."""
+        if fault is not None:
+            write_fault(Path(self.env[STUB_STATE_FILE]), fault)
         token = uuid.uuid4().hex
         self.control.arm(token, timeout_s)
         return {**(env or self.env), LEASE_TOKEN: token}

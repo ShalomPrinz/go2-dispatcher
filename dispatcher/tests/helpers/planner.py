@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from dispatcher.llm import TOOL_NAME, LLMResult
-from dispatcher.models import Plan
-
-if TYPE_CHECKING:
-    from dispatcher.context import PromptSurface
+from dispatcher.llm.client import InfraRetry, LLMResult
+from dispatcher.llm.surface import PromptSurface
+from dispatcher.planning.plan import Plan
+from dispatcher.planning.schema import TOOL_NAME
 
 SCRIPTED_USAGE = {"input_tokens": 100, "output_tokens": 20}
 
@@ -49,7 +48,7 @@ class ScriptedPlanner:
         call_index: int,
         remaining_s: Callable[[], float],
         stop_event: threading.Event,
-        on_infra_retry: Callable[[dict], None],
+        on_infra_retry: Callable[[InfraRetry], None],
     ) -> LLMResult:
         kwargs = {
             "user": user,

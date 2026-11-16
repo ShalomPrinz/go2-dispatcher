@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from dispatcher.llm import plan_tool_schema
-from dispatcher.models import Plan, PlanStep
+from typing import get_args
+
+from dispatcher.planning.plan import Plan, PlanStatus, PlanStep
+from dispatcher.planning.schema import plan_tool_schema
 
 
 def test_property_names_equal_model_fields():
@@ -13,6 +15,12 @@ def test_property_names_equal_model_fields():
     assert set(s["properties"]["steps"]["items"]["properties"]) == set(PlanStep.model_fields)
     assert s["required"] == ["status", "steps"]
     assert s["properties"]["steps"]["items"]["required"] == ["skill", "params"]
+
+
+def test_status_enum_derived_from_plan_status():
+    """PlanStatus is the single source of the statuses: the model field and the schema enum both follow it."""
+    assert Plan.model_fields["status"].annotation == PlanStatus
+    assert plan_tool_schema(5)["input_schema"]["properties"]["status"]["enum"] == list(get_args(PlanStatus))
 
 
 def test_horizon_closed_objects_and_status_enum():

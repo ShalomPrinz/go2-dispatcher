@@ -73,7 +73,7 @@ There is no `temperature` key (adding one is an unknown-key error), and `tool_ch
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `dir` | path | `"skills/catalog"` | Skill set folder loaded by the registry. Each subfolder with a `SKILL.md` is one skill. |
+| `dir` | path | `"skills"` | Skill set folder loaded by the registry: a folder of skill folders. Each subfolder with a `SKILL.md` is one skill; others (such as `skills/runtime/`) are skipped. |
 
 ### `[robot]`
 
@@ -90,8 +90,8 @@ There is no `temperature` key (adding one is an unknown-key error), and `tool_ch
 | `time_scale` | float | `0.1` | > 0 | Multiplies every simulated duration (motion loops, settle waits, detection delay). |
 | `initial_posture` | `"standing"` \| `"sitting"` | `"standing"` | | Posture written to the state file, with the pose reset to the origin, at startup by `run`, `batch`, `go2 bot` and `--reset-stub`. |
 | `state_file` | path | `"logs/.stub_state.json"` | | JSON file that holds the stub posture and odometry pose. Shared by all skill processes. |
-| `objects` | table str → `{x, y, height_m?}` | `{}` | keys are COCO class names; `x`, `y` finite numbers; optional `height_m` > 0, required for classes without a default height; no other keys | Objects in the stub world, in metres in the world (odometry) frame: the robot starts at (0, 0) facing +x, +y is left. The stub camera projects them from the current pose. Passed to skill processes as `GO2_STUB_OBJECTS`; see [skills.md](../skills/docs/skills.md#stub-backend) for the default heights and the projection. |
-| `faults` | list of `{step, kind}` | `[]` | `step` int ≥ 1, unique; `kind` one of the [fault kinds](../skills/docs/skills.md#fault-injection) (`stub.FaultKind`); must be empty when `backend = "real"` | Faults injected by dispatched step number (counted across the task). See [skills.md](../skills/docs/skills.md#fault-injection). |
+| `objects` | table str → `{x, y, height_m?}` | `{}` | keys are COCO class names; `x`, `y` finite numbers; optional `height_m` > 0, required for classes without a default height; no other keys | Objects in the stub world, in metres in the world (odometry) frame: the robot starts at (0, 0) facing +x, +y is left. The stub camera projects them from the current pose. Passed to skill processes as `GO2_STUB_OBJECTS`; see [service.md](../services/robot/docs/service.md#stub-backend) for the default heights and [vision.md](../services/vision/docs/vision.md#stub-camera) for the projection. |
+| `faults` | list of `{step, kind}` | `[]` | `step` int ≥ 1, unique; `kind` one of the [fault kinds](../services/robot/docs/service.md#fault-injection) (`contract.faults.FaultKind`, [contract.md](../contract/docs/contract.md#the-package)); must be empty when `backend = "real"` | Faults injected by dispatched step number (counted across the task). See [service.md](../services/robot/docs/service.md#fault-injection). |
 
 COCO class names that contain a space must be quoted as TOML keys:
 
@@ -101,13 +101,13 @@ objects = { chair = { x = 2.0, y = -1.0 }, "cell phone" = { x = 1.5, y = 0.5, he
 faults = [ { step = 2, kind = "hang" } ]
 ```
 
-The 80 class names are in `skills/coco.py` (`COCO_CLASSES`).
+The 80 class names are in `contract/vision.py` (`COCO_CLASSES`).
 
 ### `[log]`
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `dir` | path | `"logs"` | Root of the run logs. Each task goes to `{dir}/{llm.provider}/{robot.backend}/` with that folder's own `index.jsonl`; the folder is derived, not configurable ([run-log.md](../dispatcher/docs/run-log.md#files)). The single-instance lock file `.dispatcher.lock` is at the root, and so are the [robot service](../skills/docs/skills.md#robot-service)'s socket `robot.sock` and its lock file `robot.lock`; a Unix socket path is limited to about 107 bytes. |
+| `dir` | path | `"logs"` | Root of the run logs. Each task goes to `{dir}/{llm.provider}/{robot.backend}/` with that folder's own `index.jsonl`; the folder is derived, not configurable ([run-log.md](../dispatcher/docs/run-log.md#files)). The single-instance lock file `.dispatcher.lock` is at the root, and so are the [robot service](../services/robot/docs/service.md#robot-service)'s socket `robot.sock` and its lock file `robot.lock`; a Unix socket path is limited to about 107 bytes. |
 
 ### `[telegram]`
 
@@ -123,8 +123,8 @@ Each failure below is a config error:
 - A value of the wrong type (see the type notes above).
 - `robot.backend = "real"` with a blank `robot.network_interface`.
 - `robot.backend = "real"` with a non-empty `stub.faults`.
-- `stub.faults[].kind` not one of the [fault kinds](../skills/docs/skills.md#fault-injection) (`stub.FaultKind`); `stub.faults[].step` not an integer ≥ 1; the same step listed twice.
-- `stub.objects` key not in `COCO_CLASSES`, or an entry that breaks the rules of `skills.stub.parse_objects` (missing `x` or `y`, a non-finite number, `height_m` ≤ 0, an extra key, or no `height_m` for a class without a default). The config check calls `parse_objects`, so it cannot drift from what the skill process accepts. The removed key `stub.detections` is reported as `stub.detections: unknown key`.
+- `stub.faults[].kind` not one of the [fault kinds](../services/robot/docs/service.md#fault-injection) (`contract.faults.FaultKind`, [contract.md](../contract/docs/contract.md#the-package)); `stub.faults[].step` not an integer ≥ 1; the same step listed twice.
+- `stub.objects` key not in `COCO_CLASSES`, or an entry that breaks the rules of `contract.stub.parse_objects` (missing `x` or `y`, a non-finite number, `height_m` ≤ 0, an extra key, or no `height_m` for a class without a default). The config check calls `parse_objects`, so it cannot drift from what the skill process accepts. The removed key `stub.detections` is reported as `stub.detections: unknown key`.
 - Integers ≥ 1: `planning_horizon`, `max_failures`, `max_llm_calls`, `context_history_k`, `max_tokens`.
 - Floats > 0: `task_time_limit_s`, `request_timeout_s`, `stub.time_scale`.
 - Floats ≥ 0: `max_distance_m`, `max_rotation_deg`, every value in `infra_backoff_s`.
@@ -189,16 +189,17 @@ Some *tunable* values are named constants in code, not config keys:
 
 | Value | Where |
 |---|---|
-| Per-skill timeouts and settle waits (`TIMEOUT_S`, `SETTLE_S`) | Module constants used by `POLICY` in `skills/<skill>.py` ([skills.md](../skills/docs/skills.md#policies)) |
-| Move-loop timeout rule and command period (`MOTION_BASE_S`, `MOTION_FACTOR`, `CMD_PERIOD_S`) | Module constants in `skills/motion.py`, shared by `walk` and `turn` ([skills.md](../skills/docs/skills.md#policies)) |
+| Per-skill timeouts and settle waits (`TIMEOUT_S`, `SETTLE_S`) | Module constants used by `POLICY` in `skills/<skill>/skill.py` ([contract.md](../contract/docs/contract.md#policies)) |
+| Move-loop timeout rule and command period (`MOTION_BASE_S`, `MOTION_FACTOR`, `CMD_PERIOD_S`) | Module constants in `skills/runtime/motion.py` (`CMD_PERIOD_S` in `services/robot/protocol.py`), shared by `walk` and `turn` ([contract.md](../contract/docs/contract.md#policies)) |
 | Walking speed, yaw rate | `VELOCITY_MPS` in `walk.py`, `YAW_RATE_RPS` in `turn.py` |
-| Start-ramp lead time of walk, and of turn's open-loop fallback; the stub's dead time | `LINEAR_S`, `YAW_S` in `skills/ramp.py`, used as `LEAD_S` in `walk.py` and `turn.py` ([robot.md](../skills/docs/robot.md#motion)) |
-| Turn's time cap | `CAP_FACTOR`, `CAP_S` in `turn.py` ([robot.md](../skills/docs/robot.md#motion)) |
-| Yaw-target stop margin and state age limit | `YAW_STOP_MARGIN_RAD`, `MAX_STATE_AGE_S` in `skills/robot_service.py` ([skills.md](../skills/docs/skills.md#robot-service)) |
-| Posture thresholds | `POSTURE_SITTING_MAX_M`, `POSTURE_STANDING_MIN_M` in `skills/real.py` ([robot.md](../skills/docs/robot.md#posture-rule)) |
-| Detector thresholds | `RealDetector` constants in `skills/real.py` ([robot.md](../skills/docs/robot.md#object-detection)) |
-| `StopMove` settle wait | `SETTLE_S` in `skills/stop_move.py` |
-| Stub durations and body heights | Constants at the top of `skills/stub.py` |
+| Start-ramp lead time of walk, and of turn's open-loop fallback; the stub's dead time | `LINEAR_S`, `YAW_S` in `services/robot/ramp.py`, used as `LEAD_S` in `walk.py` and `turn.py` ([robot.md](../services/robot/docs/robot.md#motion)) |
+| Turn's time cap | `CAP_FACTOR`, `CAP_S` in `turn.py` ([robot.md](../services/robot/docs/robot.md#motion)) |
+| Yaw-target stop margin and state age limit | `YAW_STOP_MARGIN_RAD`, `MAX_STATE_AGE_S` in `services/robot/service.py` ([service.md](../services/robot/docs/service.md#robot-service)) |
+| Posture thresholds | `POSTURE_SITTING_MAX_M`, `POSTURE_STANDING_MIN_M` in `services/robot/backends/real.py` ([robot.md](../services/robot/docs/robot.md#posture-rule)) |
+| Detector thresholds | `RealDetector` constants in `services/vision/detectors/real.py` ([vision.md](../services/vision/docs/vision.md#object-detection)) |
+| `StopMove` settle wait | `SETTLE_S` in `services/robot/stop_move.py` |
+| `stop_move` and `read_state` utility timeouts | The `SkillPolicy` of the `STOP_MOVE` and `READ_STATE` descriptors in `services/robot/protocol.py` |
+| Stub durations and body heights | Constants at the top of `services/robot/backends/sim.py` |
 
 ## Design decisions
 

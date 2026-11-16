@@ -8,7 +8,8 @@ from typing import Any
 
 import pytest
 
-from dispatcher.budget import MotionBudget
+from contract.policy import MotionCost
+from contract.schema import SCHEMA_VERSION
 from dispatcher.context import (
     ContextInput,
     Feedback,
@@ -21,7 +22,7 @@ from dispatcher.context import (
 )
 from dispatcher.models import (
     ObstacleDistances,
-    PlanStep,
+    ProcessRun,
     RobotState,
     SkillError,
     SkillResponse,
@@ -30,9 +31,10 @@ from dispatcher.models import (
     StepResult,
     TaskSummary,
 )
+from dispatcher.planning.budget import MotionBudget
+from dispatcher.planning.plan import PlanStep
 from dispatcher.registry import Registry
-from skills.policy import MotionCost
-from skills.schema import SCHEMA_VERSION
+from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR
 from tests.helpers import REPO_ROOT
 
 GOLDEN = REPO_ROOT / "dispatcher" / "tests" / "golden"
@@ -50,7 +52,7 @@ TASK = "Walk forward, then  find the chair"  # verbatim: inner double space kept
 
 @pytest.fixture(scope="module")
 def registry() -> Registry:
-    return Registry.load(REPO_ROOT / "skills" / "catalog")
+    return Registry.load(BUILTIN_SKILLS_DIR)
 
 
 def check_golden(name: str, text: str, update: bool) -> None:
@@ -81,7 +83,7 @@ def ok_step(index, skill, params, *, plan_step=None, call_index=1, observations=
         dispatch=dispatched(index),
         ref=StepRef(call_index=call_index, plan_step=plan_step or index, skill=skill, params=params),
         outcome="ok",
-        response=response(skill, observations=observations),
+        process=ProcessRun(response=response(skill, observations=observations), exit_code=0, pid=1),
     )
 
 
@@ -177,7 +179,7 @@ def test_long_error_cut_to_200(registry):
         ref=StepRef(call_index=1, plan_step=1, skill="sit", params={}),
         outcome="error",
         error_message=msg,
-        response=response("sit", error="y"),
+        process=ProcessRun(response=response("sit", error="y"), exit_code=1, pid=1),
     )
     line = render_step(sr, registry, numbered=True)
     prefix = "1. sit() -> error: "
@@ -230,8 +232,12 @@ def test_after_failure(registry, update_golden):
             outcome="error",
             error_code="sdk_error",
             error_message="Move returned 3104",
-            response=response("walk", error="Move returned 3104"),
-            stderr_tail="SECRET traceback",
+            process=ProcessRun(
+                response=response("walk", error="Move returned 3104"),
+                exit_code=1,
+                pid=1,
+                stderr_tail="SECRET traceback",
+            ),
         ),
     ]
     plan = [PlanStep(skill="turn"), PlanStep(skill="walk"), PlanStep(skill="sit")]
@@ -291,8 +297,7 @@ def test_stderr_never_leaks(registry):
         ref=StepRef(call_index=1, plan_step=1, skill="walk", params={"direction": "forward", "distance_m": 1.0}),
         outcome="malformed",
         error_message="no valid response line",
-        stderr_tail="SECRET",
-        exit_code=1,
+        process=ProcessRun(exit_code=1, pid=1, stderr_tail="SECRET"),
     )
     prev = TaskSummary(task="t", outcome="FAILURE_BUDGET_EXHAUSTED", message="m", last_step=sr)
     text = build_user_message(make_input(steps=[sr], previous=prev), registry)
@@ -304,7 +309,7 @@ def test_previous_task_and_posture(registry, update_golden):
         dispatch=dispatched(2),
         ref=StepRef(call_index=1, plan_step=2, skill="sit", params={}),
         outcome="ok",
-        response=response("sit", posture="sitting"),
+        process=ProcessRun(response=response("sit", posture="sitting"), exit_code=0, pid=1),
     )
     prev = TaskSummary(task="sit down", outcome="DONE", message="I sat down.", last_step=last)
     text = build_user_message(

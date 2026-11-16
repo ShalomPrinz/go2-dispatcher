@@ -1,17 +1,23 @@
-"""FakeClock and FakeExecutor for dispatcher loop tests (tests/docs/testing.md)."""
+"""FakeClock, FakeExecutor and make_runlog for dispatcher loop tests (tests/docs/testing.md)."""
 
 from __future__ import annotations
 
 import threading
 import time
+import uuid
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
-from dispatcher.executor import ExecOutcome, ExecResult
+from contract.schema import SCHEMA_VERSION
+from dispatcher.config import Config
+from dispatcher.llm.client import PlannerClient
 from dispatcher.models import (
+    ExecOutcome,
+    ExecResult,
     ObstacleDistances,
     Posture,
+    ProcessRun,
     RobotState,
     SkillError,
     SkillResponse,
@@ -20,10 +26,17 @@ from dispatcher.models import (
     StopMoveResult,
 )
 from dispatcher.registry import SkillDescriptor
-from dispatcher.runlog import TaskObserver
-from skills.schema import SCHEMA_VERSION
+from dispatcher.runlog.session import SessionInfo
+from dispatcher.runlog.sinks import Observer
+from dispatcher.runlog.writer import RunLogFactory
 
 FAKE_CLOCK_START = 1000.0
+
+
+def make_runlog(cfg: Config, planner: PlannerClient, factory: type[RunLogFactory] = RunLogFactory) -> RunLogFactory:
+    """The run log ``app.build_dispatcher`` gives the dispatcher: under ``cfg``, from ``planner``'s surface.
+    ``factory`` is a ``RunLogFactory`` subclass, e.g. one whose ``open`` fails."""
+    return factory(cfg.run_log_dir, uuid.uuid4().hex, SessionInfo.collect(cfg, planner.surface))
 
 
 class FakeClock:
@@ -80,9 +93,7 @@ def exec_result(
     return ExecResult(
         outcome=outcome,
         interrupt_cause=interrupt_cause,
-        response=response,
-        exit_code=0,
-        pid=12345,
+        process=ProcessRun(response=response, exit_code=0, pid=12345),
         duration_ms=1.0,
         error_code=error_code,
         error_message=error_message,
@@ -91,23 +102,33 @@ def exec_result(
 
 
 def stop_move_result(
-    reason: StopCause = StopCause.OPERATOR, *, ok: bool = True, posture: Posture | None = None
+    reason: StopCause = StopCause.OPERATOR,
+    *,
+    ok: bool = True,
+    posture: Posture | None = None,
+    service_lost: bool = False,
 ) -> StopMoveResult:
-    """A service stop when ``ok``, else a failed fallback."""
+    """A service stop when ``ok`` and the service was not lost, else a fallback (failed unless ``ok``)."""
     after = state(posture) if posture is not None else None
-    if ok:
+    if ok and not service_lost:
         return StopMoveResult(ok=True, reason=reason, stop_path="service", duration_ms=1.0, state_after=after)
     return StopMoveResult(
-        ok=False, reason=reason, stop_path="fallback", duration_ms=1.0, exit_code=1, state_after=after
+        ok=ok,
+        reason=reason,
+        stop_path="fallback",
+        duration_ms=1.0,
+        exit_code=0 if ok else 1,
+        service_lost=service_lost,
+        state_after=after,
     )
 
 
 class FakeStream:
-    """A state stream that writes nothing; records its path, its observer and whether it was closed."""
+    """A state stream that writes nothing; records its path, its observers and whether it was closed."""
 
-    def __init__(self, path: Path, observer: TaskObserver | None = None):
+    def __init__(self, path: Path, observers: Sequence[Observer] = ()):
         self.path = path
-        self.observer = observer
+        self.observers = tuple(observers)
         self.closed = False
 
     def close(self) -> None:
@@ -201,8 +222,8 @@ class FakeExecutor:
             raise StateReadError("ServiceUnavailable: no robot service")
         return self.fresh if self.fresh is not None else state("standing")
 
-    def state_stream(self, path: Path, t_start: float, observer: TaskObserver | None = None) -> FakeStream:
-        stream = FakeStream(path, observer)
+    def state_stream(self, path: Path, t_start: float, observers: Sequence[Observer] = ()) -> FakeStream:
+        stream = FakeStream(path, observers)
         self.streams.append(stream)
         return stream
 

@@ -4,43 +4,39 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from pathlib import Path
 
 import pytest
 
-from dispatcher import prompts
-from dispatcher.context import PromptSurface
+from dispatcher import operator_messages, prompts
+from dispatcher.context import build_prompt_surface
 from dispatcher.dispatcher import Dispatcher
-from dispatcher.executor import STDERR_TAIL_CHARS, ExecOutcome
-from dispatcher.models import (
-    BusyError,
-    LLMInterrupted,
-    LLMUnavailable,
-    ObstacleDistances,
-    Plan,
-    PlanStep,
-    Posture,
-    StopCause,
-)
+from dispatcher.execution.process import STDERR_TAIL_CHARS
+from dispatcher.llm.client import InfraRetry, LLMInterrupted, LLMUnavailable
+from dispatcher.models import BusyError, ExecOutcome, ObstacleDistances, Posture, StopCause
+from dispatcher.planning.plan import Plan, PlanStep
 from dispatcher.registry import Registry
-from dispatcher.runlog import RunLog, RunLogFactory
+from dispatcher.runlog.events import TaskEnd
+from dispatcher.runlog.writer import RunLog, RunLogFactory
 from dispatcher.tests.helpers import (
+    BUILTIN_SKILLS_DIR,
     FakeClock,
     FakeExecutor,
     ScriptedPlanner,
     exec_result,
     make_config,
+    make_runlog,
     stop_move_result,
 )
 from dispatcher.tests.helpers.fakes import state
-from tests.helpers import REPO_ROOT
 
 WAIT_S = 5.0
 
 
 @pytest.fixture(scope="module")
 def registry():
-    return Registry.load(REPO_ROOT / "skills" / "catalog")
+    return Registry.load(BUILTIN_SKILLS_DIR)
 
 
 def walk(d=0.5, direction="forward"):
@@ -74,14 +70,22 @@ class Rig:
         on_call=None,
         executor=None,
         posture: Posture = "standing",
+        runlog: type[RunLogFactory] = RunLogFactory,
         **cfg,
     ):
         self.cfg = make_config(tmp_path, **cfg)
-        surface = PromptSurface.build(registry, self.cfg.loop.planning_horizon)
+        surface = build_prompt_surface(registry, self.cfg.loop.planning_horizon)
         self.planner = ScriptedPlanner(items, surface, on_call=on_call)
         self.executor = executor or FakeExecutor(results, fresh=state(posture))
         self.clock = FakeClock()
-        self.d = Dispatcher(self.cfg, registry, self.planner, self.executor, clock=self.clock.now)
+        self.d = Dispatcher(
+            self.cfg,
+            registry,
+            self.planner,
+            self.executor,
+            runlog=make_runlog(self.cfg, self.planner, runlog),
+            clock=self.clock.now,
+        )
 
     def run(self, task="do the thing"):
         return self.d.run_task(task, source="test")
@@ -378,6 +382,32 @@ def test_stop_during_llm_call_skips_retry(tmp_path, registry):
     assert r.executor.stop_moves == ["operator"]
 
 
+def test_stop_requested_during_names_the_phase(tmp_path, registry):
+    def stop(r):
+        assert r.d.request_stop("test") == "stopping"
+
+    def step(call):
+        stop(r)
+        return exec_result()
+
+    class StopBeforeStep(FakeExecutor):
+        def fresh_state(self, *, start=True):
+            if not start:  # the pre-step read runs between the plan and the step
+                stop(r)
+            return super().fresh_state(start=start)
+
+    cases = {
+        "llm_call": dict(items=[done()], on_call=lambda _: stop(r)),
+        "step": dict(items=[plan(walk())], results=[step]),
+        "between": dict(items=[plan(walk())], executor=StopBeforeStep([exec_result()])),
+    }
+    for during, kw in cases.items():
+        r = Rig(tmp_path / during, registry, **kw)
+        o = r.run()
+        assert o.outcome == "STOPPED"
+        assert [rec["during"] for rec in records(o, "stop_requested")] == [during]
+
+
 def test_request_stop_idle(tmp_path, registry):
     r = Rig(tmp_path, registry, [])
     assert r.d.request_stop("test") == "idle"
@@ -488,12 +518,29 @@ def test_internal_error_stop_move_stderr_tail_is_cut(tmp_path, registry):
     assert sm["stderr_tail"].endswith("x")
 
 
-def test_task_end_write_fails_index_row_still_written(tmp_path, registry, monkeypatch, capsys):
-    def task_end(self, *args, **kwargs):
-        raise OSError("disk full")
+class _TaskEndFails(RunLog):
+    def emit(self, event):
+        if isinstance(event, TaskEnd):
+            raise OSError("disk full")
+        super().emit(event)
 
-    monkeypatch.setattr(RunLog, "task_end", task_end)
-    r = Rig(tmp_path, registry, [done()])
+
+class _TaskEndFailsFactory(RunLogFactory):
+    def open(self, run_id, t_start_mono, *, clock=time.monotonic):
+        log = super().open(run_id, t_start_mono, clock=clock)
+        log.close()  # reopened in append mode as the failing log
+        return _TaskEndFails(
+            log.path,
+            session=self.session,
+            session_id=self.session_id,
+            run_id=run_id,
+            t_start_mono=t_start_mono,
+            clock=clock,
+        )
+
+
+def test_task_end_write_fails_index_row_still_written(tmp_path, registry, capsys):
+    r = Rig(tmp_path, registry, [done()], runlog=_TaskEndFailsFactory)
     o = r.run()
     assert o.outcome == "DONE"
     assert records(o, "task_end") == []
@@ -588,7 +635,7 @@ def test_stop_move_failure_warns(tmp_path, registry):
     o = r.run()
     assert o.outcome == "STOPPED"
     assert o.stop_move_failed is True
-    assert o.message.endswith(prompts.STOP_MOVE_WARNING)
+    assert o.message.endswith(operator_messages.STOP_MOVE_WARNING)
 
 
 def test_fault_lookup(tmp_path, registry):
@@ -674,7 +721,7 @@ def test_failed_stop_with_the_service_alive_ends_the_task_with_no_further_call(t
     o = r.run()
     assert (o.outcome, o.llm_calls, len(r.planner.calls), len(executor.runs)) == ("STOP_FAILED", 1, 1, 1)
     assert o.stop_move_failed is True
-    assert o.message == "Stopped: the robot may still be moving." + prompts.STOP_MOVE_WARNING  # one warning
+    assert o.message == "Stopped: the robot may still be moving." + operator_messages.STOP_MOVE_WARNING  # one warning
     assert [rec["type"] for rec in records(o)][-3:] == ["step_result", "stop_move", "task_end"]
 
 
@@ -688,7 +735,7 @@ def test_interrupted_step_with_a_failed_stop_keeps_its_outcome(tmp_path, registr
     o = r.run()
     assert (o.outcome, o.llm_calls) == (outcome, 1)
     assert o.stop_move_failed is True
-    assert o.message.endswith(prompts.STOP_MOVE_WARNING)
+    assert o.message.endswith(operator_messages.STOP_MOVE_WARNING)
 
 
 def test_dispatcher_stop_move_updates_posture(tmp_path, registry):
@@ -700,6 +747,16 @@ def test_dispatcher_stop_move_updates_posture(tmp_path, registry):
     o = r.run()
     assert o.outcome == "STOPPED"
     assert o.final_posture == "sitting"
+
+
+def test_llm_retry_record_keys_and_values(tmp_path, registry):
+    retry = InfraRetry(
+        call_index=1, attempt=1, error_type="APIStatusError", status_code=529, attempt_latency_ms=12.5, sleep_s=1.0
+    )
+    r = Rig(tmp_path, registry, [done()], on_call=lambda _: r.planner.calls[-1]["on_infra_retry"](retry))
+    (rec,) = records(r.run(), "llm_retry")
+    assert list(rec)[6:] == ["call_index", "attempt", "error_type", "status_code", "attempt_latency_ms", "sleep_s"]
+    assert [rec[k] for k in list(rec)[6:]] == [1, 1, "APIStatusError", 529, 12.5, 1.0]
 
 
 def test_llm_interrupted_time_limit(tmp_path, registry):
@@ -737,12 +794,13 @@ def test_shutdown_task_ends_within_wait(tmp_path, registry):
     assert executor.stop_moves == ["operator"]
 
 
-def test_log_open_fails_internal_error_without_index_row(tmp_path, registry, monkeypatch):
-    def open_fails(self, *args, **kwargs):
+class _OpenFailsFactory(RunLogFactory):
+    def open(self, *args, **kwargs):
         raise OSError("read-only file system")
 
-    monkeypatch.setattr(RunLogFactory, "open", open_fails)
-    r = Rig(tmp_path, registry, [done()])
+
+def test_log_open_fails_internal_error_without_index_row(tmp_path, registry):
+    r = Rig(tmp_path, registry, [done()], runlog=_OpenFailsFactory)
     o = r.run()
     assert o.outcome == "INTERNAL_ERROR" and o.log_path == ""
     assert not (r.cfg.run_log_dir / "index.jsonl").exists()
@@ -750,9 +808,8 @@ def test_log_open_fails_internal_error_without_index_row(tmp_path, registry, mon
 
 
 def lost_step(*, stop_ok=True, outcome: ExecOutcome = "error", interrupt_cause=None):
-    stop = stop_move_result(StopCause.ROBOT_SERVICE_LOST, ok=stop_ok)
-    res = exec_result(outcome, interrupt_cause=interrupt_cause, stop_move=stop)
-    return res.model_copy(update={"service_lost": True})
+    stop = stop_move_result(StopCause.ROBOT_SERVICE_LOST, ok=stop_ok, service_lost=True)
+    return exec_result(outcome, interrupt_cause=interrupt_cause, stop_move=stop)
 
 
 @pytest.mark.parametrize(
@@ -761,7 +818,8 @@ def lost_step(*, stop_ok=True, outcome: ExecOutcome = "error", interrupt_cause=N
         (True, "Stopped: the robot control service was lost (the fallback stop was confirmed)."),
         (
             False,
-            "Stopped: the robot control service was lost (the fallback stop failed)." + prompts.STOP_MOVE_WARNING,
+            "Stopped: the robot control service was lost (the fallback stop failed)."
+            + operator_messages.STOP_MOVE_WARNING,
         ),
     ],
 )

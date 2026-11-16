@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import signal
 import threading
@@ -12,16 +13,19 @@ from pathlib import Path
 import pytest
 
 from dispatcher import prompts
-from dispatcher.context import PromptSurface
+from dispatcher.app import build_executor
+from dispatcher.context import build_prompt_surface
 from dispatcher.dispatcher import Dispatcher
-from dispatcher.executor import Executor
-from dispatcher.models import Plan, PlanStep
+from dispatcher.execution import Executor, stop_path
+from dispatcher.execution.process import UtilityRun
+from dispatcher.planning.plan import Plan, PlanStep
 from dispatcher.registry import Registry
-from dispatcher.runlog import INDEX_FILE, stream_path
-from dispatcher.tests.helpers import ScriptedPlanner, make_config
-from skills import stub
-from skills.robot_ipc import RobotClient, StopSent
-from tests.helpers import REPO_ROOT
+from dispatcher.runlog.format import INDEX_FILE, stream_path
+from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR, ScriptedPlanner, make_config, make_runlog
+from services.backend import stub_state
+from services.robot.client import RobotClient
+from services.robot.protocol import StopSent
+from tests.integration.alt_skills import SKILLS_DIR as ALT_SKILLS_DIR
 
 pytestmark = pytest.mark.integration
 
@@ -34,16 +38,18 @@ STOP_WITHIN_S = 3.0
 
 @pytest.fixture(scope="module")
 def registry():
-    return Registry.load(REPO_ROOT / "skills" / "catalog")
+    return Registry.load(BUILTIN_SKILLS_DIR)
 
 
 def build(tmp_path, registry, items, **cfg_over):
     cfg = make_config(tmp_path, **cfg_over)
-    stub.reset(cfg.stub.initial_posture, cfg.stub.state_file)
-    surface = PromptSurface.build(registry, cfg.loop.planning_horizon)
+    stub_state.reset(cfg.stub.initial_posture, cfg.stub.state_file)
+    surface = build_prompt_surface(registry, cfg.loop.planning_horizon)
     planner = ScriptedPlanner(items, surface)
-    executor = Executor(cfg, cfg.base_dir)
-    d = Dispatcher(cfg, registry, planner, executor)  # the first fresh read starts the robot service
+    executor = build_executor(cfg)
+    d = Dispatcher(
+        cfg, registry, planner, executor, runlog=make_runlog(cfg, planner)
+    )  # the first fresh read starts the robot service
     return d, planner, cfg
 
 
@@ -86,6 +92,37 @@ def test_turn_then_detect(tmp_path, registry):
     assert len(index) == 1 and index[0]["run_id"] == o.run_id
     assert index[0]["input_tokens"] == 200
     assert index[0]["model"] == cfg.llm.model and index[0]["thinking"] == cfg.llm.thinking
+
+
+def test_a_differently_named_skill_set_runs_by_its_declarations(tmp_path):
+    """No skill name is known to the dispatcher: vision starts for the skill that declares uses_vision."""
+    alt = Registry.load(ALT_SKILLS_DIR)
+    assert alt.names() == ["peek", "spin"]
+    spin = PlanStep(skill="spin", params={"direction": "left", "angle_deg": 90})
+    peek = PlanStep(skill="peek", params={"target": "chair"})
+    items = [
+        Plan(status="PLAN", steps=[spin]),
+        Plan(status="DONE"),
+        Plan(status="PLAN", steps=[peek]),
+        Plan(status="DONE"),
+    ]
+    d, _, cfg = build(tmp_path, alt, items, stub={"objects": {"chair": {"x": 0.0, "y": 2.0}}})
+    assert isinstance(d.executor, Executor)
+    try:
+        turned = d.run_task("spin left", source="test")
+        assert turned.outcome == "DONE", turned.message
+        assert [(s.outcome, s.verification) for s in turned.steps] == [("ok", "verified")]
+        assert abs(stub_state.read_state(cfg.stub.state_file).pose.yaw - math.pi / 2) < math.radians(10)
+        assert d.executor.vision.pid is None  # spin does not declare uses_vision
+
+        looked = d.run_task("look for a chair", source="test")
+        assert looked.outcome == "DONE", looked.message
+        assert [s.outcome for s in looked.steps] == ["ok"]
+        assert d.executor.vision.pid is not None
+        assert looked.steps[0].response is not None
+        assert looked.steps[0].response.observations["object_found"] is True
+    finally:
+        d.shutdown(0)
 
 
 def test_fault_at_step_two(tmp_path, registry):
@@ -157,7 +194,7 @@ def test_service_crash_mid_walk_ends_the_task_and_the_next_task_restarts_it(tmp_
         stops = [r for r in recs if r["type"] == "stop_move"]
         assert len(stops) == 1 and stops[0]["ok"] and stops[0]["stop_path"] == "fallback"
         assert stops[0]["reason"] == "robot_service_lost"
-        assert stub.read_state(cfg.stub.state_file).command is None
+        assert stub_state.read_state(cfg.stub.state_file).command is None
         assert _service(d).pid is None  # the next task's fresh read starts it
 
         assert read_jsonl(stream_path(Path(o.log_path)))[-1]["type"] == "stream_error"  # the loss ended the stream too
@@ -173,7 +210,7 @@ def test_service_crash_mid_walk_ends_the_task_and_the_next_task_restarts_it(tmp_
 def test_failed_stop_with_the_service_alive_ends_the_task(tmp_path, registry, monkeypatch):
     """The stub's StopMove never fails, so both stop results are patched; the step, kill and service are real."""
     monkeypatch.setattr(RobotClient, "stop", lambda _self, _wait_s: StopSent(ret=5, stop_call_ms=1.0))
-    monkeypatch.setattr(Executor, "_run_utility", lambda _self, _utility: (1, None, "StopMove failed", 1.0))
+    monkeypatch.setattr(stop_path, "run_utility", lambda _utility, _env, _cwd: UtilityRun(1, None, "StopMove failed"))
     real_run = Executor.run
     monkeypatch.setattr(Executor, "run", lambda self, *a, **kw: real_run(self, *a, **{**kw, "timeout_s": STOP_AFTER_S}))
     items = [Plan(status="PLAN", steps=[TURN, TURN])]

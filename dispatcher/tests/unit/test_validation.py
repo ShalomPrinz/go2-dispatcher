@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dispatcher.llm import validate_tool_input
-from dispatcher.models import Plan, PlanStep
+from dispatcher.planning.plan import Plan, PlanStep
+from dispatcher.planning.validation import validate_tool_input
 
 H = 5
 STEP = {"skill": "walk", "params": {"distance_m": 1.0}}

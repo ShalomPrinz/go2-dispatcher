@@ -11,9 +11,10 @@ from pathlib import Path
 
 import pytest
 
-from dispatcher.executor import Executor
+from dispatcher.app import build_executor
+from dispatcher.execution.env import ChildEnv
+from dispatcher.execution.state_stream import STREAM_PERIOD_S
 from dispatcher.models import RobotServiceError
-from dispatcher.robot import STREAM_PERIOD_S
 from dispatcher.tests.helpers import make_config
 from tests.helpers import REPO_ROOT
 from tests.integration import robot
@@ -22,8 +23,13 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
-def executor(tmp_path):
-    ex = Executor(make_config(tmp_path), REPO_ROOT)
+def cfg(tmp_path):
+    return make_config(tmp_path)
+
+
+@pytest.fixture
+def executor(cfg):
+    ex = build_executor(cfg, REPO_ROOT)
     yield ex
     ex.close()
 
@@ -41,8 +47,8 @@ def test_start_read_restart_stop(executor):
     assert executor.robot.pid is None and not os.path.exists(executor.robot.socket_path)
 
 
-def test_lock_held_is_a_clear_startup_error(executor):
-    other = robot.start(executor._env(None))  # another service already owns the socket
+def test_lock_held_is_a_clear_startup_error(executor, cfg):
+    other = robot.start(ChildEnv(cfg).for_service())  # another service already owns the socket
     try:
         with pytest.raises(RobotServiceError, match="another robot service holds .*robot.lock"):
             executor.robot.start()

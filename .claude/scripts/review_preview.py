@@ -22,20 +22,45 @@ GREP_HITS = 5  # per stale name (tunable)
 # Contract surfaces and what a change there means (owning docs in docs/README.md).
 CONTRACTS: tuple[tuple[str, str], ...] = (
     ("dispatcher/prompts.py", "fixed texts: registry hash and golden files change (skills/docs/skills.md)"),
-    ("skills/catalog/*/SKILL.md", "skill catalog: registry hash and golden files change (skills/docs/skills.md)"),
+    (
+        "dispatcher/operator_messages.py",
+        'operator texts reach the model via "Previous task": golden files change (tests/docs/testing.md)',
+    ),
+    ("skills/*/SKILL.md", "built-in skills: registry hash and golden files change (skills/docs/skills.md)"),
     ("dispatcher/tests/golden/*", "golden file (tests/docs/testing.md)"),
     ("dispatcher/registry.py", "registry hash (skills/docs/skills.md)"),
-    ("dispatcher/runlog.py", "run-log records (dispatcher/docs/run-log.md)"),
+    ("dispatcher/runlog/*.py", "run-log records (dispatcher/docs/run-log.md)"),
     ("dispatcher/config.py", "config keys (docs/configuration.md)"),
     ("config.example.toml", "config keys (docs/configuration.md)"),
-    ("dispatcher/models.py", "plan schema and step results (dispatcher/docs/loop-and-context.md)"),
-    ("dispatcher/llm.py", "submit_plan tool schema and request (dispatcher/docs/llm.md)"),
-    ("skills/schema.py", "skill response and error codes (skills/docs/skills.md)"),
-    ("skills/manifest.py", "SKILL.md schema and body sections (skills/docs/skills.md)"),
-    ("skills/env.py", "skill process environment (skills/docs/skills.md)"),
+    ("dispatcher/models.py", "step and task result types, exceptions (dispatcher/docs/loop-and-context.md)"),
+    ("dispatcher/planning/plan.py", "plan types (dispatcher/docs/loop-and-context.md)"),
+    ("dispatcher/planning/schema.py", "submit_plan tool schema (dispatcher/docs/llm.md)"),
+    ("dispatcher/planning/validation.py", "plan validation (dispatcher/docs/loop-and-context.md)"),
+    ("dispatcher/llm/surface.py", "PromptSurface: what the model sees (dispatcher/docs/llm.md)"),
+    ("dispatcher/llm/*_planner.py", "LLM request parameters (dispatcher/docs/llm.md)"),
+    ("contract/schema.py", "skill response and error codes (contract/docs/contract.md)"),
+    ("contract/manifest.py", "SKILL.md schema and body sections (contract/docs/contract.md)"),
+    ("contract/env.py", "skill process environment (contract/docs/contract.md)"),
+    ("contract/policy.py", "skill policy types (contract/docs/contract.md)"),
+    ("contract/wire.py", "service wire framing (contract/docs/contract.md)"),
+    ("contract/constants.py", "shared constants (contract/docs/contract.md)"),
+    ("contract/backend.py", "backend selection and stub time scale (contract/docs/contract.md)"),
+    ("contract/process.py", "process helpers: stdout capture, orphan watchdog (contract/docs/contract.md)"),
+    ("services/robot/protocol.py", "robot service protocol (services/robot/docs/service.md)"),
+    ("services/vision/protocol.py", "vision service protocol (services/vision/docs/vision.md)"),
 )
-# Safety paths for reviewer check 4 (docs/safety.md): whole files, then words on changed lines elsewhere.
-SAFETY_FILES = ("dispatcher/executor.py", "skills/stop_move.py", "skills/motion.py", "skills/process.py")
+# Safety paths for reviewer check 4 (docs/safety.md): whole files (a trailing `/` is a folder, tests excluded),
+# then words on changed lines elsewhere.
+SAFETY_FILES = (
+    "dispatcher/execution/",
+    "skills/runtime/motion.py",
+    "services/robot/service.py",
+    "services/robot/lease.py",
+    "services/robot/stop_move.py",
+    "services/robot/backends/",
+    "services/backend/",
+    "contract/process.py",
+)
 SAFETY_WORDS = re.compile(
     r"\b(StopMove|stop_move|killpg|_killpg|ORPHANED|orphaned|start_orphan_watchdog|move_loop|SECRET_ENV|child_env|shutdown)\b"
 )
@@ -233,10 +258,14 @@ def contract_surfaces(paths: list[str]) -> list[str]:
     return [f"- `{p}`: {why}" for p in paths for pat, why in CONTRACTS if fnmatch(p, pat)]
 
 
+def is_safety_file(rel: str) -> bool:
+    return any(rel == p or (p.endswith("/") and rel.startswith(p) and "/tests/" not in rel) for p in SAFETY_FILES)
+
+
 def safety(root: Path, diffs: dict[str, FileDiff], untracked: list[str], packages: tuple[str, ...]) -> list[str]:
-    out = [f"- `{p}`: safety file" for p in [*diffs, *untracked] if p in SAFETY_FILES]
+    out = [f"- `{p}`: safety file" for p in [*diffs, *untracked] if is_safety_file(p)]
     for rel in [*diffs, *untracked]:
-        if rel in SAFETY_FILES or not rel.endswith(".py") or "/tests/" in rel or not rel.startswith(packages):
+        if is_safety_file(rel) or not rel.endswith(".py") or "/tests/" in rel or not rel.startswith(packages):
             continue
         lines = [t for _, t in [*diffs[rel].removed, *diffs[rel].added]] if rel in diffs else [read(root, rel) or ""]
         words = sorted({w for t in lines for w in SAFETY_WORDS.findall(t)})

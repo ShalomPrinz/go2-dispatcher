@@ -12,15 +12,26 @@ import time
 
 import pytest
 
-from dispatcher.context import PromptSurface
+from dispatcher import app
+from dispatcher.app import build_executor
+from dispatcher.context import build_prompt_surface
 from dispatcher.dispatcher import Dispatcher
-from dispatcher.executor import Executor
+from dispatcher.execution import stop_path
+from dispatcher.execution.process import UtilityRun
 from dispatcher.models import StopCause
 from dispatcher.registry import Registry
-from dispatcher.tests.helpers import FakeExecutor, ScriptedPlanner, exec_result, make_config, stop_move_result
+from dispatcher.tests.helpers import (
+    BUILTIN_SKILLS_DIR,
+    FakeExecutor,
+    ScriptedPlanner,
+    exec_result,
+    make_config,
+    make_runlog,
+    stop_move_result,
+)
 from dispatcher.transports import cli as cli_module
-from skills import stop_move as stop_move_utility
-from skills import stub
+from services.backend import stub_state
+from services.robot.protocol import STOP_MOVE
 from tests.helpers import REPO_ROOT
 
 pytestmark = pytest.mark.integration
@@ -39,7 +50,7 @@ STOP_WITHIN_S = 5.0
 def cfg_path(tmp_path):
     p = tmp_path / "config.toml"
     p.write_text(
-        f'[skills]\ndir = "{REPO_ROOT / "skills" / "catalog"}"\n'
+        f'[skills]\ndir = "{BUILTIN_SKILLS_DIR}"\n'
         '[log]\ndir = "logs"\n'
         '[robot]\nnetwork_interface = "eth0"\n'
         '[stub]\nstate_file = "logs/.stub_state.json"\ntime_scale = 0.01\n',
@@ -73,16 +84,16 @@ def test_catalog(cfg_path):
         argv(cfg_path, "catalog"), env=env, cwd=cfg_path.parent, capture_output=True, text=True, timeout=30
     )
     assert proc.returncode == 0, proc.stderr
-    assert Registry.load(REPO_ROOT / "skills" / "catalog").catalog_text() in proc.stdout
+    assert Registry.load(BUILTIN_SKILLS_DIR).catalog_text() in proc.stdout
     assert re.search(r"^Registry hash: [0-9a-f]{16}$", proc.stdout, re.M)
 
 
 def test_reset_stub(cfg_path):
     state_file = cfg_path.parent / "logs" / ".stub_state.json"
-    stub.write_posture("sitting", state_file)
+    stub_state.write_posture("sitting", state_file)
     proc = cli(cfg_path, "--reset-stub")
     assert proc.returncode == 0, proc.stderr
-    assert stub.read_posture(state_file) == "standing"
+    assert stub_state.read_posture(state_file) == "standing"
 
 
 def test_cli_does_not_import_anthropic():
@@ -165,10 +176,11 @@ def test_batch_stops_after_a_task_whose_stop_failed(tmp_path, monkeypatch, capsy
     tasks = tmp_path / "tasks.txt"
     tasks.write_text("turn left\nwalk\nturn right\nsit\n", encoding="utf-8")
     cfg = make_config(tmp_path)
-    registry = Registry.load(REPO_ROOT / "skills" / "catalog")
-    planner = ScriptedPlanner([PLAN_TURN, DONE, PLAN_TURN], PromptSurface.build(registry, cfg.loop.planning_horizon))
-    dispatcher = Dispatcher(cfg, registry, planner, FakeExecutor([exec_result(skill="turn"), failed]))
-    monkeypatch.setattr(cli_module, "build_dispatcher", lambda *_args, **_kwargs: dispatcher)
+    registry = Registry.load(BUILTIN_SKILLS_DIR)
+    planner = ScriptedPlanner([PLAN_TURN, DONE, PLAN_TURN], build_prompt_surface(registry, cfg.loop.planning_horizon))
+    executor = FakeExecutor([exec_result(skill="turn"), failed])
+    dispatcher = Dispatcher(cfg, registry, planner, executor, runlog=make_runlog(cfg, planner))
+    monkeypatch.setattr(app, "build_dispatcher", lambda *_args, **_kwargs: dispatcher)
     monkeypatch.setattr(cli_module._Runner, "install", lambda _self: None)  # no process-wide signal or atexit hooks
     assert cli_module.cmd_batch(cfg, tasks) == 1
     assert dispatcher.previous is not None and dispatcher.previous.outcome == outcome
@@ -183,24 +195,24 @@ def test_batch_stops_after_a_task_whose_stop_failed(tmp_path, monkeypatch, capsy
 
 def test_batch_stops_after_a_failed_service_stop_ending_a_walk(tmp_path, monkeypatch, capsys):
     """In process, real executor: stop_error fails the service's own StopMove; the patched fallback fails too."""
-    real_utility = Executor._run_utility
+    real_utility = stop_path.run_utility
     monkeypatch.setattr(
-        Executor,
-        "_run_utility",
-        lambda self, utility: (
-            (1, None, "StopMove failed", 1.0) if utility is stop_move_utility else real_utility(self, utility)
+        stop_path,
+        "run_utility",
+        lambda utility, env, cwd: (
+            UtilityRun(1, None, "StopMove failed") if utility is STOP_MOVE else real_utility(utility, env, cwd)
         ),
     )
     tasks = tmp_path / "tasks.txt"
     tasks.write_text("say hi\nwalk\nturn right\n", encoding="utf-8")
     cfg = make_config(tmp_path, stub={"initial_posture": "standing", "faults": [{"step": 1, "kind": "stop_error"}]})
-    stub.reset(cfg.stub.initial_posture, cfg.stub.state_file)
-    registry = Registry.load(REPO_ROOT / "skills" / "catalog")
+    stub_state.reset(cfg.stub.initial_posture, cfg.stub.state_file)
+    registry = Registry.load(BUILTIN_SKILLS_DIR)
     walk = {"skill": "walk", "params": {"direction": "forward", "distance_m": 0.1}}
     script = [DONE, {"status": "PLAN", "steps": [walk, TURN]}]  # no further call after the failed stop
-    planner = ScriptedPlanner(script, PromptSurface.build(registry, cfg.loop.planning_horizon))
-    dispatcher = Dispatcher(cfg, registry, planner, Executor(cfg, cfg.base_dir))
-    monkeypatch.setattr(cli_module, "build_dispatcher", lambda *_args, **_kwargs: dispatcher)
+    planner = ScriptedPlanner(script, build_prompt_surface(registry, cfg.loop.planning_horizon))
+    dispatcher = Dispatcher(cfg, registry, planner, build_executor(cfg), runlog=make_runlog(cfg, planner))
+    monkeypatch.setattr(app, "build_dispatcher", lambda *_args, **_kwargs: dispatcher)
     monkeypatch.setattr(cli_module._Runner, "install", lambda _self: None)  # no process-wide signal or atexit hooks
     try:
         assert cli_module.cmd_batch(cfg, tasks) == 1

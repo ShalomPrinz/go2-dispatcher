@@ -1,5 +1,5 @@
 """Registry: loading, discovery and POLICY errors, catalog golden file, registry hash
-(skills/docs/skills.md, tests/docs/testing.md)."""
+(contract/docs/contract.md, skills/docs/skills.md, tests/docs/testing.md)."""
 
 from __future__ import annotations
 
@@ -7,14 +7,15 @@ from pathlib import Path
 
 import pytest
 
-from dispatcher.llm import plan_tool_schema
+from contract.policy import SkillPolicy
 from dispatcher.models import RegistryError
+from dispatcher.planning.schema import plan_tool_schema
 from dispatcher.prompts import system_text
 from dispatcher.registry import Registry, registry_hash
-from skills.policy import SkillPolicy
+from dispatcher.tests.helpers import BUILTIN_SKILLS_DIR
 from tests.helpers import REPO_ROOT
 
-SKILLS_DIR = REPO_ROOT / "skills" / "catalog"
+SKILLS_DIR = BUILTIN_SKILLS_DIR
 GOLDEN_CATALOG = REPO_ROOT / "dispatcher" / "tests" / "golden" / "catalog.txt"
 SKILL_MODULES = "dispatcher.tests.helpers.skill_modules"
 GOOD_ENTRY = f"{SKILL_MODULES}.good"
@@ -206,3 +207,44 @@ def test_policy_not_a_skill_policy(tmp_path):
 def test_policy_name_mismatch(tmp_path):
     path = write_skill(tmp_path, "demo", "", entrypoint=f"{SKILL_MODULES}.wrong_name")
     assert_registry_error(tmp_path, path, "POLICY.name")
+
+
+# --- uses_vision and moves declarations (contract/docs/contract.md) ------------------
+
+
+def test_real_skills_declarations():
+    reg = Registry.load(SKILLS_DIR)
+    assert [n for n in reg.names() if reg[n].uses_vision] == ["detect_object"]
+    assert [n for n in reg.names() if reg[n].moves] == ["sit", "stretch", "turn", "walk"]
+
+
+def test_declarations_match_the_module(tmp_path):
+    a, b = tmp_path / "a", tmp_path / "b"
+    write_skill(a, "demo", "uses_vision: true\n", entrypoint=f"{SKILL_MODULES}.vision")
+    write_skill(b, "demo", GOOD_PARAMS + "moves: true\n", entrypoint=f"{SKILL_MODULES}.moving")
+    looks, walks = Registry.load(a)["demo"], Registry.load(b)["demo"]
+    assert (looks.uses_vision, looks.moves) == (True, False)
+    assert (walks.uses_vision, walks.moves) == (False, True)
+
+
+def test_vision_client_in_a_submodule_of_the_entry_package(tmp_path):
+    a, b = tmp_path / "a", tmp_path / "b"
+    write_skill(a, "demo", "uses_vision: true\n", entrypoint=f"{SKILL_MODULES}.vision_pkg")
+    path = write_skill(b, "demo", "", entrypoint=f"{SKILL_MODULES}.vision_pkg")
+    assert Registry.load(a)["demo"].uses_vision
+    assert_registry_error(b, path, "uses_vision is false")
+
+
+def test_uses_vision_without_vision_client(tmp_path):
+    path = write_skill(tmp_path, "demo", "uses_vision: true\n")
+    assert_registry_error(tmp_path, path, "does not import services.vision.client")
+
+
+def test_vision_client_without_uses_vision(tmp_path):
+    path = write_skill(tmp_path, "demo", "", entrypoint=f"{SKILL_MODULES}.vision")
+    assert_registry_error(tmp_path, path, "uses_vision is false")
+
+
+def test_motion_cost_without_moves(tmp_path):
+    path = write_skill(tmp_path, "demo", GOOD_PARAMS, entrypoint=f"{SKILL_MODULES}.moving")
+    assert_registry_error(tmp_path, path, "moves: true")

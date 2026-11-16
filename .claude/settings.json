@@ -9,8 +9,7 @@
     ],
     "ask": [
       "Bash(*--run-live*)",
-      "Edit(//**/dispatcher/prompts.py)",
-      "Edit(//**/skills/catalog/**/SKILL.md)"
+      "Edit(//**/skills/*/SKILL.md)"
     ],
     "allow": [
       "Bash(uv run pytest *)",

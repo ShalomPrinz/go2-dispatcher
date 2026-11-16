@@ -1,5 +1,5 @@
 """Skill output validates against the shared SkillResponse as the dispatcher parses it
-(skills/docs/skills.md)."""
+(contract/docs/contract.md)."""
 
 from __future__ import annotations
 
@@ -8,16 +8,20 @@ import json
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from skills.runner import SkillOutcome, StateSampler, build_response, to_json
-from skills.schema import ErrorCode, RobotState, SkillResponse
+from contract.runtime import SkillOutcome, StateSampler, build_response, to_json
+from contract.schema import ErrorCode, RobotState, SkillResponse
 
 ADAPTER = TypeAdapter(SkillResponse)
 STATE = RobotState(t=1.0, backend="stub", posture="standing", body_height=0.32)
 
 
+def no_state() -> RobotState:
+    raise AssertionError("not sampled")
+
+
 def test_ok_response_round_trips():
     outcome = SkillOutcome.ok(observations={"sdk_ret": 0, "distance_m": 0.9}, timing={"exec_ms": 2.5})
-    states = StateSampler(before=STATE, after=STATE, seconds=0.003, used=True)
+    states = StateSampler(no_state, before=STATE, after=STATE, seconds=0.003, used=True)
     sent = build_response("walk", outcome, states, 7, setup={"robot_connect_ms": 0.5})
     assert list(sent.timing) == ["robot_connect_ms", "exec_ms", "state_ms", "total_ms"]
     assert ADAPTER.validate_json(to_json(sent)) == sent
@@ -25,12 +29,14 @@ def test_ok_response_round_trips():
 
 def test_error_response_round_trips():
     outcome = SkillOutcome.error(ErrorCode.SDK_ERROR, "Move returned 1", observations={}, timing={})
-    sent = build_response("walk", outcome, StateSampler(errors=["before: x"]), 7)
+    sent = build_response("walk", outcome, StateSampler(no_state, errors=["before: x"]), 7)
     assert ADAPTER.validate_json(to_json(sent)) == sent
 
 
 def test_rejects_error_mismatch_and_nested_extra_fields():
-    response = build_response("read_state", SkillOutcome.ok(observations={}, timing={}), StateSampler(after=STATE), 1)
+    response = build_response(
+        "read_state", SkillOutcome.ok(observations={}, timing={}), StateSampler(no_state, after=STATE), 1
+    )
     ok = json.loads(to_json(response))
     for bad in (
         {**ok, "error": {"code": "x", "message": "y"}},
@@ -43,4 +49,8 @@ def test_rejects_error_mismatch_and_nested_extra_fields():
 
 def test_nan_is_not_emitted():
     with pytest.raises(ValueError):
-        to_json(build_response("walk", SkillOutcome.ok(observations={"x": float("nan")}, timing={}), StateSampler(), 1))
+        to_json(
+            build_response(
+                "walk", SkillOutcome.ok(observations={"x": float("nan")}, timing={}), StateSampler(no_state), 1
+            )
+        )

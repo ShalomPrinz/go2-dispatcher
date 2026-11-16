@@ -12,7 +12,7 @@ import sys
 import traceback
 from collections.abc import Awaitable, Callable, Coroutine
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from telegram import Update
 from telegram.constants import ParseMode
@@ -25,13 +25,12 @@ from telegram.ext import (
     filters,
 )
 
-from skills import stop_move
-
-from .. import prompts
-from ..config import TOKEN_ENV, Config
+from ..app import STOP_MOVE_TIMEOUT_S, build_dispatcher
+from ..config import TOKEN_ENV, Config, load_config_and_env
 from ..dispatcher import Dispatcher
 from ..models import BusyError, StartupError
-from . import build_dispatcher, load_config_and_env, startup_error_text
+from ..registry import Registry
+from . import startup_error_text, texts
 from .telegram_progress import Edit, TelegramProgress
 from .telegram_text import format_outcome, h
 
@@ -54,7 +53,7 @@ __all__ = [
 
 SOURCE = "telegram"
 STOP_WORD = "stop"  # matched after strip().lower() (docs/safety.md)
-SHUTDOWN_EXTRA_S = 5.0  # post_stop waits the stop_move POLICY timeout + this (docs/running.md)
+SHUTDOWN_EXTRA_S = 5.0  # post_stop waits the STOP_MOVE policy timeout + this (docs/running.md)
 SHUTDOWN_SOURCE = "shutdown"  # request_stop source on SIGINT/SIGTERM (as shutdown())
 STOP_SIGNALS = (signal.SIGINT, signal.SIGTERM)
 _STOPPING_KEY = "stop_signal_received"
@@ -102,19 +101,19 @@ def _guarded(fn: Callable[[Any, Any, Any], Awaitable[None]]) -> Handler:
             await fn(user, message, context)
         except Exception:  # noqa: BLE001 - reported to the operator
             traceback.print_exc(file=sys.stderr)
-            await _reply(message, prompts.ERROR_REPLY)
+            await _reply(message, texts.ERROR_REPLY)
 
     return handler
 
 
 async def _stop(message: Any, context: Any) -> None:
     result = _dispatcher(context).request_stop(SOURCE)
-    await _reply(message, prompts.STOPPING if result == "stopping" else prompts.NOTHING_RUNNING)
+    await _reply(message, texts.STOPPING if result == "stopping" else texts.NOTHING_RUNNING)
 
 
 @_guarded
 async def on_start(user: Any, message: Any, context: Any) -> None:
-    await _reply(message, h(prompts.help_text(_cfg(context).robot.backend)))
+    await _reply(message, h(texts.help_text(_cfg(context).robot.backend)))
 
 
 @_guarded
@@ -129,25 +128,25 @@ async def on_text(user: Any, message: Any, context: Any) -> None:
         await _stop(message, context)
         return
     if not text:
-        await _reply(message, prompts.EMPTY_TASK)
+        await _reply(message, texts.EMPTY_TASK)
         return
     dispatcher = _dispatcher(context)
     if dispatcher.is_busy():
-        await _reply(message, prompts.BUSY)
+        await _reply(message, texts.BUSY)
         return
-    working = await _reply(message, prompts.WORKING)  # the first progress message, edited in place (docs/running.md)
+    working = await _reply(message, texts.WORKING)  # the first progress message, edited in place (docs/running.md)
     progress = _progress(context)
 
     async def new_message(text: str) -> Edit:  # the progress message of a later model call
         return _editor(await _reply(message, text))
 
     if progress is not None and not progress.open(_editor(working), new_message):
-        await _reply(message, prompts.BUSY)  # another handler started a task during the await
+        await _reply(message, texts.BUSY)  # another handler started a task during the await
         return
     try:
         outcome = await asyncio.to_thread(dispatcher.run_task, text, source=SOURCE, sender_id=str(user.id))
     except BusyError:
-        await _reply(message, prompts.BUSY)
+        await _reply(message, texts.BUSY)
         return
     finally:
         if progress is not None:
@@ -179,7 +178,7 @@ async def on_post_init(app: Application) -> None:
 async def on_post_stop(app: Application) -> None:
     """Backstop (docs/running.md): waits for / force-ends a task still running."""
     dispatcher: Dispatcher = app.bot_data["dispatcher"]
-    await asyncio.to_thread(dispatcher.shutdown, stop_move.POLICY.timeout_s({}) + SHUTDOWN_EXTRA_S)
+    await asyncio.to_thread(dispatcher.shutdown, STOP_MOVE_TIMEOUT_S + SHUTDOWN_EXTRA_S)
 
 
 def build_application(
@@ -227,9 +226,16 @@ def _serve(config_path: Path | None) -> int:
         return 2
     if not cfg.telegram.allowed_user_ids:
         print(NO_ALLOWED_USERS_WARNING, file=sys.stderr)
-    dispatcher = build_dispatcher(cfg, reset_stub=True, observer=TelegramProgress)
+    progress: TelegramProgress | None = None
+
+    def make_progress(registry: Registry) -> TelegramProgress:
+        nonlocal progress  # the bot keeps the observer it gives the dispatcher
+        progress = TelegramProgress(registry)
+        return progress
+
+    dispatcher = build_dispatcher(cfg, reset_stub=True, observer=make_progress)
     atexit.register(dispatcher.shutdown, 0)
-    build_application(dispatcher, cfg, token, cast(TelegramProgress, dispatcher.observer)).run_polling()
+    build_application(dispatcher, cfg, token, progress).run_polling()
     return 0
 
 

@@ -9,45 +9,35 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from . import prompts
-from .bounds import cut_message
-from .budget import MotionBudget
-from .llm import plan_tool_schema
-from .models import ObstacleDistances, PlanStep, RobotState, StepResult, TaskSummary
+from .llm.surface import PromptSurface
+from .models import ObstacleDistances, ReturnReason, RobotState, StepResult, TaskSummary
+from .planning.bounds import cut_message
+from .planning.budget import MotionBudget
+from .planning.plan import PlanStep
+from .planning.schema import plan_tool_schema
 from .registry import Registry, registry_hash
 
 NOT_DISPATCHED_OUTCOMES = frozenset({"rejected", "motion_budget_exceeded"})
 NUM_DECIMALS = 2  # budget and obstacle numbers: round(x, 2) then :g (dispatcher/docs/loop-and-context.md)
 
-ReturnReason = Literal["initial", "plan_complete", "checkpoint", "failure"]
-RequestReason = ReturnReason | Literal["schema_retry"]  # logged on llm_request (dispatcher/docs/run-log.md)
 RemainingTag = Literal["pending", "abandoned"]
 
 
 # --- prompt surface (dispatcher/docs/loop-and-context.md) ----------------------------------
 
 
-@dataclass(frozen=True)
-class PromptSurface:
-    """The fixed request parts, built once per process: sent by the Dispatcher, copied into the run log."""
-
-    system: tuple[str, str]
-    catalog_text: str
-    tool_schema: dict[str, Any]
-    registry_hash: str
-    skills: tuple[str, ...]
-
-    @classmethod
-    def build(cls, registry: Registry, horizon: int) -> PromptSurface:
-        catalog_text = registry.catalog_text()
-        system_text, skills_text = prompts.system_blocks(horizon, catalog_text)
-        tool_schema = plan_tool_schema(horizon)
-        return cls(
-            system=(system_text, skills_text),
-            catalog_text=catalog_text,
-            tool_schema=tool_schema,
-            registry_hash=registry_hash(system_text, catalog_text, tool_schema),
-            skills=tuple(registry.names()),
-        )
+def build_prompt_surface(registry: Registry, horizon: int) -> PromptSurface:
+    """The fixed request parts for ``registry`` and ``horizon``, built once per process."""
+    catalog_text = registry.catalog_text()
+    system_text, skills_text = prompts.system_blocks(horizon, catalog_text)
+    tool_schema = plan_tool_schema(horizon)
+    return PromptSurface(
+        system=(system_text, skills_text),
+        catalog_text=catalog_text,
+        tool_schema=tool_schema,
+        registry_hash=registry_hash(system_text, catalog_text, tool_schema),
+        skills=tuple(registry.names()),
+    )
 
 
 # --- step-line rendering (dispatcher/docs/loop-and-context.md) -----------------------------
@@ -97,6 +87,15 @@ def _failure_text(sr: StepResult) -> str:
     return f"{sr.outcome}: {msg}" if msg else sr.outcome
 
 
+def fault_note(sr: StepResult) -> str | None:
+    """What a step line adds after its outcome: for a ``failed`` verdict, the faults or the missed goal; for a
+    step with no verdict, the detected faults only; else None."""
+    faults = ", ".join(prompts.FAULT_TEXTS[f] for f in sr.faults)
+    if sr.verification == "failed":
+        return prompts.VERIFICATION_FAILED_DETAIL.format(reasons=faults or prompts.GOAL_NOT_REACHED)
+    return faults or None
+
+
 def render_step(sr: StepResult, registry: Registry, *, numbered: bool) -> str:
     """One line for a recorded step. ``numbered=False`` drops the ``{index}. `` prefix.
     Never includes stderr or tracebacks."""
@@ -107,7 +106,7 @@ def render_step(sr: StepResult, registry: Registry, *, numbered: bool) -> str:
         body = f"{call} -> ok{_observations(sr, registry)}"
     else:
         body = f"{call} -> {_failure_text(sr)}"
-    note = prompts.fault_note(sr)
+    note = fault_note(sr)
     if note is not None:
         body += f"; {note}"
     return f"{sr.dispatch.index}. {body}" if numbered else body
