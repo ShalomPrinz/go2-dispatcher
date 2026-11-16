@@ -123,6 +123,10 @@ Notes for later steps:
 - **Not done**: the step's "compare a stub run's log records before and after by key set" was covered by the serializer test plus the reviewer's old-vs-new `model_dump` comparison, not by diffing a real integration run's log folder. Step 7's task 1 reference log is the first real-run capture.
 - `duration_ms` boundary: measured after the pipe readers join and before the reply is parsed (`SkillProcess.join()` then `finish()`); keep it so.
 
+### Step 7 (`refactor-07-runlog-events.md`): proposal approved, implementation not started
+
+Nothing committed on `architecture_refactor` (tip is still the step 6 commit). A first session ran the baseline, captured a reference log and got the read-only `dispatcher-dev` proposal; the user approved all of it. The decisions, the corrected emitter list, the commit split and the reference-log recipe with its comparison script are in `refactor-07-runlog-events.md` ("Decisions taken"). The next session starts at task 1 (baseline and reference-log capture) and then task 3; it does not ask the decision question again.
+
 ## What this is
 
 The system works and is tested. The refactor changes its **structure**, not its behaviour: the code has outgrown the "two packages, `dispatcher/` and `skills/`" layout. An architecture review found nine faults (below). The series fixes them in an order where each step leaves the repo green, committed and usable, so the series can stop after any step.
