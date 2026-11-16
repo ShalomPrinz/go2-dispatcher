@@ -7,6 +7,7 @@ import time
 
 from dispatcher.execution import state_stream
 from dispatcher.execution.state_stream import OBSERVER_FAILED_WARNING, StateStream
+from dispatcher.runlog.events import Event, RobotLink, RobotSample
 from dispatcher.tests.helpers.fakes import state
 from services.robot.protocol import LinkEvent, StateReply
 
@@ -36,12 +37,15 @@ class RaisingObserver:
         self.links: list[str] = []
         self.samples = 0
 
-    def robot_sample(self, state, link, rx_mono):
-        self.samples += 1
-        raise RuntimeError("broken telemetry")
-
-    def robot_link(self, link, rx_mono):
-        self.links.append(link)
+    def emit(self, event: Event) -> None:
+        match event:
+            case RobotSample():
+                self.samples += 1
+                raise RuntimeError("broken telemetry")
+            case RobotLink():
+                self.links.append(event.link)
+            case _:
+                pass
 
 
 def test_raising_observer_does_not_break_the_stream(tmp_path, monkeypatch, capsys):
@@ -53,7 +57,7 @@ def test_raising_observer_does_not_break_the_stream(tmp_path, monkeypatch, capsy
     monkeypatch.setattr(state_stream.RobotClient, "connect", classmethod(lambda cls, path: FakeClient(events)))
     observer = RaisingObserver()
     path = tmp_path / "s.state_stream.jsonl"
-    stream = StateStream("unused.sock", path, 0.0, observer)  # type: ignore[arg-type]
+    stream = StateStream("unused.sock", path, 0.0, [observer])
     deadline = time.monotonic() + 2.0
     while observer.samples < 2 and time.monotonic() < deadline:
         time.sleep(0.01)

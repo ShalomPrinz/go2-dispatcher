@@ -56,6 +56,12 @@ class BusyError(Exception):
     """run_task called while a task is running."""
 
 
+# --- Return reasons (dispatcher/docs/loop-and-context.md) --------------------------------------------
+
+ReturnReason = Literal["initial", "plan_complete", "checkpoint", "failure"]
+RequestReason = ReturnReason | Literal["schema_retry"]  # logged on llm_request (dispatcher/docs/run-log.md)
+
+
 # --- StepResult (dispatcher/docs/run-log.md) --------------------------------------------------------
 
 StepOutcome = Literal["ok", "error", "timeout", "malformed", "rejected", "motion_budget_exceeded", "interrupted"]

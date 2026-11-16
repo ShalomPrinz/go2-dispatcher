@@ -16,6 +16,7 @@ from dispatcher.llm.client import InfraRetry, LLMInterrupted, LLMUnavailable
 from dispatcher.models import BusyError, ExecOutcome, ObstacleDistances, Posture, StopCause
 from dispatcher.planning.plan import Plan, PlanStep
 from dispatcher.registry import Registry
+from dispatcher.runlog.events import TaskEnd
 from dispatcher.runlog.writer import RunLog, RunLogFactory
 from dispatcher.tests.helpers import (
     BUILTIN_SKILLS_DIR,
@@ -482,10 +483,14 @@ def test_internal_error_stop_move_stderr_tail_is_cut(tmp_path, registry):
 
 
 def test_task_end_write_fails_index_row_still_written(tmp_path, registry, monkeypatch, capsys):
-    def task_end(self, *args, **kwargs):
-        raise OSError("disk full")
+    emit = RunLog.emit
 
-    monkeypatch.setattr(RunLog, "task_end", task_end)
+    def task_end_fails(self, event):
+        if isinstance(event, TaskEnd):
+            raise OSError("disk full")
+        emit(self, event)
+
+    monkeypatch.setattr(RunLog, "emit", task_end_fails)
     r = Rig(tmp_path, registry, [done()])
     o = r.run()
     assert o.outcome == "DONE"

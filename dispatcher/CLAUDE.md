@@ -18,7 +18,7 @@ uv run go2 catalog                             # check system text, catalog, too
 | [loop-and-context.md](docs/loop-and-context.md) | `submit_plan` schema, validation, return reasons, budgets, outcome codes and operator messages, context layout, fixed texts |
 | [execution.md](docs/execution.md) | The executor's parts in `execution/` (env, process, kill switch, control link, stop path, outcome), the order of a step, `ExecResult` and `ProcessRun` |
 | [llm.md](docs/llm.md) | Providers (Anthropic, OpenRouter), model choice, request parameters, schema retry, horizon rejection, infrastructure retries |
-| [run-log.md](docs/run-log.md) | Run log files, record types, `index.jsonl`, study metrics |
+| [run-log.md](docs/run-log.md) | Run log files, record types, events and `emit`, observers, `index.jsonl`, study metrics |
 | [report.md](../analysis/docs/report.md) | The run-log report (`go2 report`, `analysis` package; `cli.py` only calls it) |
 | [configuration.md](../docs/configuration.md) | Config keys, validation rules, exit codes, CLI overrides, `.env` |
 | [running.md](../docs/running.md) | `go2` CLI, Telegram bot, stub vs real, single-instance lock |
@@ -36,4 +36,5 @@ uv run go2 catalog                             # check system text, catalog, too
 - The dispatcher imports `contract`, `skills` and the client surfaces of `services.robot` and `services.vision` (never `services.robot.service`, `services.robot.backends`, `services.vision.service`, `services.vision.detectors` or `services.backend`; it reaches the stub world only through `services.robot.stub`, enforced by an import contract), never the reverse. `dispatcher/tests/` holds unit tests only; tests that spawn subprocesses or need both packages go in root `tests/` ([testing.md](../tests/docs/testing.md#layout)).
 - No `temperature`, no forced `tool_choice` (Anthropic; OpenRouter forces it), no prompt caching: deliberate, not omissions ([llm.md](docs/llm.md#design-decisions)).
 - Nothing raw (stderr, tracebacks, provider error text) may enter the model context ([loop-and-context.md](docs/loop-and-context.md#design-decisions)).
+- A new record type follows the recipe in [run-log.md](docs/run-log.md#adding-a-record-type); `RunLog.emit` ends in `assert_never`, so basedpyright fails until its `case` exists. Observers match only what they show (`case _: pass`).
 - A new or changed config key updates [configuration.md](../docs/configuration.md) in the same change.

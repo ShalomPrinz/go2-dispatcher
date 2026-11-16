@@ -10,7 +10,7 @@ from typing import Any, Literal
 
 from . import prompts
 from .llm.surface import PromptSurface
-from .models import ObstacleDistances, RobotState, StepResult, TaskSummary
+from .models import ObstacleDistances, ReturnReason, RobotState, StepResult, TaskSummary
 from .planning.bounds import cut_message
 from .planning.budget import MotionBudget
 from .planning.plan import PlanStep
@@ -20,8 +20,6 @@ from .registry import Registry, registry_hash
 NOT_DISPATCHED_OUTCOMES = frozenset({"rejected", "motion_budget_exceeded"})
 NUM_DECIMALS = 2  # budget and obstacle numbers: round(x, 2) then :g (dispatcher/docs/loop-and-context.md)
 
-ReturnReason = Literal["initial", "plan_complete", "checkpoint", "failure"]
-RequestReason = ReturnReason | Literal["schema_retry"]  # logged on llm_request (dispatcher/docs/run-log.md)
 RemainingTag = Literal["pending", "abandoned"]
 
 

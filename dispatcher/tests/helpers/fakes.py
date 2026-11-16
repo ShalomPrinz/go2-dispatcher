@@ -23,7 +23,7 @@ from dispatcher.models import (
     StopMoveResult,
 )
 from dispatcher.registry import SkillDescriptor
-from dispatcher.runlog.sinks import TaskObserver
+from dispatcher.runlog.sinks import Observer
 
 FAKE_CLOCK_START = 1000.0
 
@@ -113,11 +113,11 @@ def stop_move_result(
 
 
 class FakeStream:
-    """A state stream that writes nothing; records its path, its observer and whether it was closed."""
+    """A state stream that writes nothing; records its path, its observers and whether it was closed."""
 
-    def __init__(self, path: Path, observer: TaskObserver | None = None):
+    def __init__(self, path: Path, observers: Sequence[Observer] = ()):
         self.path = path
-        self.observer = observer
+        self.observers = tuple(observers)
         self.closed = False
 
     def close(self) -> None:
@@ -211,8 +211,8 @@ class FakeExecutor:
             raise StateReadError("ServiceUnavailable: no robot service")
         return self.fresh if self.fresh is not None else state("standing")
 
-    def state_stream(self, path: Path, t_start: float, observer: TaskObserver | None = None) -> FakeStream:
-        stream = FakeStream(path, observer)
+    def state_stream(self, path: Path, t_start: float, observers: Sequence[Observer] = ()) -> FakeStream:
+        stream = FakeStream(path, observers)
         self.streams.append(stream)
         return stream
 

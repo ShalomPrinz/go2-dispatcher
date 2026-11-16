@@ -51,7 +51,7 @@ An operator sends a natural-language task over Telegram or the CLI. The LLM retu
 | Shared backend code: stub state file, DDS init | `services/backend/` | [backend.md](../services/backend/docs/backend.md) |
 | Vision protocol and client, real and stub detectors, box classification | `services/vision/` | [vision.md](../services/vision/docs/vision.md) |
 | Shared contract: skill response schema and error codes, policy types, process environment, wire framing, backend selection, process helpers, generic process runtime, fault kinds and the stub fault file, stub world format, shared constants | `contract/` | [contract.md](../contract/docs/contract.md) |
-| Run log and index: file format, session info, writer, observers | `runlog/` (`format.py`, `session.py`, `writer.py`, `sinks.py`) | [run-log.md](../dispatcher/docs/run-log.md) |
+| Run log and index: typed events, file format, session info, writer, observer fan-out | `runlog/` (`events.py`, `format.py`, `session.py`, `writer.py`, `sinks.py`) | [run-log.md](../dispatcher/docs/run-log.md) |
 | Latency report (`go2 report`): reads the run logs, prints latency and outcome statistics | `analysis/` (`logs.py`, `report.py`) | [report.md](../analysis/docs/report.md) |
 | Configuration and `.env` | `config.py` | [configuration.md](configuration.md) |
 | Single-instance lock | `process_lock.py` | [safety.md](safety.md) |

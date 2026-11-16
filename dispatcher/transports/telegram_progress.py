@@ -1,4 +1,4 @@
-"""Live task progress for the Telegram bot: a ``TaskObserver`` whose lines one message per model call shows, edited
+"""Live task progress for the Telegram bot: an ``Observer`` whose lines one message per model call shows, edited
 in place (docs/running.md). Records only update the text; the bot's event loop sends, throttled."""
 
 from __future__ import annotations
@@ -11,29 +11,30 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from ..runlog.events import (
+    Event,
+    LlmError,
+    LlmInterrupted,
+    LlmRequest,
+    LlmResponse,
+    PlanInvalid,
+    PlanRecord,
+    RobotLink,
+    RobotSample,
+    StepRecord,
+    StepStart,
+    StopMove,
+    StopRequested,
+    TaskEnd,
+)
 from . import texts
 from .telegram_text import call_html, h, step_line, trim
 
 if TYPE_CHECKING:
     from contract.constants import Link
 
-    from ..context import RequestReason, ReturnReason
-    from ..llm.client import InfraRetry, LLMResult
-    from ..models import (
-        Posture,
-        PreconditionFailure,
-        RobotState,
-        StartState,
-        StepDispatch,
-        StepRef,
-        StepResult,
-        StopMoveResult,
-        TaskOutcome,
-        TaskSummary,
-    )
-    from ..planning.budget import MotionBudget
+    from ..models import RobotState
     from ..planning.plan import Plan
-    from ..planning.validation import PlanCheck
     from ..registry import Registry
 
 __all__ = ["TelegramProgress", "Edit", "NewMessage", "EDIT_INTERVAL_S", "EDIT_FAILED_WARNING", "robot_line"]
@@ -230,20 +231,46 @@ class TelegramProgress:
             self._rounds[-1].lines.append(self._rejected.format(then=then))
             self._rejected = None
 
-    def task_start(
-        self,
-        task: str,
-        source: str,
-        sender_id: str | None,
-        previous: TaskSummary | None,
-        posture: Posture,
-        start_state: StartState,
-    ) -> None:
-        pass
+    def emit(self, event: Event) -> None:
+        match event:
+            case LlmRequest():
+                self._llm_request()
+            case LlmResponse() | LlmError() | LlmInterrupted():
+                self._update()  # an error's detail stays in the run log; the outcome text names the category
+            case PlanRecord(plan=plan):
+                self._plan(plan)
+            case PlanInvalid():
+                self._reject(texts.PROGRESS_PLAN_MALFORMED)
+            case StepStart(ref=ref):
+                self._update(
+                    pending=texts.PROGRESS_STEP_RUNNING.format(call=call_html(ref.skill, ref.params, self._registry))
+                )
+            case StepRecord(result=sr):
+                if sr.dispatch is None:  # rejected before running: the plan, not the step, failed
+                    over = sr.outcome == "motion_budget_exceeded"
+                    self._reject(texts.PROGRESS_PLAN_OVER_BUDGET if over else texts.PROGRESS_PLAN_MALFORMED)
+                    self._update()
+                    return
+                line = step_line(sr, self._registry) + texts.PROGRESS_DURATION.format(seconds=_secs(sr.duration_ms))
+                self._update(add=[line])
+            case StopRequested():
+                self._update(add=[texts.PROGRESS_STOP_REQUESTED.format(source=h(event.source))])
+            case StopMove(result=smr):
+                template = texts.PROGRESS_STOP_MOVE_SENT if smr.ok else texts.PROGRESS_STOP_MOVE_FAILED
+                self._update(add=[template.format(seconds=_secs(smr.duration_ms))])
+            case TaskEnd():
+                with self._lock:
+                    self._resolve_rejected(texts.PROGRESS_GIVING_UP)
+                    self._robot = _Robot(ended=True)  # the robot line leaves the final text; later samples are dropped
+                self._update()  # the outcome goes out as a new message
+            case RobotSample():
+                self._robot_event(event.link, event.state)
+            case RobotLink():
+                self._robot_event(event.link, None)
+            case _:
+                pass  # retries, preconditions and exceptions stay in the run log; the outcome text names the category
 
-    def llm_request(
-        self, call_index: int, return_reason: RequestReason, retry_of: ReturnReason | None, user_text: str
-    ) -> None:
+    def _llm_request(self) -> None:
         with self._lock:
             self._resolve_rejected(texts.PROGRESS_ASKING_AGAIN)
             if self._calls > 0:  # every model call after the first starts a new round, in a new message
@@ -252,19 +279,7 @@ class TelegramProgress:
             self._calls += 1
         self._update(pending=texts.PROGRESS_THINKING)
 
-    def llm_retry(self, retry: InfraRetry) -> None:
-        pass  # infrastructure retries stay in the run log (docs/running.md)
-
-    def llm_response(self, call_index: int, res: LLMResult) -> None:
-        self._update()
-
-    def llm_error(self, call_index: int, detail: str) -> None:
-        self._update()  # the detail stays in the run log; the outcome text names the category
-
-    def llm_interrupted(self, call_index: int, cause: str) -> None:
-        self._update()
-
-    def plan(self, call_index: int, plan: Plan, stop_at: int) -> None:
+    def _plan(self, plan: Plan) -> None:
         if plan.status == "PLAN":
             calls = [call_html(s.skill, s.params, self._registry) for s in plan.steps]
             head = texts.PROGRESS_PLAN_MESSAGE.format(message=h(plan.message)) if plan.message else texts.PROGRESS_PLAN
@@ -276,52 +291,10 @@ class TelegramProgress:
             add = [_PLAN_END_LINES[plan.status].format(message=h(plan.message or ""))]
         self._update(add=add)
 
-    def plan_invalid(self, call_index: int, tool_input: Any, check: PlanCheck, horizon: int) -> None:
-        self._reject(texts.PROGRESS_PLAN_MALFORMED)
-
     def _reject(self, template: str) -> None:
         """Hold a rejected-plan line until the next model call or the task end says what follows."""
         with self._lock:
             self._rejected = template
-
-    def step_start(self, ref: StepRef, dispatch: StepDispatch) -> None:
-        self._update(pending=texts.PROGRESS_STEP_RUNNING.format(call=call_html(ref.skill, ref.params, self._registry)))
-
-    def step_result(self, sr: StepResult, *, budget: MotionBudget, failures: int, posture: Posture) -> None:
-        if sr.dispatch is None:  # rejected before running: the plan, not the step, failed
-            over = sr.outcome == "motion_budget_exceeded"
-            self._reject(texts.PROGRESS_PLAN_OVER_BUDGET if over else texts.PROGRESS_PLAN_MALFORMED)
-            self._update()
-            return
-        line = step_line(sr, self._registry) + texts.PROGRESS_DURATION.format(seconds=_secs(sr.duration_ms))
-        self._update(add=[line])
-
-    def precondition_failed(self, failure: PreconditionFailure) -> None:
-        pass  # the outcome text names the category; the detail is in the run log
-
-    def stop_requested(self, source: str, during: str) -> None:
-        self._update(add=[texts.PROGRESS_STOP_REQUESTED.format(source=h(source))])
-
-    def stop_move(self, smr: StopMoveResult) -> None:
-        template = texts.PROGRESS_STOP_MOVE_SENT if smr.ok else texts.PROGRESS_STOP_MOVE_FAILED
-        self._update(add=[template.format(seconds=_secs(smr.duration_ms))])
-
-    def exception(self, where: str, e: BaseException) -> None:
-        pass  # details stay in the run log; the outcome text names the category
-
-    def task_end(
-        self, result: TaskOutcome, *, rejections: int, horizon_rejections: int, usage_totals: dict, budget: MotionBudget
-    ) -> None:
-        with self._lock:
-            self._resolve_rejected(texts.PROGRESS_GIVING_UP)
-            self._robot = _Robot(ended=True)  # the robot line leaves the final text; later samples are dropped
-        self._update()  # the outcome goes out as a new message
-
-    def robot_sample(self, state: RobotState, link: Link, rx_mono: float | None) -> None:
-        self._robot_event(link, state)
-
-    def robot_link(self, link: Link, rx_mono: float | None) -> None:
-        self._robot_event(link, None)
 
     def _robot_event(self, link: Link, state: RobotState | None) -> None:
         """Keep the latest link and sample (stream thread); wake the pump only when the rendered line changed."""

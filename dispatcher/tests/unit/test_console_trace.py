@@ -1,4 +1,4 @@
-"""TeeLog observer seam and the CLI console trace (dispatcher/docs/run-log.md, docs/running.md)."""
+"""The observer seam (``publish``) and the CLI console trace (dispatcher/docs/run-log.md, docs/running.md)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,8 @@ from dispatcher.dispatcher import Dispatcher
 from dispatcher.llm.client import LLMResult
 from dispatcher.planning.plan import Plan, PlanStep
 from dispatcher.registry import Registry
-from dispatcher.runlog.sinks import NullLog, TeeLog
+from dispatcher.runlog.events import Event, LlmError, LlmRequest, LlmResponse, StopRequested
+from dispatcher.runlog.sinks import publish
 from dispatcher.tests.helpers import (
     BUILTIN_SKILLS_DIR,
     FakeClock,
@@ -28,33 +29,38 @@ def registry():
     return Registry.load(BUILTIN_SKILLS_DIR)
 
 
-class Recorder(NullLog):
+class Recorder:
     def __init__(self):
-        self.errors: list[str] = []
+        self.events: list[Event] = []
 
-    def llm_error(self, call_index: int, detail: str) -> None:
-        self.errors.append(detail)
+    def emit(self, event: Event) -> None:
+        self.events.append(event)
 
 
-class Broken(NullLog):
-    def llm_error(self, call_index: int, detail: str) -> None:
+class Broken:
+    def emit(self, event: Event) -> None:
         raise RuntimeError("observer bug")
 
 
-def test_tee_forwards_to_log_and_observer_and_swallows_observer_errors():
-    log, seen = Recorder(), Recorder()
-    TeeLog(log, seen).llm_error(1, "boom")
-    assert log.errors == seen.errors == ["boom"]
+def test_publish_writes_the_log_then_the_observers_and_swallows_observer_errors():
+    event = LlmError(1, "boom")
+    log, seen, after = Recorder(), Recorder(), Recorder()
+    publish(event, log, [seen, Broken(), after])  # must not raise
+    assert log.events == seen.events == after.events == [event]
 
-    log = Recorder()
-    TeeLog(log, Broken()).llm_error(1, "boom")  # must not raise
-    assert log.errors == ["boom"]
+    seen = Recorder()
+    publish(event, None, [seen])  # no file yet: the observers still see it
+    assert seen.events == [event]
+
+    with pytest.raises(RuntimeError):  # a log error propagates, and no observer sees the event
+        publish(event, Broken(), [seen])
+    assert seen.events == [event]
 
 
 def test_thinking_then_thought_for(registry):
     out, clock = io.StringIO(), FakeClock()
     trace = ConsoleTrace(registry, out, ansi=False, clock=clock.now)
-    trace.llm_request(1, "initial", None, "user text")
+    trace.emit(LlmRequest(1, "initial", None, "user text"))
     clock.advance(5.3)
     res = LLMResult(
         tool_input=None,
@@ -67,7 +73,7 @@ def test_thinking_then_thought_for(registry):
         response_id=None,
         request_id=None,
     )
-    trace.llm_response(1, res)
+    trace.emit(LlmResponse(1, res))
     assert out.getvalue() == "Thinking...\nThought for 5.3s · 120 in / 30 out tokens\n"
 
 
@@ -102,9 +108,10 @@ def test_observer_hears_stop_only_after_the_kill(tmp_path, registry):
     planner = ScriptedPlanner([Plan(status="PLAN", steps=[walk])], surface)
     kills_seen: list[int] = []
 
-    class Observer(NullLog):
-        def stop_requested(self, source: str, during: str) -> None:
-            kills_seen.append(len(executor.kills))
+    class Observer:
+        def emit(self, event: Event) -> None:
+            if isinstance(event, StopRequested):
+                kills_seen.append(len(executor.kills))
 
     def step(call):
         d.request_stop("test")

@@ -6,6 +6,7 @@ from __future__ import annotations
 import secrets
 import threading
 import time
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -27,7 +28,7 @@ from .stop_path import StopPath
 from .vision_service import VisionSupervisor
 
 if TYPE_CHECKING:
-    from ..runlog.sinks import TaskObserver
+    from ..runlog.sinks import Observer
 
 POLL_INTERVAL_S = 0.05  # wait-loop poll period (docs/safety.md)
 
@@ -163,8 +164,8 @@ class Executor:
             self._control.close()
         return self.robot.read_state(start=start)
 
-    def state_stream(self, path: Path, t_start: float, observer: TaskObserver | None = None) -> StateStream:
-        return StateStream(self.robot.socket_path, path, t_start, observer)
+    def state_stream(self, path: Path, t_start: float, observers: Sequence[Observer] = ()) -> StateStream:
+        return StateStream(self.robot.socket_path, path, t_start, observers)
 
     def close(self) -> None:
         """Close the control connection, stop the vision and robot services (docs/running.md); idempotent."""

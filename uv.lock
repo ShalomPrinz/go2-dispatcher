@@ -351,6 +351,7 @@ dependencies = [
     { name = "python-telegram-bot" },
     { name = "pyyaml" },
     { name = "tomli" },
+    { name = "typing-extensions" },
 ]
 
 [package.optional-dependencies]
@@ -385,6 +386,7 @@ requires-dist = [
     { name = "python-telegram-bot", specifier = ">=22.8,<23" },
     { name = "pyyaml" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
+    { name = "typing-extensions", specifier = ">=4.1" },
     { name = "ultralytics", marker = "extra == 'vision'" },
     { name = "unitree-sdk2py", marker = "extra == 'robot'", git = "https://github.com/unitreerobotics/unitree_sdk2_python" },
 ]

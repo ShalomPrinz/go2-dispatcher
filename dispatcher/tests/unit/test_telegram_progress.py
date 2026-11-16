@@ -15,6 +15,15 @@ from dispatcher.dispatcher import Dispatcher
 from dispatcher.models import ObstacleDistances, RobotState
 from dispatcher.planning.plan import Plan, PlanStep
 from dispatcher.registry import Registry
+from dispatcher.runlog.events import (
+    LlmRequest,
+    PlanInvalid,
+    PlanRecord,
+    RobotLink,
+    RobotSample,
+    StopRequested,
+    TaskEnd,
+)
 from dispatcher.tests.helpers import (
     BUILTIN_SKILLS_DIR,
     FakeExecutor,
@@ -88,7 +97,7 @@ def test_edits_are_coalesced(registry):
     async def main():
         progress = TelegramProgress(registry, interval_s=0.2)
         assert progress.open(phone.editor(0), phone.new_message)
-        burst = threading.Thread(target=lambda: [progress.stop_requested(f"s{i}", "between") for i in range(30)])
+        burst = threading.Thread(target=lambda: [progress.emit(StopRequested(f"s{i}", "between")) for i in range(30)])
         burst.start()
         burst.join()
         await progress.close()
@@ -159,7 +168,7 @@ def test_plan_without_results_has_no_trailing_blank_line(registry):
     async def main():
         progress = TelegramProgress(registry, interval_s=0.0)
         assert progress.open(phone.editor(0), phone.new_message)
-        progress.plan(1, Plan(status="PLAN", steps=[TURN]), 1)
+        progress.emit(PlanRecord(1, Plan(status="PLAN", steps=[TURN]), 1))
         await progress.close()
 
     asyncio.run(main())
@@ -172,11 +181,11 @@ def test_rejection_that_ends_the_task_gives_up(registry):
     async def main():
         progress = TelegramProgress(registry, interval_s=0.0)
         assert progress.open(phone.editor(0), phone.new_message)
-        progress.llm_request(1, "initial", None, "")
-        progress.plan_invalid(1, None, None, 5)  # type: ignore[arg-type]
-        progress.llm_request(2, "schema_retry", "initial", "")
-        progress.plan_invalid(2, None, None, 5)  # type: ignore[arg-type]
-        progress.task_end(None, rejections=0, horizon_rejections=0, usage_totals={}, budget=None)  # type: ignore[arg-type]
+        progress.emit(LlmRequest(1, "initial", None, ""))
+        progress.emit(PlanInvalid(1, None, None, 5))  # type: ignore[arg-type]
+        progress.emit(LlmRequest(2, "schema_retry", "initial", ""))
+        progress.emit(PlanInvalid(2, None, None, 5))  # type: ignore[arg-type]
+        progress.emit(TaskEnd(None, 0, 0, {}, None))  # type: ignore[arg-type]
         await progress.close()
 
     asyncio.run(main())
@@ -193,12 +202,12 @@ def test_no_edit_when_the_text_is_unchanged(registry):
     async def main():
         progress = TelegramProgress(registry, interval_s=0.0)
         assert progress.open(phone.editor(0), phone.new_message)
-        progress.robot_sample(standing, "up", 1.0)
+        progress.emit(RobotSample(standing, "up", 1.0))
         await asyncio.sleep(0.05)
         for i in range(20):  # same rendered line: no edits
-            progress.robot_sample(standing, "up", 2.0 + i)
+            progress.emit(RobotSample(standing, "up", 2.0 + i))
             await asyncio.sleep(0.005)
-        progress.robot_link("down", None)
+        progress.emit(RobotLink("down", None))
         await progress.close()
 
     asyncio.run(main())
@@ -249,14 +258,14 @@ def test_robot_line_follows_the_stream_and_leaves_at_task_end(registry):
 
     async def main():
         progress = TelegramProgress(registry)
-        progress.robot_link("up", None)  # no session yet: dropped
+        progress.emit(RobotLink("up", None))  # no session yet: dropped
         assert progress.open(edit, new_message)
-        progress.robot_link("up", None)
-        progress.robot_sample(RobotState(t=0.0, backend="stub", posture="standing"), "up", 10.0)
-        progress.robot_link("down", 10.0)
+        progress.emit(RobotLink("up", None))
+        progress.emit(RobotSample(RobotState(t=0.0, backend="stub", posture="standing"), "up", 10.0))
+        progress.emit(RobotLink("down", 10.0))
         live = progress.text()
-        progress.task_end(None, rejections=0, horizon_rejections=0, usage_totals={}, budget=None)  # type: ignore[arg-type]
-        progress.robot_sample(RobotState(t=0.0, backend="stub", posture="standing"), "up", 10.4)  # after the end
+        progress.emit(TaskEnd(None, 0, 0, {}, None))  # type: ignore[arg-type]
+        progress.emit(RobotSample(RobotState(t=0.0, backend="stub", posture="standing"), "up", 10.4))  # after the end
         await progress.close()
         return live, progress.text()
 

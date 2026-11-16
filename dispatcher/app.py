@@ -30,7 +30,7 @@ from .llm.openrouter_planner import OpenRouterPlanner
 from .llm.surface import PromptSurface
 from .models import RobotState, StartupError
 from .registry import Registry
-from .runlog.sinks import TaskObserver
+from .runlog.sinks import Observer
 
 __all__ = [
     "build_dispatcher",
@@ -83,7 +83,7 @@ def build_executor(cfg: Config, cwd: Path | None = None) -> Executor:
 
 
 def build_dispatcher(
-    cfg: Config, *, reset_stub: bool, observer: Callable[[Registry], TaskObserver] | None = None
+    cfg: Config, *, reset_stub: bool, observer: Callable[[Registry], Observer] | None = None
 ) -> Dispatcher:
     """Lock, registry, stub reset, planner, executor, robot service start, dispatcher, vision service start
     (docs/running.md). ``observer`` builds the dispatcher's task observer from the registry. Raises

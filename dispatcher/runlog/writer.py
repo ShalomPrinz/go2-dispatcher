@@ -1,4 +1,4 @@
-"""The task's log file and the index writer, one method per record type (dispatcher/docs/run-log.md)."""
+"""The task's log file, written by one ``emit`` per event, and the index writer (dispatcher/docs/run-log.md)."""
 
 from __future__ import annotations
 
@@ -11,26 +11,31 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TextIO
 
+from typing_extensions import assert_never
+
+from .events import (
+    ExceptionRaised,
+    LlmError,
+    LlmInterrupted,
+    LlmRequest,
+    LlmResponse,
+    LlmRetry,
+    PlanInvalid,
+    PlanRecord,
+    PreconditionFailed,
+    StepRecord,
+    StepStart,
+    StopMove,
+    StopRequested,
+    TaskEnd,
+    TaskEvent,
+    TaskStart,
+)
 from .format import ENVELOPE_KEYS, FILE_TIME_FORMAT, INDEX_FILE, ROBOT_IO, RUN_ID_PREFIX_LEN, TOKEN_KEYS
 from .session import SessionInfo
 
 if TYPE_CHECKING:
-    from ..context import RequestReason, ReturnReason
-    from ..llm.client import InfraRetry, LLMResult
-    from ..models import (
-        Posture,
-        PreconditionFailure,
-        StartState,
-        StepDispatch,
-        StepRef,
-        StepResult,
-        StopMoveResult,
-        TaskOutcome,
-        TaskSummary,
-    )
-    from ..planning.budget import MotionBudget
-    from ..planning.plan import Plan
-    from ..planning.validation import PlanCheck
+    from ..models import TaskOutcome
 
 
 def _local_iso() -> str:
@@ -42,7 +47,7 @@ def _dumps(obj: Any) -> str:
 
 
 class RunLog:
-    """One task's log file, one method per record type. Writing is thread-safe (``stop_requested``
+    """One task's log file: ``emit`` writes each event as its record. Writing is thread-safe (``stop_requested``
     comes from the transport thread) and flushes every line, so a crash leaves a usable partial log."""
 
     def __init__(
@@ -91,141 +96,130 @@ class RunLog:
                 self._f.close()
                 self._f = None
 
-    # --- records (dispatcher/docs/run-log.md) -------------------------------------------------
-
-    def task_start(
-        self,
-        task: str,
-        source: str,
-        sender_id: str | None,
-        previous: TaskSummary | None,
-        posture: Posture,
-        start_state: StartState,
-    ) -> None:
-        s = self._session
-        self._write(
-            "task_start",
-            task=task,
-            source=source,
-            sender_id=sender_id,
-            condition=s.condition,
-            config=s.config.model_dump(mode="json"),
-            registry_hash=s.registry_hash,
-            system_text=s.system_text,
-            catalog_text=s.catalog_text,
-            tool_schema=s.tool_schema,
-            skills=s.skills,
-            previous_task=previous.model_dump(mode="json") if previous else None,
-            posture=posture,
-            robot_io=ROBOT_IO,
-            state_age_ms=start_state.age_ms,
-            state_error=start_state.error,
-            versions=s.versions,
-            git_commit=s.git_commit,
-        )
-
-    def llm_request(
-        self, call_index: int, return_reason: RequestReason, retry_of: ReturnReason | None, user_text: str
-    ) -> None:
-        self._write(
-            "llm_request", call_index=call_index, return_reason=return_reason, retry_of=retry_of, user_text=user_text
-        )
-
-    def llm_retry(self, retry: InfraRetry) -> None:
-        self._write(
-            "llm_retry",
-            call_index=retry.call_index,
-            attempt=retry.attempt,
-            error_type=retry.error_type,
-            status_code=retry.status_code,
-            attempt_latency_ms=retry.attempt_latency_ms,
-            sleep_s=retry.sleep_s,
-        )
-
-    def llm_response(self, call_index: int, res: LLMResult) -> None:
-        self._write(
-            "llm_response",
-            call_index=call_index,
-            latency_ms=res.latency_ms,
-            total_ms=res.total_ms,
-            attempts=res.attempts,
-            stop_reason=res.stop_reason,
-            usage=res.usage,
-            content=res.content,
-            response_id=res.response_id,
-            request_id=res.request_id,
-        )
-
-    def llm_error(self, call_index: int, detail: str) -> None:
-        self._write("llm_error", call_index=call_index, detail=detail)
-
-    def llm_interrupted(self, call_index: int, cause: str) -> None:
-        self._write("llm_interrupted", call_index=call_index, cause=cause)
-
-    def plan(self, call_index: int, plan: Plan, stop_at: int) -> None:
-        self._write("plan", call_index=call_index, plan=plan.model_dump(mode="json"), stop_at=stop_at)
-
-    def plan_invalid(self, call_index: int, tool_input: Any, check: PlanCheck, horizon: int) -> None:
-        is_horizon = check.rejection_kind == "horizon"
-        steps_in_plan = None
-        if is_horizon:
-            assert tool_input is not None  # horizon implies a steps list
-            steps_in_plan = len(tool_input["steps"])
-        self._write(
-            "plan_invalid",
-            call_index=call_index,
-            tool_input=tool_input,
-            rejection_kind=check.rejection_kind,
-            steps_in_plan=steps_in_plan,
-            horizon=horizon if is_horizon else None,
-            errors=check.errors,
-        )
-
-    def step_start(self, ref: StepRef, dispatch: StepDispatch) -> None:
-        self._write("step_start", ref=ref.model_dump(mode="json"), dispatch=dispatch.model_dump(mode="json"))
-
-    def step_result(self, sr: StepResult, *, budget: MotionBudget, failures: int, posture: Posture) -> None:
-        self._write(
-            "step_result", **sr.model_dump(mode="json"), budget_used=budget.used(), failures=failures, posture=posture
-        )
-
-    def precondition_failed(self, failure: PreconditionFailure) -> None:
-        self._write("precondition_failed", **failure.model_dump(mode="json"))
-
-    def stop_requested(self, source: str, during: str) -> None:
-        self._write("stop_requested", source=source, during=during)
-
-    def stop_move(self, smr: StopMoveResult) -> None:
-        self._write("stop_move", **smr.model_dump(mode="json"))
-
-    def exception(self, where: str, e: BaseException) -> None:
-        self._write(
-            "exception",
-            where=where,
-            exception_type=type(e).__name__,
-            message=str(e),
-            traceback="".join(traceback.format_exception(type(e), e, e.__traceback__)),
-        )
-
-    def task_end(
-        self, result: TaskOutcome, *, rejections: int, horizon_rejections: int, usage_totals: dict, budget: MotionBudget
-    ) -> None:
-        self._write(
-            "task_end",
-            outcome=result.outcome,
-            message=result.message,
-            llm_calls=result.llm_calls,
-            failures=result.failures,
-            steps_recorded=len(result.steps),
-            steps_dispatched=len(result.dispatched_steps),
-            rejections=rejections,
-            horizon_rejections=horizon_rejections,
-            usage_totals=usage_totals,
-            budget_used=budget.used(),
-            stop_move_failed=result.stop_move_failed,
-            final_posture=result.final_posture,
-            duration_ms=result.duration_ms,
-        )
+    def emit(self, event: TaskEvent) -> None:
+        """Write ``event`` as the record of the same name; an unknown event type raises (dispatcher/docs/run-log.md)."""
+        match event:
+            case TaskStart():
+                s = self._session
+                self._write(
+                    "task_start",
+                    task=event.task,
+                    source=event.source,
+                    sender_id=event.sender_id,
+                    condition=s.condition,
+                    config=s.config.model_dump(mode="json"),
+                    registry_hash=s.registry_hash,
+                    system_text=s.system_text,
+                    catalog_text=s.catalog_text,
+                    tool_schema=s.tool_schema,
+                    skills=s.skills,
+                    previous_task=event.previous.model_dump(mode="json") if event.previous else None,
+                    posture=event.posture,
+                    robot_io=ROBOT_IO,
+                    state_age_ms=event.start_state.age_ms,
+                    state_error=event.start_state.error,
+                    versions=s.versions,
+                    git_commit=s.git_commit,
+                )
+            case LlmRequest():
+                self._write(
+                    "llm_request",
+                    call_index=event.call_index,
+                    return_reason=event.return_reason,
+                    retry_of=event.retry_of,
+                    user_text=event.user_text,
+                )
+            case LlmRetry(retry=retry):
+                self._write(
+                    "llm_retry",
+                    call_index=retry.call_index,
+                    attempt=retry.attempt,
+                    error_type=retry.error_type,
+                    status_code=retry.status_code,
+                    attempt_latency_ms=retry.attempt_latency_ms,
+                    sleep_s=retry.sleep_s,
+                )
+            case LlmResponse(result=res):
+                self._write(
+                    "llm_response",
+                    call_index=event.call_index,
+                    latency_ms=res.latency_ms,
+                    total_ms=res.total_ms,
+                    attempts=res.attempts,
+                    stop_reason=res.stop_reason,
+                    usage=res.usage,
+                    content=res.content,
+                    response_id=res.response_id,
+                    request_id=res.request_id,
+                )
+            case LlmError():
+                self._write("llm_error", call_index=event.call_index, detail=event.detail)
+            case LlmInterrupted():
+                self._write("llm_interrupted", call_index=event.call_index, cause=event.cause)
+            case PlanRecord():
+                self._write(
+                    "plan", call_index=event.call_index, plan=event.plan.model_dump(mode="json"), stop_at=event.stop_at
+                )
+            case PlanInvalid(tool_input=tool_input, check=check):
+                is_horizon = check.rejection_kind == "horizon"
+                steps_in_plan = None
+                if is_horizon:
+                    assert tool_input is not None  # horizon implies a steps list
+                    steps_in_plan = len(tool_input["steps"])
+                self._write(
+                    "plan_invalid",
+                    call_index=event.call_index,
+                    tool_input=tool_input,
+                    rejection_kind=check.rejection_kind,
+                    steps_in_plan=steps_in_plan,
+                    horizon=event.horizon if is_horizon else None,
+                    errors=check.errors,
+                )
+            case StepStart():
+                self._write(
+                    "step_start", ref=event.ref.model_dump(mode="json"), dispatch=event.dispatch.model_dump(mode="json")
+                )
+            case StepRecord():
+                self._write(
+                    "step_result",
+                    **event.result.model_dump(mode="json"),
+                    budget_used=event.budget.used(),
+                    failures=event.failures,
+                    posture=event.posture,
+                )
+            case PreconditionFailed():
+                self._write("precondition_failed", **event.failure.model_dump(mode="json"))
+            case StopRequested():
+                self._write("stop_requested", source=event.source, during=event.during)
+            case StopMove():
+                self._write("stop_move", **event.result.model_dump(mode="json"))
+            case ExceptionRaised(error=e):
+                self._write(
+                    "exception",
+                    where=event.where,
+                    exception_type=type(e).__name__,
+                    message=str(e),
+                    traceback="".join(traceback.format_exception(type(e), e, e.__traceback__)),
+                )
+            case TaskEnd(result=result):
+                self._write(
+                    "task_end",
+                    outcome=result.outcome,
+                    message=result.message,
+                    llm_calls=result.llm_calls,
+                    failures=result.failures,
+                    steps_recorded=len(result.steps),
+                    steps_dispatched=len(result.dispatched_steps),
+                    rejections=event.rejections,
+                    horizon_rejections=event.horizon_rejections,
+                    usage_totals=event.usage_totals,
+                    budget_used=event.budget.used(),
+                    stop_move_failed=result.stop_move_failed,
+                    final_posture=result.final_posture,
+                    duration_ms=result.duration_ms,
+                )
+            case _:
+                assert_never(event)
 
 
 class RunLogFactory:

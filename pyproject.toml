@@ -7,6 +7,7 @@ dependencies = [
   "httpx",
   "httpx2",                               # used directly by dispatcher/llm/anthropic_planner.py (anthropic SDK transport)
   "pydantic>=2",
+  "typing_extensions>=4.1",               # assert_never in dispatcher/runlog/writer.py (no typing.assert_never on 3.10)
   "PyYAML",
   "python-telegram-bot>=22.8,<23",
   "tomli; python_version < '3.11'",

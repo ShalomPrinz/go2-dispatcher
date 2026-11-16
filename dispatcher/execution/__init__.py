@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
@@ -12,7 +13,7 @@ from ..registry import SkillDescriptor
 from .executor import Executor
 
 if TYPE_CHECKING:
-    from ..runlog.sinks import TaskObserver
+    from ..runlog.sinks import Observer
 
 __all__ = ["Executor", "SkillExecutor", "StreamHandle"]
 
@@ -43,8 +44,8 @@ class SkillExecutor(Protocol):
         ``start`` is false and the service is dead or unreachable."""
         ...
 
-    def state_stream(self, path: Path, t_start: float, observer: TaskObserver | None = None) -> StreamHandle:
-        """Start writing the robot service's state stream to ``path``, and handing it to ``observer``, until the
+    def state_stream(self, path: Path, t_start: float, observers: Sequence[Observer] = ()) -> StreamHandle:
+        """Start writing the robot service's state stream to ``path``, and handing it to ``observers``, until the
         handle is closed."""
         ...
 
