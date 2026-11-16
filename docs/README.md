@@ -42,7 +42,7 @@ The `dispatcher` package: the loop, the LLM layer and the run log.
 | [loop-and-context.md](../dispatcher/docs/loop-and-context.md) | The dispatcher loop: the `submit_plan` plan contract, plan validation and the whole-plan pre-check, return reasons, what counts as a failure and as an LLM call, budgets, preconditions, step verdicts (fault detection and goal verification), task outcome codes and their operator messages, the fixed-slot context layout and every fixed text the model sees. |
 | [llm.md](../dispatcher/docs/llm.md) | The LLM layer: provider and model choice, Sonnet 5.5 parameter constraints and the request we send (auto tool choice, non-strict tools, minimal thinking via `between_tools`, no temperature, `max_tokens`), schema retry, horizon rejection (not truncation) and its monitoring rule, infrastructure retries, live-API verification status. |
 | [execution.md](../dispatcher/docs/execution.md) | How the dispatcher runs a step: the execution parts (child environment, skill process, kill switch, control connection, stop path, step outcome, executor), the order of a step, and the execution result types. |
-| [run-log.md](../dispatcher/docs/run-log.md) | The run log as the study dataset: files, envelope, every record type, `index.jsonl`, and how to compute each study metric from the log. |
+| [run-log.md](../dispatcher/docs/run-log.md) | The run log as the study dataset: files, envelope, every record type, `index.jsonl`, how records are produced (typed events, the writer, observers) and how to add a record type, and how to compute each study metric from the log. |
 
 ### Shared backend (`services/backend/docs/`)
 
